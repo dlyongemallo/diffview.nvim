@@ -469,6 +469,19 @@ File.NULL_FILE = File({
   binary = false,
   nulled = true,
   rev = GitRev.new_null_tree(),
+  -- Explicitly disable diff-related window options for the null buffer.
+  -- This prevents scrollbind/cursorbind from persisting after closing diffview.
+  winopts = {
+    diff = false,
+    scrollbind = false,
+    cursorbind = false,
+    foldmethod = "manual",
+    scrollopt = {},
+    foldcolumn = "0",
+    foldlevel = 99,
+    foldenable = false,
+    winhl = {},
+  },
 })
 
 M.File = File

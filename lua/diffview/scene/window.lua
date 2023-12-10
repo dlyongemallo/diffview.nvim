@@ -245,11 +245,10 @@ function Window:_save_winopts()
   if Window.winopt_store[self.file.bufnr] then return end
 
   Window.winopt_store[self.file.bufnr] = {}
-  api.nvim_win_call(self.id, function()
-    for option, _ in pairs(self.file.winopts) do
-      Window.winopt_store[self.file.bufnr][option] = vim.o[option]
-    end
-  end)
+  -- Use vim.wo to get window-local option values, not vim.o which gets global values.
+  for option, _ in pairs(self.file.winopts) do
+    Window.winopt_store[self.file.bufnr][option] = vim.wo[self.id][option]
+  end
 end
 
 function Window:_restore_winopts()
