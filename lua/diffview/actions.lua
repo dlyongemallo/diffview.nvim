@@ -186,6 +186,33 @@ function M.open_file_external()
   end
 end
 
+---Open the current diffview in a new tab with the same revision.
+function M.open_in_new_tab()
+  local view = lib.get_current_view()
+
+  if not view then
+    return
+  end
+
+  -- Only works for DiffView (not FileHistoryView).
+  if not DiffView.__get():ancestorof(view) then
+    utils.info("This action only works in a diff view.")
+    return
+  end
+
+  local new_view = DiffView({
+    adapter = view.adapter,
+    rev_arg = view.rev_arg,
+    left = view.left,
+    right = view.right,
+    path_args = view.path_args,
+    options = view.options or {},
+  })
+
+  lib.add_view(new_view)
+  new_view:open()
+end
+
 ---@class diffview.ConflictCount
 ---@field total integer
 ---@field current integer
