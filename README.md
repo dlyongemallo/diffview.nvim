@@ -577,6 +577,11 @@ end, { desc = 'Diff against main/master' })
     - `vim.opt.diffopt:append { "algorithm:histogram" }`
   - Alternatives: `algorithm:patience` or `algorithm:minimal`
   - This affects how Neovim's built-in diff mode displays changes.
+- **Understanding revision arguments:**
+  - `DiffviewOpen HEAD~5` compares HEAD~5 to working tree (all changes since)
+  - `DiffviewOpen HEAD~5..HEAD` compares HEAD~5 to HEAD (excludes working tree changes)
+  - `DiffviewOpen HEAD~5^..HEAD~5` shows changes within that single commit
+  - For viewing a specific commit's changes, use `DiffviewFileHistory` instead
 
 ## Telescope Integration
 
