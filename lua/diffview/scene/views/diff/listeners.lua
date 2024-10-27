@@ -263,17 +263,47 @@ return function(view)
         commit = view.left.commit
       end
 
-      local file = view:infer_cur_file()
-      if not file then return end
+      local item = view:infer_cur_file(true)
+      if not item then return end
 
-      local bufid = utils.find_file_buffer(file.path)
+      -- Check if item is a directory.
+      if type(item.collapsed) == "boolean" then
+        ---@cast item DirData
+        local node = item._node
+        if not node then return end
 
-      if bufid and vim.bo[bufid].modified then
-        utils.err("The file is open with unsaved changes! Aborting file restoration.")
-        return
+        -- Get all files under this directory.
+        local leaves = node:leaves()
+        local restored_count = 0
+        for _, leaf in ipairs(leaves) do
+          local file = leaf.data
+          if file and file.path then
+            local bufid = utils.find_file_buffer(file.path)
+            if bufid and vim.bo[bufid].modified then
+              utils.warn(("Skipping '%s': file has unsaved changes."):format(file.path))
+            else
+              await(vcs_utils.restore_file(view.adapter, file.path, file.kind, commit))
+              restored_count = restored_count + 1
+            end
+          end
+        end
+
+        if restored_count > 0 then
+          utils.info(("Restored %d file(s)."):format(restored_count))
+        end
+      else
+        -- Single file restore.
+        local file = item
+        local bufid = utils.find_file_buffer(file.path)
+
+        if bufid and vim.bo[bufid].modified then
+          utils.err("The file is open with unsaved changes! Aborting file restoration.")
+          return
+        end
+
+        await(vcs_utils.restore_file(view.adapter, file.path, file.kind, commit))
       end
 
-      await(vcs_utils.restore_file(view.adapter, file.path, file.kind, commit))
       view:update_files()
     end),
     listing_style = function()
