@@ -92,11 +92,14 @@ function File:init(opt)
     -- otherwise collapse and hide diff content.
     foldlevel = 99,
     foldenable = true,
+    -- Use prepend method so diffview's highlights take precedence but don't
+    -- clobber user's additional winhl customizations (#515).
     winhl = {
       "DiffAdd:DiffviewDiffAdd",
       "DiffDelete:DiffviewDiffDelete",
       "DiffChange:DiffviewDiffChange",
       "DiffText:DiffviewDiffText",
+      opt = { method = "prepend" },
     },
   }
 
