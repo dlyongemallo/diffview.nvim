@@ -147,6 +147,14 @@ return function(panel)
     "DiffviewFilePanelRootPath"
   )
 
+  if conf.file_panel.show_branch_name then
+    local branch_name = panel.adapter:get_branch_name()
+    if branch_name then
+      comp:add_text("Branch: ", "DiffviewFilePanelPath")
+      comp:add_line(branch_name, "DiffviewFilePanelTitle")
+    end
+  end
+
   if conf.show_help_hints and panel.help_mapping then
     comp:add_text("Help: ", "DiffviewFilePanelPath")
     comp:add_line(panel.help_mapping, "DiffviewFilePanelCounter")

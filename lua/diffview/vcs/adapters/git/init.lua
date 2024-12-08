@@ -1317,6 +1317,21 @@ function GitAdapter:head_rev()
   return GitRev(RevType.COMMIT, s, true)
 end
 
+---Get the current branch name.
+---@return string? branch_name The branch name, or nil if detached HEAD.
+function GitAdapter:get_branch_name()
+  local out, code = self:exec_sync(
+    { "symbolic-ref", "--short", "HEAD" },
+    { cwd = self.ctx.toplevel, silent = true }
+  )
+
+  if code == 0 and out[1] then
+    return vim.trim(out[1])
+  end
+
+  return nil
+end
+
 ---@param path string
 ---@param rev_arg string?
 ---@return string?

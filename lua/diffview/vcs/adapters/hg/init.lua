@@ -861,6 +861,21 @@ function HgAdapter:head_rev()
   return HgRev(RevType.COMMIT, s, true)
 end
 
+---Get the current branch name.
+---@return string? branch_name The branch name, or nil if not available.
+function HgAdapter:get_branch_name()
+  local out, code = self:exec_sync(
+    { "branch" },
+    { cwd = self.ctx.toplevel, silent = true }
+  )
+
+  if code == 0 and out[1] then
+    return vim.trim(out[1])
+  end
+
+  return nil
+end
+
 function HgAdapter:rev_to_args(left, right)
   assert(
     not (left.type == RevType.LOCAL and right.type == RevType.LOCAL),

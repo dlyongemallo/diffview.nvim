@@ -88,6 +88,7 @@ M.defaults = {
     },
     show = true, -- Show the file panel by default when opening Diffview.
     always_show_sections = false, -- Always show Changes and Staged changes sections even when empty.
+    show_branch_name = false, -- Show branch name in the file panel header.
   },
   file_history_panel = {
     log_options = {
