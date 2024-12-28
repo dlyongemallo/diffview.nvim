@@ -305,7 +305,9 @@ function Layout:sync_scroll()
   end
 
   -- Cursor will sometimes move +- the value of 'scrolloff'
-  api.nvim_win_set_cursor(target.id, cursor)
+  if target ~= nil then
+      api.nvim_win_set_cursor(target.id, cursor)
+  end
 end
 
 M.Layout = Layout
