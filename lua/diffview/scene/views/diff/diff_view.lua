@@ -401,55 +401,75 @@ DiffView.update_files = debounce.debounce_trailing(
       for _, opr in ipairs(script) do
         if opr == EditToken.NOOP then
           -- Update status and stats
-          local a_stats = v.cur_files[ai].stats
-          local b_stats = v.new_files[bi].stats
+          -- Guard against nil entries that can occur during async race conditions (#395).
+          local cur_file = v.cur_files[ai]
+          local new_file = v.new_files[bi]
 
-          if a_stats then
-            v.cur_files[ai].stats = vim.tbl_extend("force", a_stats, b_stats or {})
-          else
-            v.cur_files[ai].stats = v.new_files[bi].stats
-          end
+          if cur_file and new_file then
+            local a_stats = cur_file.stats
+            local b_stats = new_file.stats
 
-          v.cur_files[ai].status = v.new_files[bi].status
-          v.cur_files[ai]:validate_stage_buffers(index_stat)
+            if a_stats then
+              cur_file.stats = vim.tbl_extend("force", a_stats, b_stats or {})
+            else
+              cur_file.stats = new_file.stats
+            end
 
-          if new_head then
-            v.cur_files[ai]:update_heads(new_head)
+            cur_file.status = new_file.status
+            cur_file:validate_stage_buffers(index_stat)
+
+            if new_head then
+              cur_file:update_heads(new_head)
+            end
           end
 
           ai = ai + 1
           bi = bi + 1
 
         elseif opr == EditToken.DELETE then
-          if self.panel.cur_file == v.cur_files[ai] then
-            local file_list = self.panel:ordered_file_list()
-            if file_list[1] == self.panel.cur_file then
-              self.panel:set_cur_file(nil)
-            else
-              self.panel:set_cur_file(self.panel:prev_file())
+          local cur_file = v.cur_files[ai]
+          if cur_file then
+            if self.panel.cur_file == cur_file then
+              local file_list = self.panel:ordered_file_list()
+              if file_list[1] == self.panel.cur_file then
+                self.panel:set_cur_file(nil)
+              else
+                self.panel:set_cur_file(self.panel:prev_file())
+              end
             end
+
+            cur_file:destroy()
+            table.remove(v.cur_files, ai)
           end
 
-          v.cur_files[ai]:destroy()
-          table.remove(v.cur_files, ai)
-
         elseif opr == EditToken.INSERT then
-          table.insert(v.cur_files, ai, v.new_files[bi])
-          ai = ai + 1
+          local new_file = v.new_files[bi]
+          if new_file then
+            table.insert(v.cur_files, ai, new_file)
+            ai = ai + 1
+          end
           bi = bi + 1
 
         elseif opr == EditToken.REPLACE then
-          if self.panel.cur_file == v.cur_files[ai] then
-            local file_list = self.panel:ordered_file_list()
-            if file_list[1] == self.panel.cur_file then
-              self.panel:set_cur_file(nil)
-            else
-              self.panel:set_cur_file(self.panel:prev_file())
+          local cur_file = v.cur_files[ai]
+          local new_file = v.new_files[bi]
+
+          if cur_file then
+            if self.panel.cur_file == cur_file then
+              local file_list = self.panel:ordered_file_list()
+              if file_list[1] == self.panel.cur_file then
+                self.panel:set_cur_file(nil)
+              else
+                self.panel:set_cur_file(self.panel:prev_file())
+              end
             end
+
+            cur_file:destroy()
           end
 
-          v.cur_files[ai]:destroy()
-          v.cur_files[ai] = v.new_files[bi]
+          if new_file then
+            v.cur_files[ai] = new_file
+          end
           ai = ai + 1
           bi = bi + 1
         end
