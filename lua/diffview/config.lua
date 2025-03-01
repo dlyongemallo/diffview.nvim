@@ -116,6 +116,7 @@ M.defaults = {
       win_opts = {}
     },
     commit_subject_max_length = 72, -- Max length for commit subject display.
+    date_format = "auto", -- Date format: "auto" (relative for recent, ISO for old), "relative", or "iso".
   },
   commit_log_panel = {
     win_config = {

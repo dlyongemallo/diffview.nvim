@@ -157,12 +157,20 @@ local function render_entries(panel, parent, entries, updating)
     )
 
     if entry.commit then
-      -- 3 months
-      local date = (
-        os.difftime(os.time(), entry.commit.time) > 60 * 60 * 24 * 30 * 3
-          and entry.commit.iso_date
-          or entry.commit.rel_date
-      )
+      local date_format = config.get_config().file_history_panel.date_format
+      local date
+      if date_format == "relative" then
+        date = entry.commit.rel_date
+      elseif date_format == "iso" then
+        date = entry.commit.iso_date
+      else
+        -- "auto": show relative for recent commits (< 3 months), ISO for older.
+        date = (
+          os.difftime(os.time(), entry.commit.time) > 60 * 60 * 24 * 30 * 3
+            and entry.commit.iso_date
+            or entry.commit.rel_date
+        )
+      end
       comp:add_text(" " .. entry.commit.author .. ", " .. date, "DiffviewFilePanelPath")
     end
 

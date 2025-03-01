@@ -84,6 +84,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
         height = 16,
         win_opts = {},
       },
+      date_format = "auto", -- Date format: "auto" | "relative" | "iso"
     },
     commit_log_panel = {
       win_config = {},  -- See |diffview-config-win_config|
