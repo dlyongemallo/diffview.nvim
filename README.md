@@ -572,6 +572,11 @@ end, { desc = 'Diff against main/master' })
 - **Trace line evolution:**
   - Visual select lines, then `:'<,'>DiffviewFileHistory --follow`
   - Or for single line: `:.DiffviewFileHistory --follow`
+- **Better diff display (changes shown as add+delete instead of modification):**
+  - Set Neovim's `diffopt` to use a better algorithm:
+    - `vim.opt.diffopt:append { "algorithm:histogram" }`
+  - Alternatives: `algorithm:patience` or `algorithm:minimal`
+  - This affects how Neovim's built-in diff mode displays changes.
 
 ## Telescope Integration
 
