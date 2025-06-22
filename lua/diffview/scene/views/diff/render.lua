@@ -97,12 +97,12 @@ local function render_file_tree_recurse(depth, comp)
   dir:add_text(string.rep(" ", depth * 2))
   dir:add_text(ctx.collapsed and conf.signs.fold_closed or conf.signs.fold_open, "DiffviewNonText")
 
-  if conf.use_icons then
-    dir:add_text(
-      " " .. (ctx.collapsed and conf.icons.folder_closed or conf.icons.folder_open) .. " ",
-      "DiffviewFolderSign"
-    )
-  end
+  -- Always show folder icons since they're user-configurable and don't require
+  -- an icon provider like file-type icons do (#579).
+  dir:add_text(
+    " " .. (ctx.collapsed and conf.icons.folder_closed or conf.icons.folder_open) .. " ",
+    "DiffviewFolderSign"
+  )
 
   dir:add_text(ctx.name .. "/", "DiffviewFolderName")
   -- Show file count when folder is collapsed.
