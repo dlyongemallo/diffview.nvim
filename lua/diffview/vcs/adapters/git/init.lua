@@ -1332,6 +1332,98 @@ function GitAdapter:get_branch_name()
   return nil
 end
 
+---Get the default branch name (main, master, etc.).
+---@return string? branch_name The default branch name.
+function GitAdapter:get_default_branch()
+  -- Try to get from origin/HEAD symbolic reference.
+  local out, code = self:exec_sync(
+    { "symbolic-ref", "refs/remotes/origin/HEAD" },
+    { cwd = self.ctx.toplevel, silent = true }
+  )
+
+  if code == 0 and out[1] then
+    local ref = vim.trim(out[1])
+    -- Extract branch name from "refs/remotes/origin/main".
+    local branch = ref:match("refs/remotes/origin/(.+)$")
+    if branch then
+      return branch
+    end
+  end
+
+  -- Fall back to checking if main or master exist.
+  for _, branch in ipairs({ "main", "master" }) do
+    local _, code_check = self:exec_sync(
+      { "rev-parse", "--verify", branch },
+      { cwd = self.ctx.toplevel, silent = true }
+    )
+    if code_check == 0 then
+      return branch
+    end
+  end
+
+  return nil
+end
+
+---Get the remote URL for origin.
+---@param remote? string The remote name (default: "origin").
+---@return string? url The remote URL.
+function GitAdapter:get_remote_url(remote)
+  remote = remote or "origin"
+  local out, code = self:exec_sync(
+    { "remote", "get-url", remote },
+    { cwd = self.ctx.toplevel, silent = true }
+  )
+
+  if code == 0 and out[1] then
+    return vim.trim(out[1])
+  end
+
+  return nil
+end
+
+---Construct a web URL for viewing a commit in the browser.
+---Supports GitHub, GitLab, and Bitbucket.
+---@param commit_hash string The commit hash.
+---@return string? url The web URL, or nil if the hosting service is not recognized.
+function GitAdapter:get_commit_url(commit_hash)
+  local remote_url = self:get_remote_url()
+  if not remote_url then return nil end
+
+  -- Normalize the URL to extract host and repo path.
+  local host, repo
+
+  -- Handle SSH URLs: git@github.com:user/repo.git
+  local ssh_host, ssh_repo = remote_url:match("^git@([^:]+):(.+)$")
+  if ssh_host and ssh_repo then
+    host = ssh_host
+    repo = ssh_repo
+  else
+    -- Handle HTTPS URLs: https://github.com/user/repo.git
+    local https_host, https_repo = remote_url:match("^https?://([^/]+)/(.+)$")
+    if https_host and https_repo then
+      host = https_host
+      repo = https_repo
+    end
+  end
+
+  if not host or not repo then return nil end
+
+  -- Remove .git suffix if present.
+  repo = repo:gsub("%.git$", "")
+
+  -- Construct URL based on hosting service.
+  if host:match("github") then
+    return fmt("https://%s/%s/commit/%s", host, repo, commit_hash)
+  elseif host:match("gitlab") then
+    return fmt("https://%s/%s/-/commit/%s", host, repo, commit_hash)
+  elseif host:match("bitbucket") then
+    return fmt("https://%s/%s/commits/%s", host, repo, commit_hash)
+  else
+    -- Generic format (works for many Git hosting services).
+    return fmt("https://%s/%s/commit/%s", host, repo, commit_hash)
+  end
+end
+
 ---@param path string
 ---@param rev_arg string?
 ---@return string?
@@ -1473,17 +1565,16 @@ function GitAdapter:parse_revs(rev_arg, opt)
         left = GitRev(RevType.COMMIT, hash)
         right = GitRev(RevType.STAGE, 0)
       else
-        -- When comparing a single ref with working tree, optionally use merge-base
+        -- When comparing a single ref with working tree, optionally use merge-base.
         if opt.merge_base then
           local merge_base_out, merge_base_code = self:exec_sync(
             { "merge-base", "HEAD", hash },
             { cwd = self.ctx.toplevel, fail_on_empty = true, retry = 2 }
           )
           if merge_base_code == 0 and #merge_base_out > 0 then
-            -- Use merge-base as the left side
             left = GitRev(RevType.COMMIT, merge_base_out[1])
           else
-            -- Fallback to the ref itself if merge-base fails
+            -- Fallback to the ref itself if merge-base fails.
             left = GitRev(RevType.COMMIT, hash)
           end
         else

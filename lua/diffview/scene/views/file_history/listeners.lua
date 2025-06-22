@@ -255,6 +255,34 @@ return function(view)
         end
       end
     end,
+    open_commit_in_browser = function()
+      local item = view.panel:get_item_at_cursor()
+      if not item then
+        item = view.panel.cur_item[1]
+      end
+      if not item or not item.commit then return end
+
+      local url = view.adapter:get_commit_url(item.commit.hash)
+      if not url then
+        utils.err("Could not construct browser URL. Remote URL not recognized.")
+        return
+      end
+
+      local cmd
+      if vim.fn.has("mac") == 1 then
+        cmd = { "open", url }
+      elseif vim.fn.has("wsl") == 1 then
+        cmd = { "wslview", url }
+      elseif vim.fn.has("unix") == 1 then
+        cmd = { "xdg-open", url }
+      elseif vim.fn.has("win32") == 1 then
+        cmd = { "cmd", "/c", "start", '""', url }
+      end
+
+      if cmd then
+        vim.fn.jobstart(cmd, { detach = true })
+      end
+    end,
     restore_entry = async.void(function()
       local item = view:infer_cur_file()
       if not item then return end

@@ -754,6 +754,7 @@ local action_names = {
   "listing_style",
   "next_entry",
   "open_all_folds",
+  "open_commit_in_browser",
   "open_commit_log",
   "open_fold",
   "open_in_diffview",
