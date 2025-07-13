@@ -340,17 +340,28 @@ function Window:use_winopts(opts)
   end)
 end
 
+---Maximum number of custom folds to create. Creating too many folds can freeze
+---the UI, especially when transitioning from diff foldmethod to manual.
+Window.MAX_CUSTOM_FOLDS = 100
+
 function Window:apply_custom_folds()
   if self.file.custom_folds
     and not self:is_nulled()
     and vim.wo[self.id].foldmethod == "manual"
   then
+    local folds = self.file.custom_folds
+    local fold_count = #folds
+
+    if fold_count > Window.MAX_CUSTOM_FOLDS then
+      -- Skip fold creation to prevent UI freeze with many folds.
+      return
+    end
+
     api.nvim_win_call(self.id, function()
       pcall(vim.cmd, "norm! zE") -- Delete all folds in the window
 
-      for _, fold in ipairs(self.file.custom_folds) do
-        vim.cmd(fmt("%d,%dfold", fold[1], fold[2]))
-        -- print(fmt("%d,%dfold", fold[1], fold[2]))
+      for _, fold in ipairs(folds) do
+        pcall(vim.cmd, fmt("%d,%dfold", fold[1], fold[2]))
       end
     end)
   end
