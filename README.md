@@ -582,6 +582,15 @@ end, { desc = 'Diff against main/master' })
   - `DiffviewOpen HEAD~5..HEAD` compares HEAD~5 to HEAD (excludes working tree changes)
   - `DiffviewOpen HEAD~5^..HEAD~5` shows changes within that single commit
   - For viewing a specific commit's changes, use `DiffviewFileHistory` instead
+- **LSP diagnostics in diff buffers:**
+  - Diagnostics only appear for the working tree (LOCAL) side of diffs.
+  - When comparing commits (e.g., `DiffviewOpen main..HEAD`), neither side is the
+    working tree, so LSP won't attach to those buffers.
+  - To see diagnostics, compare against the working tree: `DiffviewOpen main`
+    (not `main..HEAD`). The right side will show your current files with
+    diagnostics.
+  - Inlay hints are automatically disabled for non-working-tree buffers to
+    prevent position mismatch errors.
 
 ## Plugin Compatibility
 
