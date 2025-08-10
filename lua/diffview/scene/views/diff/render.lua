@@ -161,6 +161,11 @@ return function(panel)
     comp:add_line()
   end
 
+  if panel.is_loading then
+    comp:add_line("  Fetching changes...", "DiffviewDim1")
+    return
+  end
+
   if #panel.files.conflicting > 0 then
     comp = panel.components.conflicting.title.comp
     comp:add_text("Conflicts ", "DiffviewFilePanelTitle")

@@ -58,6 +58,7 @@ function DiffView:init(opt)
   self.left = opt.left
   self.right = opt.right
   self.initialized = false
+  self.is_loading = true
   self.options = opt.options or {}
   self.options.selected_file = self.options.selected_file
     and pl:chain(self.options.selected_file)
@@ -480,6 +481,14 @@ DiffView.update_files = debounce.debounce_trailing(
         end
       end
     end
+
+    -- Clear loading state and re-render panel before set_file, so highlight_file
+    -- can find the file components (the previous render returned early due to is_loading).
+    self.is_loading = false
+    self.panel.is_loading = false
+    self.panel:render()
+    self.panel:redraw()
+
     self:set_file(self.panel.cur_file or self.panel:next_file(), false, not self.initialized)
 
     self.update_needed = false
