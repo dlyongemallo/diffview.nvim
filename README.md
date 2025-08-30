@@ -591,6 +591,22 @@ end, { desc = 'Diff against main/master' })
     diagnostics.
   - Inlay hints are automatically disabled for non-working-tree buffers to
     prevent position mismatch errors.
+- **Customizing default keymaps to avoid conflicts:**
+  - The default keymaps (`<leader>e`, `<leader>b`, `<leader>c*`) may conflict
+    with your configuration. Override them in your setup:
+    ```lua
+    require("diffview").setup({
+      keymaps = {
+        view = {
+          -- Use localleader instead to avoid conflicts
+          { "n", "<localleader>e", actions.focus_files },
+          { "n", "<localleader>b", actions.toggle_files },
+          -- Or disable specific mappings
+          { "n", "<leader>e", false },
+        },
+      },
+    })
+    ```
 
 ## Plugin Compatibility
 
