@@ -1140,6 +1140,14 @@ HgAdapter.tracked_files = async.wrap(function (self, left, right, args, kind, op
       end
     end
     if file.state == 'u' then
+      -- Ensure file_info entry exists before accessing it
+      if not file_info[file.path] then
+        file_info[file.path] = {
+          status = "",
+          name = file.path,
+          stats = {},
+        }
+      end
       file_info[file.path].status = 'U'
       file_info[file.path].base = base
       if file.other_path ~= file.path then
