@@ -3,6 +3,7 @@ local lazy = require("diffview.lazy")
 
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local JobStatus = lazy.access("diffview.vcs.utils", "JobStatus") ---@type JobStatus|LazyModule
+local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
 local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 local vcs_utils = lazy.require("diffview.vcs.utils") ---@module "diffview.vcs.utils"
@@ -52,6 +53,24 @@ return function(view)
         lib.add_view(new_view)
         new_view:open()
       end
+    end,
+    ---Open a diffview comparing HEAD with the commit under cursor.
+    diff_against_head = function()
+      local item = view.panel:get_item_at_cursor()
+      if not item then return end
+
+      local commit = item.commit or (item.entry and item.entry.commit)
+      if not commit then return end
+
+      local new_view = DiffView({
+        adapter = view.adapter,
+        rev_arg = commit.hash,
+        left = view.adapter.Rev(RevType.COMMIT, commit.hash),
+        right = view.adapter.Rev(RevType.LOCAL),
+      })
+
+      lib.add_view(new_view)
+      new_view:open()
     end,
     select_next_entry = function()
       view:next_item()

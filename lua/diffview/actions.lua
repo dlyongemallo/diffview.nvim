@@ -721,6 +721,7 @@ local action_names = {
   "close_all_folds",
   "close_fold",
   "copy_hash",
+  "diff_against_head",
   "focus_entry",
   "focus_files",
   "listing_style",

@@ -225,6 +225,7 @@ M.defaults = {
     file_history_panel = {
       { "n", "g!",            actions.options,                     { desc = "Open the option panel" } },
       { "n", "<C-A-d>",       actions.open_in_diffview,            { desc = "Open the entry under the cursor in a diffview" } },
+      { "n", "H",             actions.diff_against_head,           { desc = "Open a diffview comparing HEAD with the commit under the cursor" } },
       { "n", "y",             actions.copy_hash,                   { desc = "Copy the commit hash of the entry under the cursor" } },
       { "n", "L",             actions.open_commit_log,             { desc = "Show commit details" } },
       { "n", "X",             actions.restore_entry,               { desc = "Restore file to the state from the selected entry" } },
