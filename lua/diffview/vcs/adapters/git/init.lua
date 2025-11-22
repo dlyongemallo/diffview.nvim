@@ -326,12 +326,16 @@ function GitAdapter:get_merge_context()
   }
 
   out, code = self:exec_sync({ "merge-base", "HEAD", their_head }, self.ctx.toplevel)
-  assert(code == 0)
-
-  ret.base = {
-    hash = out[1],
-    ref_names = self:exec_sync({ "show", "-s", "--pretty=format:%D", out[1], "--no-show-signature" }, self.ctx.toplevel)[1],
-  }
+  if code ~= 0 then
+    -- merge-base can fail during --root rebases for initial commits.
+    -- Use the canonical empty tree SHA as the base.
+    ret.base = { hash = self.Rev.NULL_TREE_SHA, ref_names = nil }
+  else
+    ret.base = {
+      hash = out[1],
+      ref_names = self:exec_sync({ "show", "-s", "--no-show-signature", "--pretty=format:%D", out[1] }, self.ctx.toplevel)[1],
+    }
+  end
 
   return ret
 end
