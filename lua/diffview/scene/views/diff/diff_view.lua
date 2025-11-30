@@ -326,10 +326,16 @@ DiffView.update_files = debounce.debounce_trailing(
   ---@param self DiffView
   ---@param callback fun(err?: string[])
   async.wrap(function(self, callback)
+    -- Never update if the view is closing (prevents coroutine failure from race conditions).
+    if self.closing:check() then
+      callback({ "The update was cancelled." })
+      return
+    end
+
     await(async.scheduler())
 
     -- Never update unless the view is in focus
-    if self.tabpage ~= api.nvim_get_current_tabpage() then
+    if self.closing:check() or self.tabpage ~= api.nvim_get_current_tabpage() then
       callback({ "The update was cancelled." })
       return
     end
@@ -363,8 +369,8 @@ DiffView.update_files = debounce.debounce_trailing(
       return
     end
 
-    -- Stop the update if the view is no longer in focus.
-    if self.tabpage ~= api.nvim_get_current_tabpage() then
+    -- Stop the update if the view is closing or no longer in focus.
+    if self.closing:check() or self.tabpage ~= api.nvim_get_current_tabpage() then
       callback({ "The update was cancelled." })
       return
     end
