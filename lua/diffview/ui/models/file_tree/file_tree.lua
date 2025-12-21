@@ -112,6 +112,7 @@ function FileTree:create_comp_schema(data)
 
     ---@type DirData
     local dir_data = node.data
+    dir_data._node = node
 
     if data.flatten_dirs then
       while #node.children == 1 and node.children[1]:has_children() do

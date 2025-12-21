@@ -105,6 +105,11 @@ local function render_file_tree_recurse(depth, comp)
   end
 
   dir:add_text(ctx.name .. "/", "DiffviewFolderName")
+  -- Show file count when folder is collapsed.
+  if ctx.collapsed and ctx._node then
+    local file_count = #ctx._node:leaves()
+    dir:add_text(" (" .. file_count .. ")", "DiffviewDim1")
+  end
   dir:ln()
 
   if not ctx.collapsed then
