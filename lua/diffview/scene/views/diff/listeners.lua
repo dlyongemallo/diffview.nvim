@@ -66,8 +66,11 @@ return function(view)
 
         if view.cur_entry and view.cur_entry.kind == "conflicting" then
           actions.next_conflict()
-          vim.cmd("norm! zz")
+        else
+          -- Jump to first diff hunk for regular files.
+          pcall(vim.cmd, "norm! ]c")
         end
+        vim.cmd("norm! zz")
       end)
 
       view.cur_layout:sync_scroll()

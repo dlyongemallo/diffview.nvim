@@ -583,6 +583,52 @@ end, { desc = 'Diff against main/master' })
   - `DiffviewOpen HEAD~5^..HEAD~5` shows changes within that single commit
   - For viewing a specific commit's changes, use `DiffviewFileHistory` instead
 
+## Plugin Compatibility
+
+Some plugins may conflict with diffview's window layout or keymaps. Here are
+known issues and workarounds:
+
+- **lens.vim (automatic window resizing):**
+  - [camspiers/lens.vim](https://github.com/camspiers/lens.vim) automatically
+    resizes windows based on focus, which interferes with diffview's layout.
+  - **Workaround:** Configure lens.vim to exclude diffview filetypes:
+    ```lua
+    -- In your lens.vim or lens.nvim config:
+    vim.g['lens#disabled_filetypes'] = {
+      'DiffviewFiles', 'DiffviewFileHistory', 'DiffviewFileHistoryPanel'
+    }
+    ```
+
+- **nvim-treesitter-context:**
+  - Context plugins that show code context at the top of windows can cause
+    visual scrollbind misalignment.
+  - **Workaround:** Configure the plugin to disable itself for diffview buffers
+    using the `on_attach` callback:
+    ```lua
+    require('treesitter-context').setup({
+      on_attach = function(buf)
+        return not vim.b[buf].ts_context_disable
+      end,
+    })
+    ```
+
+- **vim-markdown (preservim/vim-markdown):**
+  - vim-markdown creates folds for markdown sections. Older versions of
+    diffview set `foldlevel=0` which collapsed these sections, hiding diff
+    content. This has been fixed by setting `foldlevel=99` by default.
+  - If you still experience issues, you can manually set foldlevel in hooks:
+    ```lua
+    require('diffview').setup({
+      hooks = {
+        diff_buf_win_enter = function(bufnr, winid, ctx)
+          if ctx.layout_name == 'diff2_horizontal' then
+            vim.wo[winid].foldlevel = 99
+          end
+        end,
+      },
+    })
+    ```
+
 ## Telescope Integration
 
 You can use Telescope to select branches or commits for diffview:
