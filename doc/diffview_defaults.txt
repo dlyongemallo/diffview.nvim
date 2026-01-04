@@ -10,6 +10,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
     use_icons = true,         -- Requires nvim-web-devicons or mini.icons
     show_help_hints = true,   -- Show hints for how to open the help panel
     watch_index = true,       -- Update views and index buffers when the git index changes.
+    hide_merge_artifacts = false, -- Hide merge artifact files (*.orig, *.BACKUP.*, *.BASE.*, *.LOCAL.*, *.REMOTE.*)
     icons = {                 -- Only applies when use_icons is true.
       folder_closed = "",
       folder_open = "",

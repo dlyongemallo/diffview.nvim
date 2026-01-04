@@ -44,6 +44,7 @@ M.defaults = {
   use_icons = true,
   show_help_hints = true,
   watch_index = true,
+  hide_merge_artifacts = false, -- Hide merge artifact files (*.orig, *.BACKUP.*, etc.)
   icons = {
     folder_closed = "",
     folder_open = "",
