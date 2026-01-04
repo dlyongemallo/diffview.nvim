@@ -173,7 +173,12 @@ return function(panel)
     comp:add_text("(" .. #panel.files.working .. ")", "DiffviewFilePanelCounter")
     comp:ln()
 
-    render_files(panel.listing_style, panel.components.working.files.comp)
+    -- Show friendly message when working tree is clean.
+    if #panel.files.working == 0 and not has_other_files then
+      panel.components.working.files.comp:add_line("  Working tree clean", "DiffviewDim1")
+    else
+      render_files(panel.listing_style, panel.components.working.files.comp)
+    end
     panel.components.working.margin.comp:add_line()
   end
 
