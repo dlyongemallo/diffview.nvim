@@ -165,6 +165,27 @@ function M.goto_file_tab()
   end
 end
 
+---Open the current file with the system default application.
+function M.open_file_external()
+  local file = prepare_goto_file()
+
+  if file then
+    local cmd
+    if vim.fn.has("mac") == 1 then
+      cmd = { "open", file.absolute_path }
+    elseif vim.fn.has("unix") == 1 then
+      cmd = { "xdg-open", file.absolute_path }
+    elseif vim.fn.has("win32") == 1 then
+      cmd = { "cmd", "/c", "start", "", file.absolute_path }
+    else
+      utils.err("Unsupported platform for opening files externally.")
+      return
+    end
+
+    vim.fn.jobstart(cmd, { detach = true })
+  end
+end
+
 ---@class diffview.ConflictCount
 ---@field total integer
 ---@field current integer
