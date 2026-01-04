@@ -292,6 +292,10 @@ File.create_buffer = async.wrap(function(self, callback)
     vim.cmd("filetype detect")
   end)
 
+  -- Disable context plugins that interfere with scrollbind alignment.
+  vim.b[self.bufnr].ts_context_disable = true  -- nvim-treesitter-context
+  vim.b[self.bufnr].context_enabled = false    -- context.vim
+
   vim.bo[self.bufnr].modifiable = last_modifiable
   vim.bo[self.bufnr].modified = last_modified
   self:post_buf_created()
