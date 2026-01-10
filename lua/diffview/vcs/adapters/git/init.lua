@@ -311,14 +311,14 @@ function GitAdapter:get_merge_context()
   end
 
   local ret = {}
-  local out, code = self:exec_sync({ "show", "-s", "--pretty=format:%H%n%D", "HEAD", "--no-show-signature", "--" }, self.ctx.toplevel)
+  local out, code = self:exec_sync({ "show", "-s", "--no-show-signature", "--pretty=format:%H%n%D", "HEAD", "--" }, self.ctx.toplevel)
 
   ret.ours = code ~= 0 and {} or {
     hash = out[1],
     ref_names = out[2],
   }
 
-  out, code = self:exec_sync({ "show", "-s", "--pretty=format:%H%n%D", their_head, "--no-show-signature", "--" }, self.ctx.toplevel)
+  out, code = self:exec_sync({ "show", "-s", "--no-show-signature", "--pretty=format:%H%n%D", their_head, "--" }, self.ctx.toplevel)
 
   ret.theirs = code ~= 0 and {} or {
     hash = out[1],
@@ -1040,10 +1040,10 @@ GitAdapter.fh_retry_commit = async.wrap(function(self, rev_arg, state, opt, call
       "-c",
       "core.quotePath=false",
       "show",
+      "--no-show-signature",
       "--pretty=format:" .. GitAdapter.COMMIT_PRETTY_FMT,
       "--numstat",
       "--raw",
-      "--no-show-signature",
       "--diff-merges=" .. state.log_options.diff_merges,
       (state.single_file and state.log_options.follow) and "--follow" or nil,
       rev_arg,
@@ -1801,8 +1801,9 @@ function GitAdapter:show_untracked(opt)
   opt = opt or {}
 
   if opt.revs then
-    -- Show untracked files when comparing against the working tree (LOCAL)
-    if opt.revs.right.type ~= RevType.LOCAL then
+    -- Show untracked files only when comparing index (STAGE) vs working tree (LOCAL).
+    -- Don't show untracked when comparing a commit to working tree.
+    if not (opt.revs.left.type == RevType.STAGE and opt.revs.right.type == RevType.LOCAL) then
       return false
     end
   end

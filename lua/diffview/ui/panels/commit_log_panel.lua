@@ -49,6 +49,7 @@ end
 ---@field args string[]
 ---@field name string
 
+---@param parent StandardView
 ---@param adapter VCSAdapter
 ---@param opt CommitLogPanelSpec
 function CommitLogPanel:init(parent, adapter, opt)
