@@ -1,5 +1,8 @@
 local lazy = require("diffview.lazy")
 
+-- Ensure bootstrap has run before accessing DiffviewGlobal.
+require("diffview.bootstrap")
+
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local FileHistoryView = lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
 local StandardView = lazy.access("diffview.scene.views.standard.standard_view", "StandardView") ---@type StandardView|LazyModule
