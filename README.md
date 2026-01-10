@@ -573,4 +573,38 @@ end, { desc = 'Diff against main/master' })
   - Visual select lines, then `:'<,'>DiffviewFileHistory --follow`
   - Or for single line: `:.DiffviewFileHistory --follow`
 
+## Telescope Integration
+
+You can use Telescope to select branches or commits for diffview:
+
+```lua
+-- Diff against a branch selected via Telescope
+vim.keymap.set('n', '<leader>db', function()
+  require('telescope.builtin').git_branches({
+    attach_mappings = function(_, map)
+      map('i', '<CR>', function(prompt_bufnr)
+        local selection = require('telescope.actions.state').get_selected_entry()
+        require('telescope.actions').close(prompt_bufnr)
+        vim.cmd('DiffviewOpen ' .. selection.value)
+      end)
+      return true
+    end,
+  })
+end, { desc = 'Diffview branch' })
+
+-- File history for a commit selected via Telescope
+vim.keymap.set('n', '<leader>dC', function()
+  require('telescope.builtin').git_commits({
+    attach_mappings = function(_, map)
+      map('i', '<CR>', function(prompt_bufnr)
+        local selection = require('telescope.actions.state').get_selected_entry()
+        require('telescope.actions').close(prompt_bufnr)
+        vim.cmd('DiffviewOpen ' .. selection.value .. '^!')
+      end)
+      return true
+    end,
+  })
+end, { desc = 'Diffview commit' })
+```
+
 <!-- vim: set tw=80 -->
