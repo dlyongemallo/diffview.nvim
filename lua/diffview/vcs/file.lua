@@ -293,8 +293,10 @@ File.create_buffer = async.wrap(function(self, callback)
   end)
 
   -- Disable context plugins that interfere with scrollbind alignment.
-  vim.b[self.bufnr].ts_context_disable = true  -- nvim-treesitter-context
-  vim.b[self.bufnr].context_enabled = false    -- context.vim
+  -- Note: nvim-treesitter-context does NOT check this variable by default;
+  -- users must configure `on_attach` callback to check it. context.vim does.
+  vim.b[self.bufnr].ts_context_disable = true
+  vim.b[self.bufnr].context_enabled = false
 
   vim.bo[self.bufnr].modifiable = last_modifiable
   vim.bo[self.bufnr].modified = last_modified
