@@ -106,6 +106,7 @@ M.defaults = {
       height = 16,
       win_opts = {}
     },
+    commit_subject_max_length = 72, -- Max length for commit subject display.
   },
   commit_log_panel = {
     win_config = {
