@@ -104,7 +104,7 @@ local function render_file_tree_recurse(depth, comp)
     )
   end
 
-  dir:add_text(ctx.name, "DiffviewFolderName")
+  dir:add_text(ctx.name .. "/", "DiffviewFolderName")
   dir:ln()
 
   if not ctx.collapsed then
