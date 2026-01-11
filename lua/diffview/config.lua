@@ -87,6 +87,7 @@ M.defaults = {
       win_opts = {}
     },
     show = true, -- Show the file panel by default when opening Diffview.
+    always_show_sections = false, -- Always show Changes and Staged changes sections even when empty.
   },
   file_history_panel = {
     log_options = {

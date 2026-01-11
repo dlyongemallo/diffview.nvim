@@ -164,10 +164,11 @@ return function(panel)
   end
 
   local has_other_files = #panel.files.conflicting > 0 or #panel.files.staged > 0
+  local always_show = conf.file_panel.always_show_sections
 
   -- Don't show the 'Changes' section if it's empty and we have other visible
-  -- sections.
-  if #panel.files.working > 0 or not has_other_files then
+  -- sections (unless always_show_sections is enabled).
+  if #panel.files.working > 0 or not has_other_files or always_show then
     comp = panel.components.working.title.comp
     comp:add_text("Changes ", "DiffviewFilePanelTitle")
     comp:add_text("(" .. #panel.files.working .. ")", "DiffviewFilePanelCounter")
@@ -176,19 +177,25 @@ return function(panel)
     -- Show friendly message when working tree is clean.
     if #panel.files.working == 0 and not has_other_files then
       panel.components.working.files.comp:add_line("  Working tree clean", "DiffviewDim1")
+    elseif #panel.files.working == 0 then
+      panel.components.working.files.comp:add_line("  (empty)", "DiffviewDim1")
     else
       render_files(panel.listing_style, panel.components.working.files.comp)
     end
     panel.components.working.margin.comp:add_line()
   end
 
-  if #panel.files.staged > 0 then
+  if #panel.files.staged > 0 or always_show then
     comp = panel.components.staged.title.comp
     comp:add_text("Staged changes ", "DiffviewFilePanelTitle")
     comp:add_text("(" .. #panel.files.staged .. ")", "DiffviewFilePanelCounter")
     comp:ln()
 
-    render_files(panel.listing_style, panel.components.staged.files.comp)
+    if #panel.files.staged == 0 then
+      panel.components.staged.files.comp:add_line("  (empty)", "DiffviewDim1")
+    else
+      render_files(panel.listing_style, panel.components.staged.files.comp)
+    end
     panel.components.staged.margin.comp:add_line()
   end
 
