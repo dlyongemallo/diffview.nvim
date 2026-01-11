@@ -85,7 +85,7 @@ local function render_entries(panel, parent, entries, updating)
     local comp = entry_struct.commit.comp
 
     if not entry.single_file then
-      comp:add_text((entry.folded and c.signs.fold_closed or c.signs.fold_open) .. " ", "CursorLineNr")
+      comp:add_text((entry.folded and c.signs.fold_closed or c.signs.fold_open) .. " ", "DiffviewFolderSign")
     end
 
     if entry.status then
