@@ -45,6 +45,7 @@ M.defaults = {
   show_help_hints = true,
   watch_index = true,
   hide_merge_artifacts = false, -- Hide merge artifact files (*.orig, *.BACKUP.*, etc.)
+  auto_close_on_empty = false, -- Automatically close diffview when the last file is staged/resolved
   icons = {
     folder_closed = "",
     folder_open = "",

@@ -4,6 +4,8 @@ local lazy = require("diffview.lazy")
 local EventName = lazy.access("diffview.events", "EventName") ---@type EventName|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
 local actions = lazy.require("diffview.actions") ---@module "diffview.actions"
+local config = lazy.require("diffview.config") ---@module "diffview.config"
+local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 local vcs_utils = lazy.require("diffview.vcs.utils") ---@module "diffview.vcs.utils"
 
@@ -200,6 +202,13 @@ return function(view)
         view:update_files(
           vim.schedule_wrap(function()
             view.panel:highlight_cur_file()
+            -- Auto-close if all working/conflicting files have been staged.
+            if config.get_config().auto_close_on_empty then
+              if #view.files.working == 0 and #view.files.conflicting == 0 then
+                view:close()
+                lib.dispose_view(view)
+              end
+            end
           end)
         )
         view.emitter:emit(EventName.FILES_STAGED, view)
@@ -220,6 +229,13 @@ return function(view)
 
         view:update_files(function()
           view.panel:highlight_cur_file()
+          -- Auto-close if all working/conflicting files have been staged.
+          if config.get_config().auto_close_on_empty then
+            if #view.files.working == 0 and #view.files.conflicting == 0 then
+              view:close()
+              lib.dispose_view(view)
+            end
+          end
         end)
         view.emitter:emit(EventName.FILES_STAGED, view)
       end
