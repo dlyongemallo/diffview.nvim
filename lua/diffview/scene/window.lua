@@ -241,13 +241,23 @@ function Window:_is_file_in_use()
   return false
 end
 
+-- Options that are global-only and cannot be accessed via vim.wo.
+local global_only_opts = {
+  scrollopt = true,
+}
+
 function Window:_save_winopts()
   if Window.winopt_store[self.file.bufnr] then return end
 
   Window.winopt_store[self.file.bufnr] = {}
-  -- Use vim.wo to get window-local option values, not vim.o which gets global values.
   for option, _ in pairs(self.file.winopts) do
-    Window.winopt_store[self.file.bufnr][option] = vim.wo[self.id][option]
+    if global_only_opts[option] then
+      -- Global options: save from vim.o.
+      Window.winopt_store[self.file.bufnr][option] = vim.o[option]
+    else
+      -- Window-local options: save from vim.wo to get actual window values.
+      Window.winopt_store[self.file.bufnr][option] = vim.wo[self.id][option]
+    end
   end
 end
 
