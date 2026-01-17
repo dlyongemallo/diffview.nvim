@@ -7,6 +7,7 @@ local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") 
 local FileHistoryView = lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
 local HelpPanel = lazy.access("diffview.ui.panels.help_panel", "HelpPanel") ---@type HelpPanel|LazyModule
 local StandardView = lazy.access("diffview.scene.views.standard.standard_view", "StandardView") ---@type StandardView|LazyModule
+local config = lazy.require("diffview.config") ---@module "diffview.config"
 local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 local vcs_utils = lazy.require("diffview.vcs.utils") ---@module "diffview.vcs.utils"
@@ -489,19 +490,41 @@ function M.diffput(target)
   end
 end
 
+---@type table<string, Layout>
+local layout_name_map = {
+  diff1_plain = Diff1,
+  diff2_horizontal = Diff2Hor,
+  diff2_vertical = Diff2Ver,
+  diff3_horizontal = Diff3Hor,
+  diff3_vertical = Diff3Ver,
+  diff3_mixed = Diff3Mixed,
+  diff4_mixed = Diff4Mixed,
+}
+
 function M.cycle_layout()
+  local conf = config.get_config()
+  local cycle_config = conf.view.cycle_layouts or {}
+
+  -- Convert layout names to layout classes.
+  local function resolve_layouts(names)
+    local result = {}
+    for _, name in ipairs(names or {}) do
+      local layout_class = layout_name_map[name]
+      if layout_class then
+        result[#result + 1] = layout_class.__get()
+      end
+    end
+    return result
+  end
+
+  -- Use config or fall back to defaults.
   local layout_cycles = {
-    standard = {
-      Diff2Hor.__get(),
-      Diff2Ver.__get(),
-    },
-    merge_tool = {
-      Diff3Hor.__get(),
-      Diff3Ver.__get(),
-      Diff3Mixed.__get(),
-      Diff4Mixed.__get(),
-      Diff1.__get(),
-    }
+    standard = #(cycle_config.default or {}) > 0
+        and resolve_layouts(cycle_config.default)
+        or { Diff2Hor.__get(), Diff2Ver.__get() },
+    merge_tool = #(cycle_config.merge_tool or {}) > 0
+        and resolve_layouts(cycle_config.merge_tool)
+        or { Diff3Hor.__get(), Diff3Ver.__get(), Diff3Mixed.__get(), Diff4Mixed.__get(), Diff1.__get() },
   }
 
   local view = lib.get_current_view()
@@ -553,17 +576,6 @@ function M.cycle_layout()
     if was_focused then main:focus() end
   end
 end
-
----@type table<string, Layout>
-local layout_name_map = {
-  diff1_plain = Diff1,
-  diff2_horizontal = Diff2Hor,
-  diff2_vertical = Diff2Ver,
-  diff3_horizontal = Diff3Hor,
-  diff3_vertical = Diff3Ver,
-  diff3_mixed = Diff3Mixed,
-  diff4_mixed = Diff4Mixed,
-}
 
 ---Set a specific layout for the current view.
 ---@param layout_name string One of: diff1_plain, diff2_horizontal, diff2_vertical, diff3_horizontal, diff3_vertical, diff3_mixed, diff4_mixed

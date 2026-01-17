@@ -69,6 +69,11 @@ M.defaults = {
       disable_diagnostics = false,
       winbar_info = false,
     },
+    -- Layouts to cycle through with `cycle_layout` action.
+    cycle_layouts = {
+      default = { "diff2_horizontal", "diff2_vertical" },
+      merge_tool = { "diff3_horizontal", "diff3_vertical", "diff3_mixed", "diff4_mixed", "diff1_plain" },
+    },
   },
   file_panel = {
     listing_style = "tree",
