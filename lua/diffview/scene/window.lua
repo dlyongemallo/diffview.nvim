@@ -146,6 +146,17 @@ Window.open_file = async.void(function(self)
 
   self.emitter:emit("pre_open")
 
+  -- Disable context plugins BEFORE the buffer enters the window.
+  -- This must happen before BufWinEnter fires, when context plugins decide to show.
+  -- Save original state for restoration later (only for LOCAL files that we'll restore).
+  if not self.file._context_state_saved then
+    self.file._orig_ts_context_disable = vim.b[self.file.bufnr].ts_context_disable
+    self.file._orig_context_enabled = vim.b[self.file.bufnr].context_enabled
+    self.file._context_state_saved = true
+  end
+  vim.b[self.file.bufnr].ts_context_disable = true  -- nvim-treesitter-context
+  vim.b[self.file.bufnr].context_enabled = false    -- context.vim
+
   local conf = config.get_config()
   api.nvim_win_set_buf(self.id, self.file.bufnr)
 
@@ -222,8 +233,16 @@ function Window:open_null()
 end
 
 function Window:detach_file()
-  if self.file and self.file:is_valid() then
-    self.file:detach_buffer()
+  if self.file then
+    -- Restore context plugin state for local files.
+    if self.file._context_state_saved and self.file:is_valid() then
+      vim.b[self.file.bufnr].ts_context_disable = self.file._orig_ts_context_disable
+      vim.b[self.file.bufnr].context_enabled = self.file._orig_context_enabled
+    end
+
+    if self.file:is_valid() then
+      self.file:detach_buffer()
+    end
   end
 end
 
