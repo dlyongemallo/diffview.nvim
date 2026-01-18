@@ -377,6 +377,14 @@ function File:attach_buffer(force, opt)
         end
       end
 
+      -- Inlay hints: Always disable for non-LOCAL buffers to prevent
+      -- "Invalid 'col': out of range" errors. Inlay hint positions are
+      -- computed for the current file version, which may differ from the
+      -- revision shown in the diff buffer.
+      if HAS_NVIM_0_10 and self.rev and self.rev.type ~= RevType.LOCAL then
+        pcall(vim.lsp.inlay_hint.enable, false, { bufnr = self.bufnr })
+      end
+
       File.attached[self.bufnr] = state
     end
   end
@@ -407,6 +415,11 @@ function File:detach_buffer()
           ---@diagnostic disable-next-line: param-type-mismatch
           vim.diagnostic.enable(self.bufnr)
         end
+      end
+
+      -- Re-enable inlay hints for non-LOCAL buffers (if they were disabled)
+      if HAS_NVIM_0_10 and self.rev and self.rev.type ~= RevType.LOCAL then
+        pcall(vim.lsp.inlay_hint.enable, true, { bufnr = self.bufnr })
       end
 
       File.attached[self.bufnr] = nil
