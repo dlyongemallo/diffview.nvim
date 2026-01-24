@@ -81,6 +81,7 @@ M.defaults = {
       width = 35,
       win_opts = {}
     },
+    show = true, -- Show the file panel by default when opening Diffview.
   },
   file_history_panel = {
     log_options = {
