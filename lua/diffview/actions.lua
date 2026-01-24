@@ -554,6 +554,74 @@ function M.cycle_layout()
   end
 end
 
+---@type table<string, Layout>
+local layout_name_map = {
+  diff1_plain = Diff1,
+  diff2_horizontal = Diff2Hor,
+  diff2_vertical = Diff2Ver,
+  diff3_horizontal = Diff3Hor,
+  diff3_vertical = Diff3Ver,
+  diff3_mixed = Diff3Mixed,
+  diff4_mixed = Diff4Mixed,
+}
+
+---Set a specific layout for the current view.
+---@param layout_name string One of: diff1_plain, diff2_horizontal, diff2_vertical, diff3_horizontal, diff3_vertical, diff3_mixed, diff4_mixed
+function M.set_layout(layout_name)
+  return function()
+    local layout_class = layout_name_map[layout_name]
+    if not layout_class then
+      utils.err(("Unknown layout: '%s'. See ':h diffview-config-view.x.layout' for valid layouts."):format(layout_name))
+      return
+    end
+
+    local view = lib.get_current_view()
+    if not view then return end
+
+    local files, cur_file
+
+    if view:instanceof(FileHistoryView.__get()) then
+      ---@cast view FileHistoryView
+      files = view.panel:list_files()
+      cur_file = view:cur_file()
+    elseif view:instanceof(DiffView.__get()) then
+      ---@cast view DiffView
+      cur_file = view.cur_entry
+      if cur_file then
+        files = cur_file.kind == "conflicting"
+            and view.files.conflicting
+            or utils.vec_join(view.panel.files.working, view.panel.files.staged)
+      end
+    else
+      return
+    end
+
+    if not files then return end
+
+    local target_layout = layout_class.__get()
+
+    for _, entry in ipairs(files) do
+      entry:convert_layout(target_layout)
+    end
+
+    if cur_file then
+      local main = view.cur_layout:get_main_win()
+      local pos = api.nvim_win_get_cursor(main.id)
+      local was_focused = view.cur_layout:is_focused()
+
+      cur_file.layout.emitter:once("files_opened", function()
+        utils.set_cursor(main.id, unpack(pos))
+        if not was_focused then view.cur_layout:sync_scroll() end
+      end)
+
+      view:set_file(cur_file, false)
+      main = view.cur_layout:get_main_win()
+
+      if was_focused then main:focus() end
+    end
+  end
+end
+
 ---@param keymap_groups string|string[]
 function M.help(keymap_groups)
   keymap_groups = type(keymap_groups) == "table" and keymap_groups or { keymap_groups }
