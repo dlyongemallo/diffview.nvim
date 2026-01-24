@@ -503,6 +503,45 @@ restore the file to the state from the left side of the diff (key binding `X`
 from the file panel by default). The current state of the file is stored in the
 git object database, and a command is echoed that shows how to undo the change.
 
+## Recommended Keymaps
+
+These keymaps are commonly used patterns for working with diffview:
+
+```lua
+-- Toggle diffview open/close
+vim.keymap.set('n', '<leader>dv', function()
+  if next(require('diffview.lib').views) == nil then
+    vim.cmd('DiffviewOpen')
+  else
+    vim.cmd('DiffviewClose')
+  end
+end, { desc = 'Toggle Diffview' })
+
+-- Diff working directory
+vim.keymap.set('n', '<leader>do', '<cmd>DiffviewOpen<cr>', { desc = 'Diffview open' })
+vim.keymap.set('n', '<leader>dc', '<cmd>DiffviewClose<cr>', { desc = 'Diffview close' })
+
+-- File history
+vim.keymap.set('n', '<leader>dh', '<cmd>DiffviewFileHistory %<cr>', { desc = 'File history (current file)' })
+vim.keymap.set('n', '<leader>dH', '<cmd>DiffviewFileHistory<cr>', { desc = 'File history (repo)' })
+
+-- Visual mode: history for selection
+vim.keymap.set('v', '<leader>dh', "<Esc><cmd>'<,'>DiffviewFileHistory --follow<CR>", { desc = 'Range history' })
+
+-- Single line history
+vim.keymap.set('n', '<leader>dl', '<cmd>.DiffviewFileHistory --follow<CR>', { desc = 'Line history' })
+
+-- Diff against main/master branch (useful before merging)
+vim.keymap.set('n', '<leader>dm', function()
+  -- Try main first, fall back to master
+  local handle = io.popen('git rev-parse --verify main 2>/dev/null')
+  local result = handle:read('*a')
+  handle:close()
+  local branch = result ~= '' and 'main' or 'master'
+  vim.cmd('DiffviewOpen ' .. branch)
+end, { desc = 'Diff against main/master' })
+```
+
 ## Tips and FAQ
 
 - **Hide untracked files:**
@@ -524,5 +563,14 @@ git object database, and a command is echoed that shows how to undo the change.
 - **Q: How do I jump between hunks in the diff?**
   - A: Use `[c` and `]c`
   - `:h jumpto-diffs`
+- **Compare against merge-base (PR-style diff):**
+  - `DiffviewOpen origin/main...HEAD --merge-base`
+  - Shows only changes introduced since branching.
+- **Use with Neogit:**
+  - Configure Neogit with `integrations = { diffview = true }` for seamless
+    integration.
+- **Trace line evolution:**
+  - Visual select lines, then `:'<,'>DiffviewFileHistory --follow`
+  - Or for single line: `:.DiffviewFileHistory --follow`
 
 <!-- vim: set tw=80 -->
