@@ -431,7 +431,7 @@ function M.get_hl_groups()
   return {
     FilePanelTitle = { fg = M.get_fg("Label") or colors.blue, style = "bold" },
     FilePanelCounter = { fg = M.get_fg("Identifier") or colors.purple, style = "bold" },
-    FilePanelFileName = { fg = M.get_fg("Normal") or colors.white },
+    -- FilePanelFileName is linked to Normal in hl_links.
     Dim1 = { fg = M.get_fg("Comment") or colors.white },
     Primary = { fg = M.get_fg("Function") or "Purple" },
     Secondary = { fg = M.get_fg("String") or "Orange" },
