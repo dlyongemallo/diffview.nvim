@@ -325,6 +325,18 @@ return function(view)
       view.panel:render()
       view.panel:redraw()
     end,
+    toggle_untracked = function()
+      -- Only applicable to working tree comparisons.
+      if not (view.left.type == RevType.STAGE and view.right.type == RevType.LOCAL) then
+        utils.info("Toggle untracked is only available when comparing staged vs working tree.")
+        return
+      end
+
+      view.options.show_untracked = not view.options.show_untracked
+      local state = view.options.show_untracked and "shown" or "hidden"
+      utils.info(("Untracked files: %s"):format(state))
+      view:update_files()
+    end,
     focus_files = function()
       view.panel:focus()
     end,

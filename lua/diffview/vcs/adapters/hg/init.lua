@@ -876,6 +876,13 @@ function HgAdapter:get_branch_name()
   return nil
 end
 
+---Get the default branch name.
+---@return string branch_name The default branch name ("default" for Mercurial).
+function HgAdapter:get_default_branch()
+  -- Mercurial's default branch is always "default".
+  return "default"
+end
+
 function HgAdapter:rev_to_args(left, right)
   assert(
     not (left.type == RevType.LOCAL and right.type == RevType.LOCAL),

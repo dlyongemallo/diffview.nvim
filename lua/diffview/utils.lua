@@ -840,6 +840,19 @@ function M.vec_push(t, ...)
   return t
 end
 
+---Append all elements from another table to the end of a vector.
+---Unlike vec_push with unpack(), this handles large tables safely.
+---@param t vector
+---@param other table
+---@return vector t
+function M.vec_extend(t, other)
+  for i = 1, #other do
+    t[#t + 1] = other[i]
+  end
+
+  return t
+end
+
 ---Remove an object from a vector.
 ---@param t vector
 ---@param v any

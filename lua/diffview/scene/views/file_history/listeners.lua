@@ -95,12 +95,6 @@ return function(view)
     select_prev_entry = function()
       view:prev_item()
     end,
-    select_next_entry_in_commit = function()
-      view:next_item(true)
-    end,
-    select_prev_entry_in_commit = function()
-      view:prev_item(true)
-    end,
     select_first_entry = function()
       local entry = view.panel.entries[1]
       if entry and #entry.files > 0 then
@@ -132,6 +126,30 @@ return function(view)
       local next_idx = (entry_idx - vim.v.count1 - 1) % #view.panel.entries + 1
       local next_entry = view.panel.entries[next_idx]
       view:set_file(next_entry.files[1])
+    end,
+    ---Cycle to next file within the current commit (wrap around).
+    next_entry_in_commit = function()
+      local cur_entry = view.panel.cur_item[1]
+      local cur_file = view.panel.cur_item[2]
+      if not cur_entry or not cur_file then return end
+
+      local file_idx = utils.vec_indexof(cur_entry.files, cur_file)
+      if file_idx == -1 then return end
+
+      local next_idx = (file_idx % #cur_entry.files) + 1
+      view:set_file(cur_entry.files[next_idx])
+    end,
+    ---Cycle to previous file within the current commit (wrap around).
+    prev_entry_in_commit = function()
+      local cur_entry = view.panel.cur_item[1]
+      local cur_file = view.panel.cur_item[2]
+      if not cur_entry or not cur_file then return end
+
+      local file_idx = utils.vec_indexof(cur_entry.files, cur_file)
+      if file_idx == -1 then return end
+
+      local prev_idx = ((file_idx - 2) % #cur_entry.files) + 1
+      view:set_file(cur_entry.files[prev_idx])
     end,
     next_entry = function()
       view.panel:highlight_next_file()

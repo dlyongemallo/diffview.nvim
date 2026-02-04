@@ -386,13 +386,11 @@ end
 ---@param offset integer
 ---@return LogEntry?
 ---@return FileEntry?
-function FileHistoryPanel:_get_entry_by_file_offset(entry_idx, file_idx, offset, cycle_in_commit)
+function FileHistoryPanel:_get_entry_by_file_offset(entry_idx, file_idx, offset)
   local cur_entry = self.entries[entry_idx]
 
-  local entryPos = cycle_in_commit and ((file_idx + offset - 1) % #cur_entry.files + 1) or (file_idx + offset)
-
-  if cur_entry.files[entryPos] then
-    return cur_entry, cur_entry.files[entryPos]
+  if cur_entry.files[file_idx + offset] then
+    return cur_entry, cur_entry.files[file_idx + offset]
   end
 
   local sign = utils.sign(offset)
@@ -412,7 +410,7 @@ function FileHistoryPanel:_get_entry_by_file_offset(entry_idx, file_idx, offset,
   end
 end
 
-function FileHistoryPanel:set_file_by_offset(offset, cycle_in_commit)
+function FileHistoryPanel:set_file_by_offset(offset)
   if self:num_items() == 0 then return end
 
   local entry, file = self.cur_item[1], self.cur_item[2]
@@ -427,7 +425,7 @@ function FileHistoryPanel:set_file_by_offset(offset, cycle_in_commit)
     local file_idx = utils.vec_indexof(entry.files, file)
 
     if entry_idx ~= -1 and file_idx ~= -1 then
-      local next_entry, next_file = self:_get_entry_by_file_offset(entry_idx, file_idx, offset, cycle_in_commit)
+      local next_entry, next_file = self:_get_entry_by_file_offset(entry_idx, file_idx, offset)
       self:set_cur_item({ next_entry, next_file })
 
       if next_entry ~= entry then
@@ -442,12 +440,12 @@ function FileHistoryPanel:set_file_by_offset(offset, cycle_in_commit)
   end
 end
 
-function FileHistoryPanel:prev_file(cycle_in_commit)
-  return self:set_file_by_offset(-vim.v.count1, cycle_in_commit)
+function FileHistoryPanel:prev_file()
+  return self:set_file_by_offset(-vim.v.count1)
 end
 
-function FileHistoryPanel:next_file(cycle_in_commit)
-  return self:set_file_by_offset(vim.v.count1, cycle_in_commit)
+function FileHistoryPanel:next_file()
+  return self:set_file_by_offset(vim.v.count1)
 end
 
 ---@param item LogEntry|FileEntry

@@ -6,6 +6,7 @@ local lazy = require("diffview.lazy")
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local FileHistoryView = lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
 local HelpPanel = lazy.access("diffview.ui.panels.help_panel", "HelpPanel") ---@type HelpPanel|LazyModule
+local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
 local StandardView = lazy.access("diffview.scene.views.standard.standard_view", "StandardView") ---@type StandardView|LazyModule
 local config = lazy.require("diffview.config") ---@module "diffview.config"
 local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
@@ -207,6 +208,41 @@ function M.open_in_new_tab()
     right = view.right,
     path_args = view.path_args,
     options = view.options or {},
+  })
+
+  lib.add_view(new_view)
+  new_view:open()
+end
+
+---Open a diffview comparing the default branch against working tree.
+---The default branch is detected automatically (main, master, or from origin/HEAD).
+function M.diff_against_default_branch()
+  local view = lib.get_current_view()
+  local adapter
+
+  if view then
+    adapter = view.adapter
+  else
+    -- Get an adapter for the current working directory.
+    local err
+    err, adapter = require("diffview.vcs").get_adapter()
+    if err or not adapter then
+      utils.err("Failed to get VCS adapter: " .. (err or "unknown error"))
+      return
+    end
+  end
+
+  local default_branch = adapter:get_default_branch()
+  if not default_branch then
+    utils.err("Could not detect default branch (main/master). Please specify manually.")
+    return
+  end
+
+  local new_view = DiffView({
+    adapter = adapter,
+    rev_arg = default_branch,
+    left = adapter.Rev(RevType.COMMIT, default_branch),
+    right = adapter.Rev(RevType.LOCAL),
   })
 
   lib.add_view(new_view)
@@ -753,6 +789,7 @@ local action_names = {
   "focus_files",
   "listing_style",
   "next_entry",
+  "next_entry_in_commit",
   "open_all_folds",
   "open_commit_in_browser",
   "open_commit_log",
@@ -760,13 +797,12 @@ local action_names = {
   "open_in_diffview",
   "options",
   "prev_entry",
+  "prev_entry_in_commit",
   "refresh_files",
   "restore_entry",
   "select_entry",
   "select_next_entry",
-  "select_next_entry_in_commit",
   "select_prev_entry",
-  "select_prev_entry_in_commit",
   "select_first_entry",
   "select_last_entry",
   "select_next_commit",
@@ -776,6 +812,7 @@ local action_names = {
   "toggle_flatten_dirs",
   "toggle_fold",
   "toggle_stage_entry",
+  "toggle_untracked",
   "unstage_all",
 }
 

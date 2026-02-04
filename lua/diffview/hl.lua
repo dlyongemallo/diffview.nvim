@@ -411,11 +411,11 @@ function M.get_git_hl(status)
   return git_status_hl_map[status]
 end
 
-
---- @param status string
---- @return string
+---Get the configured status icon for a git status letter.
+---@param status string Git status letter (e.g., "M", "A", "D").
+---@return string
 function M.get_status_icon(status)
-  return config._config.status_icons[status] or status
+  return config.get_config().status_icons[status] or status
 end
 
 function M.get_colors()

@@ -16,18 +16,18 @@ DEFAULT CONFIG                                  *diffview.defaults*
       folder_closed = "",
       folder_open = "",
     },
-    status_icons = {
-      ["A"] = "A", -- added
-      ["?"] = "?", -- untracked
-      ["M"] = "M", -- modified
-      ["R"] = "R", -- renamed
-      ["C"] = "C", -- copied
-      ["T"] = "T", -- file type change
-      ["U"] = "U", -- updated but unmerged
-      ["X"] = "X",
-      ["D"] = "D", -- deleted
-      ["B"] = "B",
-      ["!"] = "!", -- untracked
+    status_icons = {          -- Configure icons for git status letters.
+      ["A"] = "A",            -- Added
+      ["?"] = "?",            -- Untracked
+      ["M"] = "M",            -- Modified
+      ["R"] = "R",            -- Renamed
+      ["C"] = "C",            -- Copied
+      ["T"] = "T",            -- Type changed
+      ["U"] = "U",            -- Unmerged
+      ["X"] = "X",            -- Unknown
+      ["D"] = "D",            -- Deleted
+      ["B"] = "B",            -- Broken
+      ["!"] = "!",            -- Ignored
     },
     signs = {
       fold_closed = "",
