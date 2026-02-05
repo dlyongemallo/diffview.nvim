@@ -67,6 +67,17 @@ function CommitLogPanel:init(parent, adapter, opt)
     end,
   })
 
+  parent.emitter:on("close", function(e)
+    if self:is_focused() then
+      self:close()
+      e:stop_propagation()
+    end
+  end)
+end
+
+function CommitLogPanel:init_buffer()
+  CommitLogPanel:super_class().init_buffer(self)
+
   local conf = get_user_config().keymaps
   local default_opt = { silent = true, nowait = true, buffer = self.bufid }
 
@@ -74,13 +85,6 @@ function CommitLogPanel:init(parent, adapter, opt)
     local map_opt = vim.tbl_extend("force", default_opt, mapping[4] or {}, { buffer = self.bufid })
     vim.keymap.set(mapping[1], mapping[2], mapping[3], map_opt)
   end
-
-  parent.emitter:on("close", function(e)
-    if self:is_focused() then
-      self:close()
-      e:stop_propagation()
-    end
-  end)
 end
 
 ---@param self CommitLogPanel
