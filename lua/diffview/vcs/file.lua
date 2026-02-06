@@ -341,7 +341,40 @@ end
 
 ---@class vcs.File.AttachState
 ---@field keymaps table
+---@field saved_keymaps table<string, table> Original buffer keymaps saved before overwriting.
 ---@field disable_diagnostics boolean
+
+---Save any existing buffer-local keymap for the given mode and lhs before
+---diffview overwrites it, so we can restore it on detach.
+---@param bufnr integer
+---@param saved table<string, table>
+---@param mode string
+---@param lhs string
+local function save_existing_keymap(bufnr, saved, mode, lhs)
+  local key = mode .. " " .. lhs
+  if saved[key] then return end
+
+  local buf_maps = api.nvim_buf_get_keymap(bufnr, mode)
+  for _, km in ipairs(buf_maps) do
+    if km.lhs == lhs then
+      saved[key] = {
+        mode = mode,
+        lhs = lhs,
+        rhs = km.rhs or "",
+        callback = km.callback,
+        opts = {
+          buffer = bufnr,
+          desc = km.desc,
+          silent = km.silent == 1 or km.silent == true,
+          noremap = km.noremap == 1 or km.noremap == true,
+          nowait = km.nowait == 1 or km.nowait == true,
+          expr = km.expr == 1 or km.expr == true,
+        },
+      }
+      return
+    end
+  end
+end
 
 ---@param force? boolean
 ---@param opt? vcs.File.AttachState
@@ -360,9 +393,14 @@ function File:attach_buffer(force, opt)
 
       -- Keymaps
       state.keymaps = config.extend_keymaps(conf.keymaps.view, state.keymaps)
+      state.saved_keymaps = state.saved_keymaps or {}
       local default_map_opt = { silent = true, nowait = true, buffer = self.bufnr }
 
       for _, mapping in ipairs(state.keymaps) do
+        local modes = type(mapping[1]) == "table" and mapping[1] or { mapping[1] }
+        for _, mode in ipairs(modes) do
+          save_existing_keymap(self.bufnr, state.saved_keymaps, mode, mapping[2])
+        end
         local map_opt = vim.tbl_extend("force", default_map_opt, mapping[4] or {}, { buffer = self.bufnr })
         vim.keymap.set(mapping[1], mapping[2], mapping[3], map_opt)
       end
@@ -395,7 +433,7 @@ function File:detach_buffer()
     local state = File.attached[self.bufnr]
 
     if state then
-      -- Keymaps
+      -- Keymaps: remove diffview's mappings.
       for lhs, mapping in pairs(state.keymaps) do
         if type(lhs) == "number" then
           local modes = type(mapping[1]) == "table" and mapping[1] or { mapping[1] }
@@ -404,6 +442,16 @@ function File:detach_buffer()
           end
         else
           pcall(api.nvim_buf_del_keymap, self.bufnr, "n", lhs)
+        end
+      end
+
+      -- Restore original buffer keymaps that were saved before attach.
+      if state.saved_keymaps then
+        for _, km in pairs(state.saved_keymaps) do
+          local rhs = km.callback or km.rhs
+          if rhs and api.nvim_buf_is_valid(self.bufnr) then
+            pcall(vim.keymap.set, km.mode, km.lhs, rhs, km.opts)
+          end
         end
       end
 
