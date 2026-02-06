@@ -106,6 +106,7 @@ M.defaults = {
     show_branch_name = false, -- Show branch name in the file panel header.
   },
   file_history_panel = {
+    stat_style = "number", -- "number" (e.g. "5, 3"), "bar" (e.g. "| 8 +++++---"), or "both".
     log_options = {
       ---@type ConfigLogOptions
       git = {
