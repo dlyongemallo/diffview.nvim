@@ -92,6 +92,7 @@ M.defaults = {
   },
   file_panel = {
     listing_style = "tree",
+    sort_file = nil, -- Custom file comparator: function(a_name, b_name, a_data, b_data) -> boolean
     tree_options = {
       flatten_dirs = true,
       folder_statuses = "only_folded"
