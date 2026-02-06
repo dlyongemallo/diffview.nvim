@@ -29,6 +29,7 @@ local M = {}
 ---@class DiffViewOptions
 ---@field show_untracked? boolean
 ---@field selected_file? string Path to the preferred initially selected file.
+---@field selected_row? integer Row to position the cursor on after opening the selected file.
 
 ---@class DiffView : StandardView
 ---@operator call : DiffView
@@ -516,6 +517,17 @@ DiffView.update_files = debounce.debounce_trailing(
     self.panel:redraw()
 
     self:set_file(self.panel.cur_file or self.panel:next_file(), false, not self.initialized)
+
+    -- Position cursor at the requested row on first open.
+    if not self.initialized and self.options.selected_row then
+      local win = self.cur_layout:get_main_win()
+      if win and api.nvim_win_is_valid(win.id) then
+        local buf = api.nvim_win_get_buf(win.id)
+        local line_count = api.nvim_buf_line_count(buf)
+        local row = math.min(self.options.selected_row, line_count)
+        pcall(api.nvim_win_set_cursor, win.id, { math.max(1, row), 0 })
+      end
+    end
 
     self.update_needed = false
     perf:time()

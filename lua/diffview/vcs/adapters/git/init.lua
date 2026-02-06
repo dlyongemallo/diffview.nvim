@@ -1296,6 +1296,7 @@ function GitAdapter:diffview_options(argo)
     selected_file = argo:get_flag("selected-file", { no_empty = true, expand = true })
       or (vim.bo.buftype == "" and pl:vim_expand("%:p"))
       or nil,
+    selected_row = tonumber(argo:get_flag("selected-row", { no_empty = true })),
   }
 
   return {left = left, right = right, options = options}
@@ -2258,6 +2259,7 @@ function GitAdapter:init_completion()
   self.comp.open:put({ "selected-file" }, function (_, arg_lead)
     return vim.fn.getcompletion(arg_lead, "file")
   end)
+  self.comp.open:put({ "selected-row" })
 
   self.comp.file_history:put({ "base" }, function(_, arg_lead)
     return utils.vec_join("LOCAL", self:rev_candidates(arg_lead))

@@ -829,6 +829,7 @@ function HgAdapter:diffview_options(argo)
     selected_file = argo:get_flag("selected-file", { no_empty = true, expand = true })
         or (vim.bo.buftype == "" and pl:vim_expand("%:p"))
         or nil,
+    selected_row = tonumber(argo:get_flag("selected-row", { no_empty = true })),
   }
 
   return {left = left, right = right, options = options}
