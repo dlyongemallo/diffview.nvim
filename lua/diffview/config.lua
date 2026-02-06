@@ -615,7 +615,7 @@ function M.setup(user_config)
   do
     -- Validate layouts
     local view = M._config.view
-    local standard_layouts = { "diff2_horizontal", "diff2_vertical", -1 }
+    local standard_layouts = { "diff1_plain", "diff2_horizontal", "diff2_vertical", -1 }
     local merge_layuots = {
       "diff1_plain",
       "diff3_horizontal",
