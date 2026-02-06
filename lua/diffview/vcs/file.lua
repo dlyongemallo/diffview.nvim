@@ -286,7 +286,7 @@ File.create_buffer = async.wrap(function(self, callback)
   end
 
   for option, value in pairs(bufopts) do
-    api.nvim_buf_set_option(self.bufnr, option, value)
+    vim.bo[self.bufnr][option] = value
   end
 
   local last_modifiable = vim.bo[self.bufnr].modifiable
@@ -505,7 +505,7 @@ function File._get_null_buffer()
   if not api.nvim_buf_is_loaded(File.NULL_FILE.bufnr or -1) then
     local bn = api.nvim_create_buf(false, false)
     for option, value in pairs(File.bufopts) do
-      api.nvim_buf_set_option(bn, option, value)
+      vim.bo[bn][option] = value
     end
 
     local bufname = "diffview://null"
