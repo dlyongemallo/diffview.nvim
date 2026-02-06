@@ -16,6 +16,7 @@ local config = lazy.require("diffview.config") ---@module "diffview.config"
 local debounce = lazy.require("diffview.debounce") ---@module "diffview.debounce"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 local vcs_utils = lazy.require("diffview.vcs.utils") ---@module "diffview.vcs.utils"
+local File = lazy.access("diffview.vcs.file", "File") ---@type vcs.File|LazyModule
 local GitAdapter = lazy.access("diffview.vcs.adapters.git", "GitAdapter") ---@type GitAdapter|LazyModule
 
 local api = vim.api
@@ -181,6 +182,28 @@ function DiffView:close()
 
     for _, file in self.files:iter() do
       file:destroy()
+    end
+
+    -- Clean up LOCAL buffers created by diffview that the user didn't have open before.
+    if config.get_config().clean_up_buffers then
+      for bufnr, _ in pairs(File.created_bufs) do
+        if api.nvim_buf_is_valid(bufnr) and not vim.bo[bufnr].modified then
+          -- Only delete if not displayed in a window outside this tabpage.
+          local dominated = true
+          for _, winid in ipairs(utils.win_find_buf(bufnr, 0)) do
+            if api.nvim_win_get_tabpage(winid) ~= self.tabpage then
+              dominated = false
+              break
+            end
+          end
+
+          if dominated then
+            pcall(api.nvim_buf_delete, bufnr, { force = false })
+          end
+        end
+
+        File.created_bufs[bufnr] = nil
+      end
     end
 
     self.commit_log_panel:destroy()

@@ -52,6 +52,10 @@ File.attached = {}
 ---@type table<string, table<string, integer>>
 File.index_bufmap = {}
 
+---Tracks LOCAL buffers that were newly created by diffview (not pre-existing).
+---@type table<integer, boolean>
+File.created_bufs = {}
+
 ---@static
 File.bufopts = {
   buftype = "nowrite",
@@ -173,6 +177,9 @@ function File:_create_local_buffer()
     end)
 
     api.nvim_win_close(winid, true)
+
+    -- Track this buffer as created by diffview so it can be cleaned up on close.
+    File.created_bufs[self.bufnr] = true
   else
     -- NOTE: LSP servers might load buffers in the background and unlist
     -- them. Explicitly set the buffer as listed when loading it here.
