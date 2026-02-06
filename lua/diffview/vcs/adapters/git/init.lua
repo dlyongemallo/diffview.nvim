@@ -576,6 +576,10 @@ function GitAdapter:stream_fh_data(state)
       "log",
       "--no-show-signature",
       "--pretty=format:%x00%n" .. GitAdapter.COMMIT_PRETTY_FMT,
+      (function()
+        local t = config.get_config().rename_threshold
+        return t and ("-M" .. t .. "%") or nil
+      end)(),
       "--numstat",
       "--raw",
       state.prepared_log_opts.flags,
@@ -1830,6 +1834,8 @@ GitAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, op
   ---@type FileEntry[]
   local conflicts = {}
   local log_opt = { label = "GitAdapter:tracked_files()" }
+  local rename_threshold = config.get_config().rename_threshold
+  local rename_flag = rename_threshold and ("-M" .. rename_threshold .. "%") or nil
 
   local namestat_job = Job({
     command = self:bin(),
@@ -1838,6 +1844,7 @@ GitAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, op
       "-c",
       "core.quotePath=false",
       "diff",
+      rename_flag,
       "--ignore-submodules",
       "--name-status",
       args
@@ -1852,6 +1859,7 @@ GitAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, op
       "-c",
       "core.quotePath=false",
       "diff",
+      rename_flag,
       "--ignore-submodules",
       "--numstat",
       args

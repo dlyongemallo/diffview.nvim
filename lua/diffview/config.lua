@@ -41,6 +41,7 @@ M.defaults = {
   enhanced_diff_hl = false,
   git_cmd = { "git" },
   hg_cmd = { "hg" },
+  rename_threshold = nil, -- Similarity threshold for rename detection (e.g. 40 for 40%). Nil uses git default (50%).
   use_icons = true,
   show_help_hints = true,
   watch_index = true,
