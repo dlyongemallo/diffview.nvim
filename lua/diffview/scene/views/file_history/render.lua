@@ -10,9 +10,55 @@ local pl = utils.path
 
 local cache = setmetatable({}, { __mode = "k" })
 
+local MAX_BAR_WIDTH = 20
+
+---Render a stat bar (like git --stat) onto a component.
+---@param comp RenderComponent
+---@param additions integer
+---@param deletions integer
+local function render_stat_bar(comp, additions, deletions)
+  local total = additions + deletions
+  if total == 0 then return end
+
+  local bar_width = math.min(total, MAX_BAR_WIDTH)
+  local add_width = math.floor(additions / total * bar_width + 0.5)
+  local del_width = bar_width - add_width
+
+  comp:add_text(" | ", "DiffviewNonText")
+  comp:add_text(tostring(total) .. " ", "DiffviewFilePanelCounter")
+
+  if add_width > 0 then
+    comp:add_text(string.rep("+", add_width), "DiffviewFilePanelInsertions")
+  end
+  if del_width > 0 then
+    comp:add_text(string.rep("-", del_width), "DiffviewFilePanelDeletions")
+  end
+end
+
+---Render file stats onto a component.
+---@param comp RenderComponent
+---@param stats GitStats
+---@param stat_style string
+local function render_file_stats(comp, stats, stat_style)
+  local show_number = stat_style == "number" or stat_style == "both"
+  local show_bar = stat_style == "bar" or stat_style == "both"
+
+  if show_number then
+    comp:add_text(" " .. stats.additions, "DiffviewFilePanelInsertions")
+    comp:add_text(", ")
+    comp:add_text(tostring(stats.deletions), "DiffviewFilePanelDeletions")
+  end
+
+  if show_bar and stats.additions and stats.deletions then
+    render_stat_bar(comp, stats.additions, stats.deletions)
+  end
+end
+
 ---@param comp RenderComponent
 ---@param files FileEntry[]
 local function render_files(comp, files)
+  local stat_style = config.get_config().file_history_panel.stat_style or "number"
+
   for i, file in ipairs(files) do
     comp:add_text(i == #files and "└   " or "│   ", "DiffviewNonText")
 
@@ -38,9 +84,7 @@ local function render_files(comp, files)
       comp:add_text(file.basename, file.active and "DiffviewFilePanelSelected" or "DiffviewFilePanelFileName")
 
       if file.stats then
-        comp:add_text(" " .. file.stats.additions, "DiffviewFilePanelInsertions")
-        comp:add_text(", ")
-        comp:add_text(tostring(file.stats.deletions), "DiffviewFilePanelDeletions")
+        render_file_stats(comp, file.stats, stat_style)
       end
     end
 
