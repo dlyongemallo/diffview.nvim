@@ -363,7 +363,7 @@ function Panel:init_buffer()
   local bn = api.nvim_create_buf(false, false)
 
   for k, v in pairs(self.class.bufopts) do
-    api.nvim_buf_set_option(bn, k, v)
+    vim.bo[bn][k] = v
   end
 
   local bufname
