@@ -110,6 +110,9 @@ M.defaults = {
   },
   file_history_panel = {
     stat_style = "number", -- "number" (e.g. "5, 3"), "bar" (e.g. "| 8 +++++---"), or "both".
+    -- Ordered list of components to show for each commit entry.
+    -- Available: "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date"
+    commit_format = { "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date" },
     log_options = {
       ---@type ConfigLogOptions
       git = {
