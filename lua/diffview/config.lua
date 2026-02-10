@@ -47,6 +47,10 @@ M.defaults = {
   watch_index = true,
   hide_merge_artifacts = false, -- Hide merge artifact files (*.orig, *.BACKUP.*, etc.)
   auto_close_on_empty = false, -- Automatically close diffview when the last file is staged/resolved.
+  -- Override diffopt settings while diffview is open. Restored on close.
+  -- Keys: algorithm, context, indent_heuristic, iwhite, iwhiteall, iwhiteeol, iblank, icase.
+  -- Example: { algorithm = "histogram", indent_heuristic = true }
+  diffopt = {},
   clean_up_buffers = false, -- Delete file buffers created by diffview on close (only buffers not open before diffview).
   icons = {
     folder_closed = "",
