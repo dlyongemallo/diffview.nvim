@@ -177,10 +177,16 @@ local formatters = {
       subject = "[empty message]"
     end
 
-    comp:add_text(
-      " " .. subject,
-      ctx.panel.cur_item[1] == entry and "DiffviewFilePanelSelected" or "DiffviewFilePanelFileName"
-    )
+    local subject_hl
+    if ctx.panel.cur_item[1] == entry then
+      subject_hl = "DiffviewFilePanelSelected"
+    elseif entry.pushed then
+      subject_hl = "DiffviewCommitPushed"
+    else
+      subject_hl = "DiffviewCommitUnpushed"
+    end
+
+    comp:add_text(" " .. subject, subject_hl)
   end,
 
   author = function(comp, entry, _ctx)
