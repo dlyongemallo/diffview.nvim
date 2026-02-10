@@ -17,8 +17,6 @@ local logger = DiffviewGlobal.logger
 
 local M = {}
 
-local HAS_NVIM_0_8 = vim.fn.has("nvim-0.8") == 1
-
 ---@class Window : diffview.Object
 ---@field id integer
 ---@field file vcs.File
@@ -203,7 +201,7 @@ end)
 
 ---@return boolean
 function Window:show_winbar_info()
-  if self.file and self.file.winbar and HAS_NVIM_0_8 then
+  if self.file and self.file.winbar then
     local conf = config.get_config()
     local view = lib.get_current_view()
 
@@ -290,9 +288,7 @@ function Window:_restore_winopts()
       local winid = utils.temp_win(self.file.bufnr)
       utils.set_local(winid, Window.winopt_store[self.file.bufnr])
 
-      if HAS_NVIM_0_8 then
-        vim.wo[winid].winbar = nil
-      end
+      vim.wo[winid].winbar = nil
 
       api.nvim_win_close(winid, true)
     end)

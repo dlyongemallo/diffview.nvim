@@ -90,7 +90,7 @@ function DiffView:post_open()
   })
 
   if config.get_config().watch_index and self.adapter:instanceof(GitAdapter.__get()) then
-    self.watcher = vim.loop.new_fs_poll()
+    self.watcher = vim.uv.new_fs_poll()
     self.watcher:start(
       self.adapter.ctx.dir .. "/index",
       1000,

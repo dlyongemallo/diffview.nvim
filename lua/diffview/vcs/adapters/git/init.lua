@@ -23,7 +23,7 @@ local await, pawait = async.await, async.pawait
 local fmt = string.format
 local logger = DiffviewGlobal.logger
 local pl = lazy.access(utils, "path") ---@type PathLib
-local uv = vim.loop
+local uv = vim.uv
 
 local M = {}
 
@@ -247,7 +247,7 @@ function GitAdapter:init(opt)
   opt = opt or {}
   self:super(opt)
 
-  local cwd = opt.cpath or vim.loop.cwd()
+  local cwd = opt.cpath or uv.cwd()
 
   self.ctx = {
     toplevel = opt.toplevel,

@@ -491,7 +491,7 @@ function M.render(bufid, data)
     return
   end
 
-  local last = vim.loop.hrtime()
+  local last = vim.uv.hrtime()
   local was_modifiable = vim.bo[bufid].modifiable
   vim.bo[bufid].modifiable = true
 
@@ -524,7 +524,7 @@ function M.render(bufid, data)
   end
 
   vim.bo[bufid].modifiable = was_modifiable
-  M.last_draw_time = (vim.loop.hrtime() - last) / 1000000
+  M.last_draw_time = (vim.uv.hrtime() - last) / 1000000
 end
 
 M.RenderComponent = RenderComponent

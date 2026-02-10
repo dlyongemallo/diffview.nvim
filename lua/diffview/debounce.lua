@@ -2,7 +2,7 @@ local async = require("diffview.async")
 local utils = require("diffview.utils")
 
 local await = async.await
-local uv = vim.loop
+local uv = vim.uv
 
 local M = {}
 
