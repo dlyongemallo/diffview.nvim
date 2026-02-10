@@ -162,7 +162,8 @@ function CDiffView:create_file_entries(files)
           end
           -- Fall back to layout's should_null if left_null/right_null not specified.
           if nulled == nil then
-            nulled = select(2, pcall(layout_class.should_null, rev, file_data.status, symbol))
+            local ok, res = pcall(layout_class.should_null, rev, file_data.status, symbol)
+            nulled = ok and res or false
           end
 
           return File({

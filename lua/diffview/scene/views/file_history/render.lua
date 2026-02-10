@@ -180,10 +180,10 @@ local formatters = {
     local subject_hl
     if ctx.panel.cur_item[1] == entry then
       subject_hl = "DiffviewFilePanelSelected"
-    elseif entry.pushed then
-      subject_hl = "DiffviewCommitPushed"
+    elseif entry.has_remote_ref then
+      subject_hl = "DiffviewCommitRemoteRef"
     else
-      subject_hl = "DiffviewCommitUnpushed"
+      subject_hl = "DiffviewCommitLocalOnly"
     end
 
     comp:add_text(" " .. subject, subject_hl)

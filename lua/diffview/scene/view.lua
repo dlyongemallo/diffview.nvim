@@ -29,7 +29,9 @@ local function apply_diffopt()
   local conf = config.get_config().diffopt
   if not conf or vim.tbl_isempty(conf) then return end
 
-  saved_diffopt = vim.opt.diffopt:get()
+  if not saved_diffopt then
+    saved_diffopt = vim.opt.diffopt:get()
+  end
 
   if conf.algorithm then
     -- Remove any existing algorithm:* entry and add the new one.

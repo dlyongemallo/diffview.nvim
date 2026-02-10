@@ -168,8 +168,8 @@ function Diff1.should_null(rev, status, sym)
     return status == "D"
 
   elseif rev.type == RevType.COMMIT then
-    -- For commit comparisons, window "b" (the main window) shows the newer version.
-    return false
+    -- Deleted files have no content on the newer side.
+    return status == "D"
 
   elseif rev.type == RevType.STAGE then
     -- Deleted files have no staged content.
