@@ -15,7 +15,6 @@ local pl = lazy.access(utils, "path") ---@type PathLib
 local api = vim.api
 local M = {}
 
-local HAS_NVIM_0_10 = vim.fn.has("nvim-0.10") == 1
 
 ---@alias git.FileDataProducer fun(kind: vcs.FileKind, path: string, pos: "left"|"right"): string[]
 
@@ -414,19 +413,14 @@ function File:attach_buffer(force, opt)
 
       -- Diagnostics
       if state.disable_diagnostics then
-        if HAS_NVIM_0_10 then
-          vim.diagnostic.enable(false, { bufnr = self.bufnr })
-        else
-          ---@diagnostic disable-next-line: deprecated
-          vim.diagnostic.disable(self.bufnr)
-        end
+        vim.diagnostic.enable(false, { bufnr = self.bufnr })
       end
 
       -- Inlay hints: Always disable for non-LOCAL buffers to prevent
       -- "Invalid 'col': out of range" errors. Inlay hint positions are
       -- computed for the current file version, which may differ from the
       -- revision shown in the diff buffer.
-      if HAS_NVIM_0_10 and self.rev and self.rev.type ~= RevType.LOCAL then
+      if self.rev and self.rev.type ~= RevType.LOCAL then
         pcall(vim.lsp.inlay_hint.enable, false, { bufnr = self.bufnr })
       end
 
@@ -464,16 +458,11 @@ function File:detach_buffer()
 
       -- Diagnostics
       if state.disable_diagnostics then
-        if HAS_NVIM_0_10 then
-          vim.diagnostic.enable(true, { bufnr = self.bufnr })
-        else
-          ---@diagnostic disable-next-line: param-type-mismatch
-          vim.diagnostic.enable(self.bufnr)
-        end
+        vim.diagnostic.enable(true, { bufnr = self.bufnr })
       end
 
-      -- Re-enable inlay hints for non-LOCAL buffers (if they were disabled)
-      if HAS_NVIM_0_10 and self.rev and self.rev.type ~= RevType.LOCAL then
+      -- Re-enable inlay hints for non-LOCAL buffers (if they were disabled).
+      if self.rev and self.rev.type ~= RevType.LOCAL then
         pcall(vim.lsp.inlay_hint.enable, true, { bufnr = self.bufnr })
       end
 

@@ -6,7 +6,7 @@ local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local await = async.await
 local fmt = string.format
-local uv = vim.loop
+local uv = vim.uv
 
 local M = {}
 

@@ -25,15 +25,8 @@ function M.init()
   -- Fix the strange behavior that "<afile>" expands non-files
   -- as file name in some cases.
   --
-  -- Ref:
-  --  * sindrets/diffview.nvim#369
-  --  * neovim/neovim#23943
   local function get_tabnr(state)
-    if vim.fn.has("nvim-0.9.2") ~= 1 then
-      return tonumber(state.match)
-    else
-      return tonumber(state.file)
-    end
+    return tonumber(state.file)
   end
 
   local au = api.nvim_create_autocmd
