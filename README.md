@@ -568,7 +568,7 @@ end, { desc = 'Diff against main/master' })
 - **Compare against merge-base (PR-style diff):**
   - `DiffviewOpen origin/main...HEAD --merge-base`
   - Shows only changes introduced since branching.
-- **Use with Neogit:**
+- **Use with [Neogit](https://github.com/NeogitOrg/neogit):**
   - Configure Neogit with `integrations = { diffview = true }` for seamless
     integration.
 - **Trace line evolution:**
@@ -593,6 +593,11 @@ end, { desc = 'Diff against main/master' })
     diagnostics.
   - Inlay hints are automatically disabled for non-working-tree buffers to
     prevent position mismatch errors.
+- **VSCode-style character-level highlighting:**
+  - Pair diffview with
+    [diffchar.vim](https://github.com/rickhowe/diffchar.vim) for precise
+    character/word-level diff highlights. See
+    [Companion Plugins > Recommended](#recommended) for setup details.
 - **Customizing default keymaps to avoid conflicts:**
   - The default keymaps (`<leader>e`, `<leader>b`, `<leader>c*`) may conflict
     with your configuration. Override them in your setup:
@@ -610,7 +615,73 @@ end, { desc = 'Diff against main/master' })
     })
     ```
 
-## Plugin Compatibility
+## Companion Plugins
+
+### Recommended
+
+- **[diffchar.vim](https://github.com/rickhowe/diffchar.vim) (VSCode-style character-level highlighting):**
+  - diffchar.vim enhances diff mode with precise character and word-level
+    highlighting. It automatically activates in diff mode, adding a second layer
+    of highlights on top of Neovim's built-in line-level `DiffChange`
+    backgrounds. This gives VSCode-style dual-layer highlighting: light
+    backgrounds for changed lines plus fine-grained highlights for the exact
+    characters that differ.
+  - diffchar.vim works with diffview out of the box. Install the plugin and open
+    a diff — no additional configuration is needed. You may want to disable
+    diffchar's default keymaps (`<leader>g`, `<leader>p`) if they conflict with
+    your mappings:
+    ```lua
+    {
+      'rickhowe/diffchar.vim',
+      config = function()
+        -- Disable diffchar default keymaps.
+        -- See: https://github.com/rickhowe/diffchar.vim/issues/21
+        vim.cmd([[
+          nmap <Leader>g <Nop>
+          nmap <Leader>p <Nop>
+        ]])
+      end,
+    }
+    ```
+  - diffchar supports multiple diff granularities via `g:DiffUnit`: `'Char'`
+    (character-level), `'Word1'` (words separated by non-word characters),
+    `'Word2'` (whitespace-delimited words), and custom delimiter patterns. It
+    also offers multi-colour matching via `g:DiffColors` to visually correlate
+    corresponding changed units across windows.
+
+- **[Telescope](https://github.com/nvim-telescope/telescope.nvim) integration:**
+  - You can use Telescope to select branches or commits for diffview:
+    ```lua
+    -- Diff against a branch selected via Telescope
+    vim.keymap.set('n', '<leader>db', function()
+      require('telescope.builtin').git_branches({
+        attach_mappings = function(_, map)
+          map('i', '<CR>', function(prompt_bufnr)
+            local selection = require('telescope.actions.state').get_selected_entry()
+            require('telescope.actions').close(prompt_bufnr)
+            vim.cmd('DiffviewOpen ' .. selection.value)
+          end)
+          return true
+        end,
+      })
+    end, { desc = 'Diffview branch' })
+
+    -- File history for a commit selected via Telescope
+    vim.keymap.set('n', '<leader>dC', function()
+      require('telescope.builtin').git_commits({
+        attach_mappings = function(_, map)
+          map('i', '<CR>', function(prompt_bufnr)
+            local selection = require('telescope.actions.state').get_selected_entry()
+            require('telescope.actions').close(prompt_bufnr)
+            vim.cmd('DiffviewOpen ' .. selection.value .. '^!')
+          end)
+          return true
+        end,
+      })
+    end, { desc = 'Diffview commit' })
+    ```
+
+### Known Issues
 
 Some plugins may conflict with diffview's window layout or keymaps. Here are
 known issues and workarounds:
@@ -626,7 +697,7 @@ known issues and workarounds:
     }
     ```
 
-- **nvim-treesitter-context:**
+- **[nvim-treesitter-context](https://github.com/nvim-treesitter/nvim-treesitter-context):**
   - Context plugins that show code context at the top of windows can cause
     visual scrollbind misalignment.
   - **Workaround:** Configure the plugin to disable itself for diffview buffers
@@ -639,7 +710,7 @@ known issues and workarounds:
     })
     ```
 
-- **vim-markdown (preservim/vim-markdown):**
+- **[vim-markdown](https://github.com/preservim/vim-markdown) (preservim/vim-markdown):**
   - vim-markdown creates folds for markdown sections. Older versions of
     diffview set `foldlevel=0` which collapsed these sections, hiding diff
     content. This has been fixed by setting `foldlevel=99` by default.
@@ -655,39 +726,5 @@ known issues and workarounds:
       },
     })
     ```
-
-## Telescope Integration
-
-You can use Telescope to select branches or commits for diffview:
-
-```lua
--- Diff against a branch selected via Telescope
-vim.keymap.set('n', '<leader>db', function()
-  require('telescope.builtin').git_branches({
-    attach_mappings = function(_, map)
-      map('i', '<CR>', function(prompt_bufnr)
-        local selection = require('telescope.actions.state').get_selected_entry()
-        require('telescope.actions').close(prompt_bufnr)
-        vim.cmd('DiffviewOpen ' .. selection.value)
-      end)
-      return true
-    end,
-  })
-end, { desc = 'Diffview branch' })
-
--- File history for a commit selected via Telescope
-vim.keymap.set('n', '<leader>dC', function()
-  require('telescope.builtin').git_commits({
-    attach_mappings = function(_, map)
-      map('i', '<CR>', function(prompt_bufnr)
-        local selection = require('telescope.actions.state').get_selected_entry()
-        require('telescope.actions').close(prompt_bufnr)
-        vim.cmd('DiffviewOpen ' .. selection.value .. '^!')
-      end)
-      return true
-    end,
-  })
-end, { desc = 'Diffview commit' })
-```
 
 <!-- vim: set tw=80 -->
