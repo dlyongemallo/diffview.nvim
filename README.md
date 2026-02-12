@@ -627,13 +627,17 @@ end, { desc = 'Diff against main/master' })
     backgrounds for changed lines plus fine-grained highlights for the exact
     characters that differ.
   - diffchar.vim works with diffview out of the box. Install the plugin and open
-    a diff — no additional configuration is needed. You may want to disable
-    diffchar's default keymaps (`<leader>g`, `<leader>p`) if they conflict with
-    your mappings:
+    a diff — no additional configuration is needed. You may want to enable
+    visual indicators next to deleted characters to get VSCode-style
+    character-level diffs, or disable diffchar's default keymaps (`<leader>g`,
+    `<leader>p`) if they conflict with your mappings:
     ```lua
     {
       'rickhowe/diffchar.vim',
       config = function()
+        -- Use bold/underline on adjacent chars instead of virtual blank columns.
+        vim.g.DiffDelPosVisible = 1
+
         -- Disable diffchar default keymaps.
         -- See: https://github.com/rickhowe/diffchar.vim/issues/21
         vim.cmd([[
