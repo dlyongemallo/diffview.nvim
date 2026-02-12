@@ -1,7 +1,5 @@
 # Diffview.nvim
 
-> **Note:** This is a fork of [sindrets/diffview.nvim](https://github.com/sindrets/diffview.nvim) with bug fixes and improvements applied. The original repository has not been updated since June 2024.
-
 Single tabpage interface for easily cycling through diffs for all modified files
 for any git rev.
 
