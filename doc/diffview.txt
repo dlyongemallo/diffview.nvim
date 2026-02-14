@@ -401,6 +401,11 @@ EXAMPLE CONFIGURATION WITH DEFAULT SETTINGS: |diffview.defaults|
 
 
 
+diff_binaries                                   *diffview-config-diff_binaries*
+        Type: `boolean`, Default: `false`
+
+        Show diffs for binary files.
+
 enhanced_diff_hl                                *diffview-config-enhanced_diff_hl*
         Type: `boolean`, Default: `false`
 
@@ -438,6 +443,97 @@ hg_cmd                                          *diffview-config-hg_cmd*
 
         If your Mercurial install bundles the `chg` binary, this can be
         configured here to have a significant performance boost.
+
+rename_threshold                                *diffview-config-rename_threshold*
+        Type: `integer?`, Default: `nil`
+
+        Similarity threshold for rename detection (e.g. 40 for 40%). When
+        nil, uses the git default (50%).
+
+use_icons                                       *diffview-config-use_icons*
+        Type: `boolean`, Default: `true`
+
+        Use file icons from nvim-web-devicons or mini.icons. Requires one
+        of these plugins to be installed.
+
+show_help_hints                                 *diffview-config-show_help_hints*
+        Type: `boolean`, Default: `true`
+
+        Show hints for how to open the help panel.
+
+watch_index                                     *diffview-config-watch_index*
+        Type: `boolean`, Default: `true`
+
+        Update views and index buffers when the git index changes.
+
+hide_merge_artifacts                            *diffview-config-hide_merge_artifacts*
+        Type: `boolean`, Default: `false`
+
+        Hide merge artifact files (*.orig, *.BACKUP.*, *.BASE.*, *.LOCAL.*,
+        *.REMOTE.*) from the file list.
+
+auto_close_on_empty                             *diffview-config-auto_close_on_empty*
+        Type: `boolean`, Default: `false`
+
+        Automatically close the Diffview when the last file is staged or
+        resolved.
+
+diffopt                                         *diffview-config-diffopt*
+        Type: `table`, Default: `{}`
+
+        Override |'diffopt'| settings while Diffview is open. Settings are
+        restored on close. Available keys: `algorithm`, `context`,
+        `indent_heuristic`, `iwhite`, `iwhiteall`, `iwhiteeol`, `iblank`,
+        `icase`.
+
+        Example: >lua
+                diffopt = { algorithm = "histogram", indent_heuristic = true }
+<
+
+clean_up_buffers                                *diffview-config-clean_up_buffers*
+        Type: `boolean`, Default: `false`
+
+        Delete file buffers created by Diffview when the view is closed.
+        Only affects buffers that were not open before the Diffview was
+        opened.
+
+icons                                           *diffview-config-icons*
+        Type: `table`, Default: (see defaults)
+
+        Icons for folder states. Only applies when
+        |diffview-config-use_icons| is true.
+
+        Fields: ~
+            {folder_closed} (string)
+                Icon for closed folders.
+
+            {folder_open} (string)
+                Icon for open folders.
+
+status_icons                                    *diffview-config-status_icons*
+        Type: `table`, Default: (see defaults)
+
+        Configure icons for git status letters. Each key is a git status
+        letter and the value is the string to display in the file panel.
+
+        Default keys: `A` (added), `?` (untracked), `M` (modified),
+        `R` (renamed), `C` (copied), `T` (type changed), `U` (unmerged),
+        `X` (unknown), `D` (deleted), `B` (broken), `!` (ignored).
+
+signs                                           *diffview-config-signs*
+        Type: `table`, Default: (see defaults)
+
+        Signs used in the file panel and file history panel.
+
+        Fields: ~
+            {fold_closed} (string)
+                Sign for closed folds.
+
+            {fold_open} (string)
+                Sign for open folds.
+
+            {done} (string)
+                Sign indicating completion/resolution.
 
 view.x.layout                                   *diffview-config-view.x.layout*
         Type: >
@@ -571,8 +667,107 @@ view.x.disable_diagnostics
         diagnostics are automatically enabled again when leaving or closing
         the view's tab page.
 
+view.cycle_layouts                              *diffview-config-view.cycle_layouts*
+        Type: `table`, Default: (see defaults)
+
+        Layouts to cycle through with the |diffview-actions-cycle_layout|
+        action. Separate lists can be configured for the default view and
+        the merge tool.
+
+        Fields: ~
+            {default} (string[])
+                Layouts to cycle through in the default view.
+                Default: `{ "diff2_horizontal", "diff2_vertical" }`
+
+            {merge_tool} (string[])
+                Layouts to cycle through in the merge tool.
+                Default: >
+                    { "diff3_horizontal", "diff3_vertical",
+                      "diff3_mixed", "diff4_mixed", "diff1_plain" }
+<
+
+file_panel                                      *diffview-config-file_panel*
+        Type: `table`, Default: (see defaults)
+
+        Configuration for the file panel in Diffview.
+
+        Fields: ~
+            {listing_style} ("tree"|"list")
+                The listing style for the file panel. Default: `"tree"`
+
+            {sort_file} (function?)
+                Custom file comparator function. Receives
+                `(a_name, b_name, a_data, b_data)` and should return a
+                boolean.
+
+            {tree_options} (table)
+                Options for the tree listing style:
+                • {flatten_dirs} (boolean) Flatten directories that only
+                  contain a single directory. Default: `true`
+                • {folder_statuses} ("never"|"only_folded"|"always")
+                  Show folder statuses. Default: `"only_folded"`
+
+            {win_config} (table|function)
+                See |diffview-config-win_config|.
+
+            {show} (boolean)
+                Show the file panel when opening Diffview. Default: `true`
+
+            {always_show_sections} (boolean)
+                Always show the Changes and Staged changes sections even
+                when empty. Default: `false`
+
+            {show_branch_name} (boolean)
+                Show branch name in the file panel header. Default: `false`
+
+file_history_panel                              *diffview-config-file_history_panel*
+        Type: `table`, Default: (see defaults)
+
+        Configuration for the file history panel.
+
+        Fields: ~
+            {stat_style} ("number"|"bar"|"both")
+                How to display file change stats. `"number"` shows e.g.
+                "5, 3", `"bar"` shows e.g. "| 8 +++++---". Default:
+                `"number"`
+
+            {commit_format} (string[])
+                Ordered list of components to show for each commit entry.
+                Available components: `"status"`, `"files"`, `"stats"`,
+                `"hash"`, `"reflog"`, `"ref"`, `"subject"`, `"author"`,
+                `"date"`.
+
+            {log_options} (table)
+                See |diffview-config-log_options|.
+
+            {win_config} (table|function)
+                See |diffview-config-win_config|.
+
+            {commit_subject_max_length} (integer)
+                Maximum length for commit subject display.
+                Default: `72`
+
+            {date_format} ("auto"|"relative"|"iso")
+                Date format for commit entries. `"auto"` uses relative
+                format for recent commits and ISO for older ones.
+                Default: `"auto"`
+
+commit_log_panel                                *diffview-config-commit_log_panel*
+        Type: `table`, Default: (see defaults)
+
+        Configuration for the commit log panel (opened with the
+        |diffview-actions-open_commit_log| action).
+
+        Fields: ~
+            {win_config} (table|function)
+                See |diffview-config-win_config|.
+
 win_config                                      *diffview-config-win_config*
         Type: `table | fun(): table`, Default: `{}`
+
+        This is a sub-field of the panel config tables
+        (|diffview-config-file_panel|, |diffview-config-file_history_panel|,
+        |diffview-config-commit_log_panel|), not a top-level config field.
 
         This is used to configure the windows of the various panels in the
         plugin. If this is set to a function, it should return the config
@@ -661,6 +856,9 @@ win_config                                      *diffview-config-win_config*
 
 log_options                                     *diffview-config-log_options*
         Type: `table`, Default: (see defaults)
+
+        This is a sub-field of |diffview-config-file_history_panel|, not a
+        top-level config field.
 
         This table allows you to control the default options that are passed
         to git-log in order to produce the file history. The table is divided
