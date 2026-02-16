@@ -188,7 +188,7 @@ require("diffview").setup({
   enhanced_diff_hl = false, -- See |diffview-config-enhanced_diff_hl|
   git_cmd = { "git" },      -- The git executable followed by default args.
   hg_cmd = { "hg" },        -- The hg executable followed by default args.
-  rename_threshold = nil,   -- Similarity threshold for rename detection (e.g. 40 for 40%). Nil uses git default (50%).
+  rename_threshold = nil,   -- Integer 0-100 for rename detection similarity. Nil uses git default (50%). Invalid values are ignored.
   use_icons = true,         -- Requires nvim-web-devicons or mini.icons
   show_help_hints = true,   -- Show hints for how to open the help panel
   watch_index = true,       -- Update views and index buffers when the git index changes.

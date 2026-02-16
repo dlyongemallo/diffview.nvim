@@ -106,13 +106,38 @@ function Diff3:to_diff4(layout)
   })
 end
 
----FIXME
 ---@override
 ---@param rev Rev
 ---@param status string Git status symbol.
 ---@param sym Diff3.WindowSymbol
 function Diff3.should_null(rev, status, sym)
-  return false
+  assert(sym == "a" or sym == "b" or sym == "c")
+
+  if rev.type == RevType.LOCAL then
+    return status == "D"
+
+  elseif rev.type == RevType.COMMIT then
+    if sym == "a" then
+      return vim.tbl_contains({ "?", "A" }, status)
+    end
+
+    return status == "D"
+
+  elseif rev.type == RevType.STAGE then
+    if rev.stage == 0 then
+      if sym == "a" then
+        return vim.tbl_contains({ "?", "A" }, status)
+      end
+
+      return status == "D"
+    end
+
+    -- Merge stages (1..3) can be absent depending on conflict type.
+    -- This is resolved at file load time by checking stage blob existence.
+    return false
+  end
+
+  error(("Unexpected state! %s, %s, %s"):format(rev, status, sym))
 end
 
 M.Diff3 = Diff3
