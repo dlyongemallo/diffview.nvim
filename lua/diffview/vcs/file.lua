@@ -239,6 +239,18 @@ File.create_buffer = async.wrap(function(self, callback)
     return
   end
 
+  -- Unmerged entries may not have all stage blobs (e.g. delete/modify
+  -- conflicts). Missing stage blobs should render as null buffers.
+  if self.rev.type == RevType.STAGE and self.rev.stage > 0 and self.adapter.file_blob_hash then
+    if not self.adapter:file_blob_hash(self.path, ":" .. self.rev.stage) then
+      self.nulled = true
+      self.bufnr = File._get_null_buffer()
+      self:post_buf_created()
+      callback(self.bufnr)
+      return
+    end
+  end
+
   local context
   if self.rev.type == RevType.COMMIT then
     context = self.rev:abbrev(11)
