@@ -14,6 +14,18 @@ local M = {}
 
 local fstat_cache = {}
 
+---Safely evaluate a layout's should_null predicate. Returns false if the
+---call errors so that a broken predicate never accidentally nulls a file.
+---@param layout Layout (class)
+---@param rev Rev
+---@param status string
+---@param symbol string
+---@return boolean
+local function try_should_null(layout, rev, status, symbol)
+  local ok, res = pcall(layout.should_null, rev, status, symbol)
+  return ok and res or false
+end
+
 ---@class GitStats
 ---@field additions integer
 ---@field deletions integer
@@ -123,7 +135,7 @@ function FileEntry:convert_layout(target_layout)
       commit = self.commit,
       get_data = get_data,
       rev = rev,
-      nulled = select(2, pcall(target_layout.should_null, rev, self.status, symbol)),
+      nulled = try_should_null(target_layout, rev, self.status, symbol),
     }) --[[@as vcs.File ]]
   end
 
@@ -319,7 +331,7 @@ function FileEntry.with_layout(layout_class, opt)
       rev = rev,
       nulled = utils.sate(
         opt.nulled,
-        select(2, pcall(layout_class.should_null, rev, opt.status, symbol))
+        try_should_null(layout_class, rev, opt.status, symbol)
       ),
     }) --[[@as vcs.File ]]
   end

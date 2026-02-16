@@ -23,6 +23,8 @@ function M.load(plugin)
 end
 
 function M.setup()
+  vim.g.loaded_netrw = 1
+  vim.g.loaded_netrwPlugin = 1
   vim.cmd([[set runtimepath=$VIMRUNTIME]])
   vim.opt.runtimepath:append(M.root())
   vim.opt.packpath = { M.root(".tests/site") }

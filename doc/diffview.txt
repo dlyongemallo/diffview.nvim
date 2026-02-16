@@ -449,6 +449,7 @@ rename_threshold                                *diffview-config-rename_threshol
 
         Similarity threshold for rename detection (e.g. 40 for 40%). When
         nil, uses the git default (50%).
+        Must be an integer in the range [0, 100]. Invalid values are ignored.
 
 use_icons                                       *diffview-config-use_icons*
         Type: `boolean`, Default: `true`

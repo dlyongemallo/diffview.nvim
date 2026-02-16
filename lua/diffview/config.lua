@@ -620,6 +620,23 @@ function M.setup(user_config)
   end
 
   do
+    local rename_threshold = M._config.rename_threshold
+
+    if rename_threshold ~= nil then
+      local n = tonumber(rename_threshold)
+
+      if not n or n < 0 or n > 100 or n % 1 ~= 0 then
+        utils.warn(
+          "Invalid value for 'rename_threshold'. Must be an integer between 0 and 100, or nil."
+        )
+        M._config.rename_threshold = M.defaults.rename_threshold
+      else
+        M._config.rename_threshold = n
+      end
+    end
+  end
+
+  do
     -- Validate layouts
     local view = M._config.view
     local standard_layouts = { "diff1_plain", "diff2_horizontal", "diff2_vertical", -1 }
