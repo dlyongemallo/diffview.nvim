@@ -1965,7 +1965,7 @@ GitAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, op
       }
     })
 
-    if left and left.type == RevType.LOCAL then
+    if left and left.type == RevType.LOCAL and file.stats then
       -- Special handling is required here. The rev range `LOCAL..{REV}` can't be
       -- expressed in Git's rev syntax, but logically it should be the same as
       -- just `{REV}`, but with the diff stats swapped (as we want the diff from
