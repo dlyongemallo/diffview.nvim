@@ -123,7 +123,10 @@ function FileEntry:convert_layout(target_layout)
       commit = self.commit,
       get_data = get_data,
       rev = rev,
-      nulled = select(2, pcall(target_layout.should_null, rev, self.status, symbol)),
+      nulled = (function()
+        local ok, res = pcall(target_layout.should_null, rev, self.status, symbol)
+        return ok and res or false
+      end)(),
     }) --[[@as vcs.File ]]
   end
 
@@ -319,7 +322,10 @@ function FileEntry.with_layout(layout_class, opt)
       rev = rev,
       nulled = utils.sate(
         opt.nulled,
-        select(2, pcall(layout_class.should_null, rev, opt.status, symbol))
+        (function()
+          local ok, res = pcall(layout_class.should_null, rev, opt.status, symbol)
+          return ok and res or false
+        end)()
       ),
     }) --[[@as vcs.File ]]
   end
