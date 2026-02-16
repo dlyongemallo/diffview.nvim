@@ -280,6 +280,11 @@ return function(view)
       end
       if not item or not item.commit then return end
 
+      if not view.adapter.get_commit_url then
+        utils.err("Opening commits in browser is not supported for this VCS.")
+        return
+      end
+
       local url = view.adapter:get_commit_url(item.commit.hash)
       if not url then
         utils.err("Could not construct browser URL. Remote URL not recognized.")
