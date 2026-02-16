@@ -76,7 +76,7 @@ function CommitLogPanel:init(parent, adapter, opt)
 end
 
 function CommitLogPanel:init_buffer()
-  CommitLogPanel:super_class().init_buffer(self)
+  CommitLogPanel.super_class.init_buffer(self)
 
   local conf = get_user_config().keymaps
   local default_opt = { silent = true, nowait = true, buffer = self.bufid }

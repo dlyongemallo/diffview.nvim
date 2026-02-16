@@ -225,7 +225,12 @@ function M.diff_against_default_branch()
   else
     -- Get an adapter for the current working directory.
     local err
-    err, adapter = require("diffview.vcs").get_adapter()
+    local cfile = pl:vim_expand("%")
+    local top_indicators = utils.vec_join(
+      vim.bo.buftype == "" and pl:absolute(cfile) or nil,
+      pl:realpath(".")
+    )
+    err, adapter = require("diffview.vcs").get_adapter({ top_indicators = top_indicators })
     if err or not adapter then
       utils.err("Failed to get VCS adapter: " .. (err or "unknown error"))
       return
