@@ -118,6 +118,8 @@ end
 
 ---@param target_layout Layout
 function FileEntry:convert_layout(target_layout)
+  if not self.revs then return end
+
   local get_data
 
   for _, file in ipairs(self.layout:files()) do
