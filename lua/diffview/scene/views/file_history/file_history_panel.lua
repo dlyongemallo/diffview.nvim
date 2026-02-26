@@ -319,7 +319,7 @@ end
 ---Get the log or file entry under the cursor.
 ---@return (LogEntry|FileEntry)?
 function FileHistoryPanel:get_item_at_cursor()
-  if not self:is_open() and self:buf_loaded() then return end
+  if not (self:is_open() and self:buf_loaded()) then return end
 
   local cursor = api.nvim_win_get_cursor(self.winid)
   local line = cursor[1]

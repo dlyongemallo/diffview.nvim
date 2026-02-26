@@ -244,7 +244,7 @@ end
 ---Get the file entry under the cursor.
 ---@return (FileEntry|DirData)?
 function FilePanel:get_item_at_cursor()
-  if not self:is_open() and self:buf_loaded() then return end
+  if not (self:is_open() and self:buf_loaded()) then return end
 
   local line = api.nvim_win_get_cursor(self.winid)[1]
   local comp = self.components.comp:get_comp_on_line(line)
@@ -260,7 +260,7 @@ end
 ---@return RenderComponent?
 function FilePanel:get_dir_at_cursor()
   if self.listing_style ~= "tree" then return end
-  if not self:is_open() and self:buf_loaded() then return end
+  if not (self:is_open() and self:buf_loaded()) then return end
 
   local line = api.nvim_win_get_cursor(self.winid)[1]
   local comp = self.components.comp:get_comp_on_line(line)
