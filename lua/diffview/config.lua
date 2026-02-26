@@ -41,6 +41,7 @@ M.defaults = {
   enhanced_diff_hl = false,
   git_cmd = { "git" },
   hg_cmd = { "hg" },
+  jj_cmd = { "jj" },
   rename_threshold = nil, -- Similarity threshold for rename detection (e.g. 40 for 40%). Nil uses git default (50%).
   use_icons = true,
   show_help_hints = true,
@@ -617,6 +618,14 @@ function M.setup(user_config)
 
   if #M._config.git_cmd == 0 then
     M._config.git_cmd = M.defaults.git_cmd
+  end
+
+  if #M._config.hg_cmd == 0 then
+    M._config.hg_cmd = M.defaults.hg_cmd
+  end
+
+  if #M._config.jj_cmd == 0 then
+    M._config.jj_cmd = M.defaults.jj_cmd
   end
 
   if #M._config.p4_cmd == 0 then

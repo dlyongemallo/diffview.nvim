@@ -50,13 +50,14 @@ Visit the help page for more info.
 COMMANDS                                        *diffview-commands*
 
                                                 *:DiffviewOpen*
-:DiffviewOpen [git-rev] [options] [ -- {paths...}]
+:DiffviewOpen [rev] [options] [ -- {paths...}]
 
-        Opens a new Diffview that compares against [git-rev]. If no [git-rev]
-        is given, defaults to comparing against the index. Additional
-        {paths...} may be provided to narrow down what files are shown. If the
-        `-C` flag is not defined, the git top-level is determined from the
-        current buffer when possible. Otherwise it's determined from the cwd.
+        Opens a new Diffview that compares against [rev]. If no [rev] is
+        given, defaults to comparing against the working copy baseline for the
+        active adapter. Additional {paths...} may be provided to narrow down
+        what files are shown. If the `-C` flag is not defined, the adapter
+        repository top-level is determined from the current buffer when
+        possible. Otherwise it's determined from the cwd.
 
         Examples: >vim
 
@@ -77,6 +78,11 @@ COMMANDS                                        *diffview-commands*
 
             " Diff HEAD against it's merge base in origin/main:
             :DiffviewOpen origin/main...HEAD
+
+            " Jujutsu examples:
+            :DiffviewOpen @-
+            :DiffviewOpen main..@
+            :DiffviewOpen main...@
 
             " Limit the scope to the given paths:
             :DiffviewOpen HEAD~2 -- lua/diffview plugin
@@ -143,8 +149,10 @@ COMMANDS                                        *diffview-commands*
                           • `true`, `normal`, `all` Show untracked.
                           • `false`, `no` Don't show untracked.
         --cached, --staged
-                        Diff staged changes against [git-rev]. If no [git-rev]
+                        Diff staged changes against [rev]. If no [rev]
                         is given, defaults to `HEAD`.
+                        NOTE: This is Git-specific. For Jujutsu, this option is
+                        ignored with a warning.
 
         --imply-local   If a range rev is provided and either end of the range
                         points to `HEAD`: point that end to local files
@@ -153,6 +161,8 @@ COMMANDS                                        *diffview-commands*
                         (triple-dot), but you want to be able to utilize the
                         LSP features that are not available while you're
                         viewing files created from git.
+                        NOTE: This is Git-specific. For Jujutsu, this option is
+                        ignored with a warning.
 
         -C{path}        Run as if git was started in {path} instead of the
                         current working directory.
@@ -168,6 +178,8 @@ COMMANDS                                        *diffview-commands*
         Opens a new file history view that lists all commits that affected the
         given paths. This is a porcelain interface for git-log. Both [paths]
         and [options] may be specified in any order, even interchangeably.
+
+        NOTE: The Jujutsu adapter currently supports only |:DiffviewOpen|.
 
         If no [paths] are given, defaults to the top-level of the working
         tree. The top-level will be inferred from the current buffer when
@@ -443,6 +455,13 @@ hg_cmd                                          *diffview-config-hg_cmd*
 
         If your Mercurial install bundles the `chg` binary, this can be
         configured here to have a significant performance boost.
+
+jj_cmd                                          *diffview-config-jj_cmd*
+        Type: `string[]`, Default: `{ "jj" }`
+
+        This table forms the first part of all Jujutsu commands used
+        internally in the plugin. The first element should be the Jujutsu
+        binary. The subsequent elements are passed as arguments.
 
 rename_threshold                                *diffview-config-rename_threshold*
         Type: `integer?`, Default: `nil`

@@ -66,6 +66,7 @@ function M.check()
 
     local has_valid_adapter = false
     local adapter_kinds = {
+      { class = require("diffview.vcs.adapters.jj").JjAdapter, name = "Jujutsu" },
       { class = require("diffview.vcs.adapters.git").GitAdapter, name = "Git" },
       { class = require("diffview.vcs.adapters.hg").HgAdapter, name = "Mercurial" },
       { class = require("diffview.vcs.adapters.p4").P4Adapter, name = "Perforce" },

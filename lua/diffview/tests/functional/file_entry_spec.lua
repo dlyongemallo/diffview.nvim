@@ -1,9 +1,12 @@
+local helpers = require("diffview.tests.helpers")
 local FileEntry = require("diffview.scene.file_entry").FileEntry
 local Diff2Hor = require("diffview.scene.layouts.diff_2_hor").Diff2Hor
 local RevType = require("diffview.vcs.rev").RevType
 local GitRev = require("diffview.vcs.adapters.git.rev").GitRev
 
-describe("diffview.file_entry", function()
+local eq = helpers.eq
+
+describe("diffview.scene.file_entry", function()
   it("convert_layout skips null entries without error (#612)", function()
     local adapter = { ctx = { toplevel = vim.uv.cwd() } }
     local entry = FileEntry.new_null_entry(adapter)
@@ -47,5 +50,46 @@ describe("diffview.file_entry", function()
 
     assert.is_not_nil(captured)
     assert.False(captured.b.nulled)
+  end)
+
+  it("forwards force flag to contained files when destroyed", function()
+    local seen = {}
+    local layout_destroyed = false
+
+    local layout = {
+      files = function()
+        return {
+          {
+            destroy = function(_, force)
+              seen[#seen + 1] = force
+            end,
+          },
+          {
+            destroy = function(_, force)
+              seen[#seen + 1] = force
+            end,
+          },
+        }
+      end,
+      destroy = function()
+        layout_destroyed = true
+      end,
+    }
+
+    local entry = FileEntry({
+      adapter = { ctx = { toplevel = "/tmp" } },
+      path = "a.txt",
+      oldpath = nil,
+      revs = {},
+      layout = layout,
+      status = "M",
+      stats = {},
+      kind = "working",
+    })
+
+    entry:destroy(true)
+
+    eq({ true, true }, seen)
+    eq(true, layout_destroyed)
   end)
 end)

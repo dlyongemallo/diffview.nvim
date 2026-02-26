@@ -13,12 +13,13 @@ for any git rev.
 Vim's diff mode is pretty good, but there is no convenient way to quickly bring
 up all modified files in a diffsplit. This plugin aims to provide a simple,
 unified, single tabpage interface that lets you easily review all changed files
-for any git rev.
+for any VCS rev.
 
 ## Requirements
 
 - Git ≥ 2.31.0 (for Git support)
 - Mercurial ≥ 5.4.0 (for Mercurial support)
+- Jujutsu ≥ 0.38.0 (for `:DiffviewOpen` support)
 - Neovim ≥ 0.10.0 (with LuaJIT)
 - [nvim-web-devicons](https://github.com/nvim-tree/nvim-web-devicons) or [mini.icons](https://github.com/echasnovski/mini.nvim/blob/main/readmes/mini-icons.md) (optional) for file icons
 
@@ -82,11 +83,11 @@ For more info, see `:h :DiffviewFileHistory`.
 
 ## Usage
 
-### `:DiffviewOpen [git rev] [options] [ -- {paths...}]`
+### `:DiffviewOpen [rev] [options] [ -- {paths...}]`
 
-Calling `:DiffviewOpen` with no args opens a new Diffview that compares against
-the current index. You can also provide any valid git rev to view only changes
-for that rev.
+Calling `:DiffviewOpen` with no args opens a new Diffview for the current
+working copy (the exact baseline depends on VCS adapter). You can also provide
+any valid rev/range accepted by your active adapter.
 
 Examples:
 
@@ -97,6 +98,9 @@ Examples:
 - `:DiffviewOpen d4a7b0d^!`
 - `:DiffviewOpen d4a7b0d..519b30e`
 - `:DiffviewOpen origin/main...HEAD`
+- `:DiffviewOpen @-` (Jujutsu)
+- `:DiffviewOpen main..@` (Jujutsu)
+- `:DiffviewOpen main...@` (Jujutsu)
 
 You can also provide additional paths to narrow down what files are shown:
 
@@ -104,6 +108,10 @@ You can also provide additional paths to narrow down what files are shown:
 
 For information about additional `[options]`, visit the
 [documentation](https://github.com/sindrets/diffview.nvim/blob/main/doc/diffview.txt).
+
+Jujutsu currently supports only `:DiffviewOpen`. The options `--cached`,
+`--staged`, and `--imply-local` are Git-only and are ignored by the Jujutsu
+adapter with a warning.
 
 Additional commands for convenience:
 
@@ -188,6 +196,7 @@ require("diffview").setup({
   enhanced_diff_hl = false, -- See |diffview-config-enhanced_diff_hl|
   git_cmd = { "git" },      -- The git executable followed by default args.
   hg_cmd = { "hg" },        -- The hg executable followed by default args.
+  jj_cmd = { "jj" },        -- The jj executable followed by default args.
   rename_threshold = nil,   -- Integer 0-100 for rename detection similarity. Nil uses git default (50%). Invalid values are ignored.
   use_icons = true,         -- Requires nvim-web-devicons or mini.icons
   show_help_hints = true,   -- Show hints for how to open the help panel

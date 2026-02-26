@@ -89,9 +89,10 @@ function FileEntry:init(opt)
   self.opened = false
 end
 
-function FileEntry:destroy()
+---@param force? boolean
+function FileEntry:destroy(force)
   for _, f in ipairs(self.layout:files()) do
-    f:destroy()
+    f:destroy(force)
   end
 
   self.layout:destroy()

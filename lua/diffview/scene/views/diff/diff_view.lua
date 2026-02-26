@@ -27,6 +27,24 @@ local pl = lazy.access(utils, "path") ---@type PathLib
 
 local M = {}
 
+---@param a Rev?
+---@param b Rev?
+---@return boolean
+local function same_rev(a, b)
+  if a == nil and b == nil then
+    return true
+  end
+
+  if a == nil or b == nil then
+    return false
+  end
+
+  return a.type == b.type
+    and a.commit == b.commit
+    and a.stage == b.stage
+    and a.track_head == b.track_head
+end
+
 ---@class DiffViewOptions
 ---@field show_untracked? boolean
 ---@field selected_file? string Path to the preferred initially selected file.
@@ -368,6 +386,17 @@ DiffView.update_files = debounce.debounce_trailing(
     local perf = PerfTimer("[DiffView] Status Update")
     self:ensure_layout()
 
+    local new_left, new_right = self.adapter:refresh_revs(self.rev_arg, self.left, self.right)
+    if new_left and new_right then
+      self.left = new_left
+      self.right = new_right
+
+      if not self.rev_arg then
+        self.panel.rev_pretty_name = self.adapter:rev_to_pretty_string(self.left, self.right)
+      end
+    end
+    perf:lap("refreshed revs")
+
     -- If left is tracking HEAD and right is LOCAL: Update HEAD rev.
     local new_head
     if self.left.track_head and self.right.type == RevType.LOCAL then
@@ -428,26 +457,49 @@ DiffView.update_files = debounce.debounce_trailing(
 
       for _, opr in ipairs(script) do
         if opr == EditToken.NOOP then
-          -- Update status and stats
-          -- Guard against nil entries that can occur during async race conditions (#395).
-          local cur_file = v.cur_files[ai]
+          local old_file = v.cur_files[ai]
           local new_file = v.new_files[bi]
 
-          if cur_file and new_file then
-            local a_stats = cur_file.stats
-            local b_stats = new_file.stats
+          -- Guard against nil entries that can occur during async race conditions (#395).
+          if old_file and new_file then
+            local replace_noop = self.adapter:force_entry_refresh_on_noop(self.left, self.right)
 
-            if a_stats then
-              cur_file.stats = vim.tbl_extend("force", a_stats, b_stats or {})
-            else
-              cur_file.stats = new_file.stats
+            -- Even with a stable path, rev endpoints can change on refresh
+            -- (e.g. symbolic revs like `master...@`). Replace the entry so
+            -- the displayed content comes from the latest rev pair.
+            if not replace_noop then
+              replace_noop = not (
+                same_rev(utils.tbl_access(old_file, "revs.a"), utils.tbl_access(new_file, "revs.a"))
+                and same_rev(utils.tbl_access(old_file, "revs.b"), utils.tbl_access(new_file, "revs.b"))
+                and same_rev(utils.tbl_access(old_file, "revs.c"), utils.tbl_access(new_file, "revs.c"))
+                and same_rev(utils.tbl_access(old_file, "revs.d"), utils.tbl_access(new_file, "revs.d"))
+              )
             end
 
-            cur_file.status = new_file.status
-            cur_file:validate_stage_buffers(index_stat)
+            if replace_noop then
+              if self.panel.cur_file == old_file then
+                self.panel:set_cur_file(new_file)
+              end
 
-            if new_head then
-              cur_file:update_heads(new_head)
+              old_file:destroy(true)
+              v.cur_files[ai] = new_file
+            else
+              -- Update status and stats
+              local a_stats = old_file.stats
+              local b_stats = new_file.stats
+
+              if a_stats then
+                old_file.stats = vim.tbl_extend("force", a_stats, b_stats or {})
+              else
+                old_file.stats = new_file.stats
+              end
+
+              old_file.status = new_file.status
+              old_file:validate_stage_buffers(index_stat)
+
+              if new_head then
+                old_file:update_heads(new_head)
+              end
             end
           end
 

@@ -254,6 +254,24 @@ function VCSAdapter:rev_to_args(left, right)
   oop.abstract_stub()
 end
 
+---Refresh rev endpoints for an existing view.
+---@param rev_arg string?
+---@param left Rev
+---@param right Rev
+---@return Rev? new_left
+---@return Rev? new_right
+function VCSAdapter:refresh_revs(rev_arg, left, right)
+  return nil, nil
+end
+
+---Whether NOOP diff entries should still be replaced during a refresh.
+---@param left Rev
+---@param right Rev
+---@return boolean
+function VCSAdapter:force_entry_refresh_on_noop(left, right)
+  return false
+end
+
 ---Restore a file to the requested state
 ---@param path string # file to restore
 ---@param kind '"staged"'|'"working"'
