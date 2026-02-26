@@ -17,11 +17,16 @@ for any VCS rev.
 
 ## Requirements
 
-- Git ≥ 2.31.0 (for Git support)
-- Mercurial ≥ 5.4.0 (for Mercurial support)
-- Jujutsu ≥ 0.38.0 (for `:DiffviewOpen` support)
 - Neovim ≥ 0.10.0 (with LuaJIT)
 - [nvim-web-devicons](https://github.com/nvim-tree/nvim-web-devicons) or [mini.icons](https://github.com/echasnovski/mini.nvim/blob/main/readmes/mini-icons.md) (optional) for file icons
+
+Supported VCS (at least one required):
+
+- **Git** ≥ 2.31.0
+- **Mercurial** ≥ 5.4.0
+- **Sapling** (any version; detected automatically via the Mercurial adapter)
+- **Jujutsu** ≥ 0.38.0 (`:DiffviewOpen` only; file history is not yet supported)
+- **Perforce** (any version with the `p4` CLI; experimental)
 
 ## Installation
 
@@ -109,9 +114,17 @@ You can also provide additional paths to narrow down what files are shown:
 For information about additional `[options]`, visit the
 [documentation](https://github.com/sindrets/diffview.nvim/blob/main/doc/diffview.txt).
 
-Jujutsu currently supports only `:DiffviewOpen`. The options `--cached`,
-`--staged`, and `--imply-local` are Git-only and are ignored by the Jujutsu
-adapter with a warning.
+#### VCS Adapter Notes
+
+- **Jujutsu** currently supports only `:DiffviewOpen`. The options `--cached`,
+  `--staged`, and `--imply-local` are Git-only and are ignored by the Jujutsu
+  adapter with a warning. In colocated repos (where Jujutsu uses Git as a
+  backend), Git is detected first by default. Set `preferred_adapter = "jj"` to
+  use the Jujutsu adapter instead.
+- **Sapling** is detected automatically through the Mercurial adapter. Use
+  `hg_cmd` to configure the Sapling executable (e.g. `hg_cmd = { "sl" }`).
+- **Perforce** support is experimental. Requires a configured Perforce client
+  (`P4PORT`, `P4USER`, `P4CLIENT`).
 
 Additional commands for convenience:
 
@@ -197,6 +210,8 @@ require("diffview").setup({
   git_cmd = { "git" },      -- The git executable followed by default args.
   hg_cmd = { "hg" },        -- The hg executable followed by default args.
   jj_cmd = { "jj" },        -- The jj executable followed by default args.
+  p4_cmd = { "p4" },        -- The p4 executable followed by default args.
+  preferred_adapter = nil,  -- Preferred VCS adapter ("git", "hg", "jj", "p4"). Tried first when detecting repos.
   rename_threshold = nil,   -- Integer 0-100 for rename detection similarity. Nil uses git default (50%). Invalid values are ignored.
   use_icons = true,         -- Requires nvim-web-devicons or mini.icons
   show_help_hints = true,   -- Show hints for how to open the help panel
@@ -647,6 +662,11 @@ end, { desc = 'Diff against main/master' })
     [diffchar.vim](https://github.com/rickhowe/diffchar.vim) for precise
     character/word-level diff highlights. See
     [Companion Plugins > Recommended](#recommended) for setup details.
+- **MSYS2/Cygwin on Windows:**
+  - If you use MSYS2 or Cygwin git with native Windows Neovim, path conversion
+    is handled automatically via `cygpath`. Ensure `cygpath` is on your `PATH`.
+    Alternatively, install [Git for Windows](https://gitforwindows.org/) which
+    uses native Windows paths and avoids the issue entirely.
 - **Customizing default keymaps to avoid conflicts:**
   - The default keymaps (`<leader>e`, `<leader>b`, `<leader>c*`) may conflict
     with your configuration. Override them in your setup:
