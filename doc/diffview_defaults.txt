@@ -7,6 +7,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
     enhanced_diff_hl = false, -- See |diffview-config-enhanced_diff_hl|
     git_cmd = { "git" },      -- The git executable followed by default args.
     hg_cmd = { "hg" },        -- The hg executable followed by default args.
+    p4_cmd = { "p4" },        -- The p4 executable followed by default args.
     rename_threshold = nil,   -- Integer 0-100 for rename detection similarity. Nil uses git default (50%). Invalid values are ignored.
     use_icons = true,         -- Requires nvim-web-devicons or mini.icons
     show_help_hints = true,   -- Show hints for how to open the help panel
@@ -104,6 +105,10 @@ DEFAULT CONFIG                                  *diffview.defaults*
           },
         },
         hg = {
+          single_file = {},
+          multi_file = {},
+        },
+        p4 = {
           single_file = {},
           multi_file = {},
         },

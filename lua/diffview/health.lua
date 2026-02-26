@@ -68,6 +68,7 @@ function M.check()
     local adapter_kinds = {
       { class = require("diffview.vcs.adapters.git").GitAdapter, name = "Git" },
       { class = require("diffview.vcs.adapters.hg").HgAdapter, name = "Mercurial" },
+      { class = require("diffview.vcs.adapters.p4").P4Adapter, name = "Perforce" },
     }
 
     for _, kind in ipairs(adapter_kinds) do

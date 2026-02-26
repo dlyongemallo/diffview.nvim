@@ -619,6 +619,10 @@ function M.setup(user_config)
     M._config.git_cmd = M.defaults.git_cmd
   end
 
+  if #M._config.p4_cmd == 0 then
+    M._config.p4_cmd = M.defaults.p4_cmd
+  end
+
   do
     local rename_threshold = M._config.rename_threshold
 
