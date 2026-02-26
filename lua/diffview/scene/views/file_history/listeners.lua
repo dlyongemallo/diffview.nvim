@@ -269,7 +269,7 @@ return function(view)
         local item = view.panel:get_item_at_cursor()
         if item then
           vim.fn.setreg('"', item.commit.hash)
-          utils.info(string.format("Copied '%s' to the clipboard.", item.commit.hash))
+          utils.info(string.format("Copied '%s' to the default register.", item.commit.hash))
         end
       end
     end,
@@ -299,7 +299,7 @@ return function(view)
       elseif vim.fn.has("unix") == 1 then
         cmd = { "xdg-open", url }
       elseif vim.fn.has("win32") == 1 then
-        cmd = { "cmd", "/c", "start", '""', url }
+        cmd = { "cmd", "/c", "start", "", url }
       end
 
       if cmd then
