@@ -940,15 +940,15 @@ function HgAdapter:parse_revs(rev_arg, opt)
       right = HgRev(RevType.COMMIT, to)
     else
       local node, code, stderr = self:exec_sync({"log", "--limit=1", "--template={node}",  "--rev=" .. rev_arg}, self.ctx.toplevel)
-      if code ~= 0 and node then
-        utils.err(fmt("Failed to parse rev %s: %s", utils.str_quote(rev_arg), stderr))
+      if not code or code ~= 0 then
+        utils.err(fmt("Failed to parse rev %s: %s", utils.str_quote(rev_arg), table.concat(stderr or {}, "\n")))
         return
       end
       left = HgRev(RevType.COMMIT, node[1])
 
       node, code, stderr = self:exec_sync({"log", "--limit=1", "--template={node}",  "--rev=reverse(" .. rev_arg .. ")"}, self.ctx.toplevel)
-      if code ~= 0  and node then
-        utils.err(fmt("Failed to parse rev %s: %s", utils.str_quote(rev_arg), stderr))
+      if not code or code ~= 0 then
+        utils.err(fmt("Failed to parse rev %s: %s", utils.str_quote(rev_arg), table.concat(stderr or {}, "\n")))
         return
       end
 

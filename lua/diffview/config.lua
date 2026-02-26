@@ -590,8 +590,8 @@ function M.setup(user_config)
     for _, name in ipairs(top_options) do
       if user_log_options[name] ~= nil then
         utils.warn("Global config of 'file_panel.log_options' has been deprecated. See ':h diffview.changelog-271'.")
+        break
       end
-      break
     end
 
     local option_names = {
@@ -640,7 +640,7 @@ function M.setup(user_config)
     -- Validate layouts
     local view = M._config.view
     local standard_layouts = { "diff1_plain", "diff2_horizontal", "diff2_vertical", -1 }
-    local merge_layuots = {
+    local merge_layouts = {
       "diff1_plain",
       "diff3_horizontal",
       "diff3_vertical",
@@ -650,7 +650,7 @@ function M.setup(user_config)
     }
     local valid_layouts = {
       default = standard_layouts,
-      merge_tool = merge_layuots,
+      merge_tool = merge_layouts,
       file_history = standard_layouts,
     }
 

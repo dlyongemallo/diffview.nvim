@@ -176,12 +176,11 @@ function M.get_style(groups, no_trans)
       local res = {}
 
       for _, attr in ipairs(style_attrs) do
-        if hl[attr] then table.insert(res, attr)
-        end
+        if hl[attr] then table.insert(res, attr) end
+      end
 
-        if #res > 0 then
-          return table.concat(res, ",")
-        end
+      if #res > 0 then
+        return table.concat(res, ",")
       end
     end
   end
