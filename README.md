@@ -1,6 +1,6 @@
 # Diffview.nvim
 
-> **Note:** This is a fork of [sindrets/diffview.nvim](https://github.com/sindrets/diffview.nvim) with bug fixes and improvements applied. The original repository has not been updated since June 2024.
+> **Note:** This is an **actively maintained fork** of [sindrets/diffview.nvim](https://github.com/sindrets/diffview.nvim) with bug fixes and improvements applied. The original repository has not been updated since June 2024.
 
 Single tabpage interface for easily cycling through diffs for all modified files
 for any git rev.
@@ -32,14 +32,16 @@ Supported VCS (at least one required):
 
 Install the plugin with your package manager of choice.
 
-```vim
-" Plug
-Plug 'sindrets/diffview.nvim'
+```lua
+-- Lazy
+{
+    "dlyongemallo/diffview.nvim",
+}
 ```
 
-```lua
--- Packer
-use "sindrets/diffview.nvim" 
+```vim
+" Plug
+Plug 'dlyongemallo/diffview.nvim'
 ```
 
 ## Merge Tool
@@ -112,7 +114,7 @@ You can also provide additional paths to narrow down what files are shown:
 - `:DiffviewOpen HEAD~2 -- lua/diffview plugin`
 
 For information about additional `[options]`, visit the
-[documentation](https://github.com/sindrets/diffview.nvim/blob/main/doc/diffview.txt).
+[documentation](https://github.com/dlyongemallo/diffview.nvim/blob/main/doc/diffview.txt).
 
 #### VCS Adapter Notes
 
