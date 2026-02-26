@@ -272,6 +272,14 @@ function VCSAdapter:force_entry_refresh_on_noop(left, right)
   return false
 end
 
+---Called when `_create_local_buffer` reuses an existing buffer. Adapters
+---whose VCS rewrites working-copy files (e.g. jj) should override this to
+---ensure the buffer content reflects the current state on disk.
+---@param bufnr integer
+function VCSAdapter:on_local_buffer_reused(bufnr)
+  -- Default: no-op. Git and Hg do not rewrite working-copy files.
+end
+
 ---Restore a file to the requested state
 ---@param path string # file to restore
 ---@param kind '"staged"'|'"working"'

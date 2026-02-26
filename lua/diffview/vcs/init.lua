@@ -17,7 +17,7 @@ local M = {}
 ---@return string? err
 ---@return VCSAdapter? adapter
 function M.get_adapter(opt)
-  local adapter_kinds = { JjAdapter, GitAdapter, HgAdapter, P4Adapter }
+  local adapter_kinds = { GitAdapter, JjAdapter, HgAdapter, P4Adapter }
 
   if not opt.cmd_ctx then
     opt.cmd_ctx = {}

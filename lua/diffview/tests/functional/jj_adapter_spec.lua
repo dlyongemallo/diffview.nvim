@@ -160,6 +160,32 @@ describe("diffview.vcs.adapters.jj", function()
     end)
   end)
 
+  describe("on_local_buffer_reused()", function()
+    it("calls checktime on an unmodified buffer", function()
+      local adapter = new_adapter()
+      local bufnr = vim.api.nvim_create_buf(true, false)
+
+      -- checktime requires a file on disk; write a temp file so the buffer
+      -- has a real name and checktime doesn't error.
+      local tmpfile = vim.fn.tempname()
+      vim.fn.writefile({ "hello" }, tmpfile)
+      vim.api.nvim_buf_set_name(bufnr, tmpfile)
+      vim.fn.bufload(bufnr)
+
+      -- Should not error.
+      assert.has_no.errors(function()
+        adapter:on_local_buffer_reused(bufnr)
+      end)
+
+      -- Buffer should still be loaded and valid.
+      assert.is_true(vim.api.nvim_buf_is_valid(bufnr))
+      assert.is_true(vim.api.nvim_buf_is_loaded(bufnr))
+
+      pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+      vim.fn.delete(tmpfile)
+    end)
+  end)
+
   describe("rev_to_args()", function()
     it("returns --from/--to for commit ranges", function()
       local adapter = new_adapter()

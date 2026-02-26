@@ -434,6 +434,21 @@ function JjAdapter:force_entry_refresh_on_noop(left, right)
   return self:has_local(left, right)
 end
 
+---Jj may rewrite working-copy files when revisions change, so reload the
+---buffer from disk when it is reused.
+---@param bufnr integer
+function JjAdapter:on_local_buffer_reused(bufnr)
+  local api = vim.api
+
+  if not api.nvim_buf_is_loaded(bufnr) then
+    vim.fn.bufload(bufnr)
+  end
+
+  if not vim.bo[bufnr].modified then
+    pcall(vim.cmd, ("checktime %d"):format(bufnr))
+  end
+end
+
 ---@param left Rev
 ---@param right Rev
 ---@return string[]

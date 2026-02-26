@@ -182,15 +182,8 @@ function File:_create_local_buffer()
   else
     -- NOTE: LSP servers might load buffers in the background and unlist
     -- them. Explicitly set the buffer as listed when loading it here.
-    if not api.nvim_buf_is_loaded(self.bufnr) then
-      vim.fn.bufload(self.bufnr)
-    end
-
-    if not vim.bo[self.bufnr].modified then
-      pcall(vim.cmd, ("checktime %d"):format(self.bufnr))
-    end
-
     vim.bo[self.bufnr].buflisted = true
+    self.adapter:on_local_buffer_reused(self.bufnr)
   end
 
   self:post_buf_created()
@@ -508,7 +501,7 @@ function File:detach_buffer()
 end
 
 function File:dispose_buffer()
-  if self.bufnr and api.nvim_buf_is_valid(self.bufnr) then
+  if self.bufnr and api.nvim_buf_is_loaded(self.bufnr) then
     self:detach_buffer()
 
     if not lib.is_buf_in_use(self.bufnr, { self }) then
@@ -520,14 +513,12 @@ function File:dispose_buffer()
 end
 
 function File.safe_delete_buf(bufnr)
-  if not bufnr or bufnr == File.NULL_FILE.bufnr or not api.nvim_buf_is_valid(bufnr) then
+  if not bufnr or bufnr == File.NULL_FILE.bufnr or not api.nvim_buf_is_loaded(bufnr) then
     return
   end
 
-  if api.nvim_buf_is_loaded(bufnr) then
-    for _, winid in ipairs(utils.win_find_buf(bufnr, 0)) do
-      File.load_null_buffer(winid)
-    end
+  for _, winid in ipairs(utils.win_find_buf(bufnr, 0)) do
+    File.load_null_buffer(winid)
   end
 
   pcall(api.nvim_buf_delete, bufnr, { force = true })
