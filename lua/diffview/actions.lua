@@ -607,13 +607,15 @@ function M.cycle_layout()
   end
 
   -- Use config or fall back to defaults.
+  local default_standard = { Diff2Hor.__get(), Diff2Ver.__get() }
+  local default_merge_tool = { Diff3Hor.__get(), Diff3Ver.__get(), Diff3Mixed.__get(), Diff4Mixed.__get(), Diff1.__get() }
+
+  local resolved_standard = resolve_layouts(cycle_config.default)
+  local resolved_merge_tool = resolve_layouts(cycle_config.merge_tool)
+
   local layout_cycles = {
-    standard = #(cycle_config.default or {}) > 0
-        and resolve_layouts(cycle_config.default)
-        or { Diff2Hor.__get(), Diff2Ver.__get() },
-    merge_tool = #(cycle_config.merge_tool or {}) > 0
-        and resolve_layouts(cycle_config.merge_tool)
-        or { Diff3Hor.__get(), Diff3Ver.__get(), Diff3Mixed.__get(), Diff4Mixed.__get(), Diff1.__get() },
+    standard = #resolved_standard > 0 and resolved_standard or default_standard,
+    merge_tool = #resolved_merge_tool > 0 and resolved_merge_tool or default_merge_tool,
   }
 
   local view = lib.get_current_view()

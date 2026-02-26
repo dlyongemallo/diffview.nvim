@@ -389,6 +389,10 @@ DiffView.update_files = debounce.debounce_trailing(
     if err then
       utils.err("Failed to update files in a diff view!", true)
       logger:error("[DiffView] Failed to update files!")
+      self.is_loading = false
+      self.panel.is_loading = false
+      self.panel:render()
+      self.panel:redraw()
       callback(err)
       return
     end
