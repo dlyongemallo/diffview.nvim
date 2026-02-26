@@ -41,6 +41,9 @@ M.defaults = {
   enhanced_diff_hl = false,
   git_cmd = { "git" },
   hg_cmd = { "hg" },
+  jj_cmd = { "jj" },
+  p4_cmd = { "p4" },
+  preferred_adapter = nil, -- Preferred VCS adapter ("git", "hg", "jj", "p4"). Tried first when detecting repos.
   rename_threshold = nil, -- Similarity threshold for rename detection (e.g. 40 for 40%). Nil uses git default (50%).
   use_icons = true,
   show_help_hints = true,
@@ -617,6 +620,29 @@ function M.setup(user_config)
 
   if #M._config.git_cmd == 0 then
     M._config.git_cmd = M.defaults.git_cmd
+  end
+
+  if #M._config.hg_cmd == 0 then
+    M._config.hg_cmd = M.defaults.hg_cmd
+  end
+
+  if #M._config.jj_cmd == 0 then
+    M._config.jj_cmd = M.defaults.jj_cmd
+  end
+
+  if #M._config.p4_cmd == 0 then
+    M._config.p4_cmd = M.defaults.p4_cmd
+  end
+
+  do
+    local pa = M._config.preferred_adapter
+    local valid = { git = true, hg = true, jj = true, p4 = true }
+    if pa ~= nil and not valid[pa] then
+      utils.warn(
+        "Invalid value for 'preferred_adapter'. Must be one of: 'git', 'hg', 'jj', 'p4', or nil."
+      )
+      M._config.preferred_adapter = M.defaults.preferred_adapter
+    end
   end
 
   do

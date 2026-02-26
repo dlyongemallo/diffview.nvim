@@ -166,6 +166,33 @@ function GitAdapter.get_repo_paths(path_args, cpath)
   return paths, top_indicators
 end
 
+---Convert MSYS2/Cygwin Unix-style paths to Windows paths when running on
+---native Windows with a Cygwin-based git. Without this, paths like
+---`/c/Users/...` returned by Cygwin git are unusable by Neovim.
+---See: https://www.msys2.org/docs/git/
+---@param path string?
+---@return string?
+local has_cygpath ---@type boolean?
+local function normalize_cygwin_path(path)
+  if not path or vim.fn.has("win32") ~= 1 or path:sub(1, 1) ~= "/" then
+    return path
+  end
+
+  if has_cygpath == nil then
+    has_cygpath = vim.fn.executable("cygpath") == 1
+  end
+
+  if has_cygpath then
+    local result = vim.trim(vim.fn.system({ "cygpath", "--absolute", "--windows", path }))
+    if vim.v.shell_error ~= 0 or result == "" then
+      return path
+    end
+    return result
+  end
+
+  return path
+end
+
 ---Get the git toplevel directory from a path to file or directory
 ---@param path string
 ---@return string?
@@ -177,7 +204,7 @@ local function get_toplevel(path)
   if code ~= 0 then
     return nil
   end
-  return out[1] and vim.trim(out[1])
+  return normalize_cygwin_path(out[1] and vim.trim(out[1]))
 end
 
 ---Try to find the top-level of a working tree by using the given indicative
@@ -279,7 +306,7 @@ function GitAdapter:get_dir(path)
   if code ~= 0 then
     return nil
   end
-  return out[1] and vim.trim(out[1])
+  return normalize_cygwin_path(out[1] and vim.trim(out[1]))
 end
 
 ---Verify that a given git rev is valid.

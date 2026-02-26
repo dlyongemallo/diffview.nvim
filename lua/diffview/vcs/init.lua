@@ -1,5 +1,8 @@
+local config = require("diffview.config")
 local GitAdapter = require('diffview.vcs.adapters.git').GitAdapter
 local HgAdapter = require('diffview.vcs.adapters.hg').HgAdapter
+local JjAdapter = require('diffview.vcs.adapters.jj').JjAdapter
+local P4Adapter = require('diffview.vcs.adapters.p4').P4Adapter
 
 local M = {}
 
@@ -15,7 +18,19 @@ local M = {}
 ---@return string? err
 ---@return VCSAdapter? adapter
 function M.get_adapter(opt)
-  local adapter_kinds = { GitAdapter, HgAdapter }
+  local adapter_kinds = { GitAdapter, JjAdapter, HgAdapter, P4Adapter }
+
+  -- Move the preferred adapter to the front so it is tried first.
+  local preferred = config.get_config().preferred_adapter
+  if preferred then
+    for i, kind in ipairs(adapter_kinds) do
+      if kind.config_key == preferred then
+        table.remove(adapter_kinds, i)
+        table.insert(adapter_kinds, 1, kind)
+        break
+      end
+    end
+  end
 
   if not opt.cmd_ctx then
     opt.cmd_ctx = {}

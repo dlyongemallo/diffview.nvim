@@ -183,6 +183,7 @@ function File:_create_local_buffer()
     -- NOTE: LSP servers might load buffers in the background and unlist
     -- them. Explicitly set the buffer as listed when loading it here.
     vim.bo[self.bufnr].buflisted = true
+    self.adapter:on_local_buffer_reused(self.bufnr)
   end
 
   self:post_buf_created()
@@ -366,32 +367,41 @@ end
 ---diffview overwrites it, so we can restore it on detach.
 ---@param bufnr integer
 ---@param saved table<string, table>
+---@param mode_map_cache table<string, table>
 ---@param mode string
 ---@param lhs string
-local function save_existing_keymap(bufnr, saved, mode, lhs)
+local function save_existing_keymap(bufnr, saved, mode_map_cache, mode, lhs)
   local key = mode .. " " .. lhs
   if saved[key] then return end
 
-  local buf_maps = api.nvim_buf_get_keymap(bufnr, mode)
-  for _, km in ipairs(buf_maps) do
-    if km.lhs == lhs then
-      saved[key] = {
-        mode = mode,
-        lhs = lhs,
-        rhs = km.rhs or "",
-        callback = km.callback,
-        opts = {
-          buffer = bufnr,
-          desc = km.desc,
-          silent = km.silent == 1 or km.silent == true,
-          noremap = km.noremap == 1 or km.noremap == true,
-          nowait = km.nowait == 1 or km.nowait == true,
-          expr = km.expr == 1 or km.expr == true,
-        },
-      }
-      return
+  local mode_cache = mode_map_cache[mode]
+  if not mode_cache then
+    mode_cache = {}
+    for _, km in ipairs(api.nvim_buf_get_keymap(bufnr, mode)) do
+      if km.lhs and mode_cache[km.lhs] == nil then
+        mode_cache[km.lhs] = km
+      end
     end
+    mode_map_cache[mode] = mode_cache
   end
+
+  local km = mode_cache[lhs]
+  if not km then return end
+
+  saved[key] = {
+    mode = mode,
+    lhs = lhs,
+    rhs = km.rhs or "",
+    callback = km.callback,
+    opts = {
+      buffer = bufnr,
+      desc = km.desc,
+      silent = km.silent == 1 or km.silent == true,
+      noremap = km.noremap == 1 or km.noremap == true,
+      nowait = km.nowait == 1 or km.nowait == true,
+      expr = km.expr == 1 or km.expr == true,
+    },
+  }
 end
 
 ---@param force? boolean
@@ -413,11 +423,18 @@ function File:attach_buffer(force, opt)
       state.keymaps = config.extend_keymaps(conf.keymaps.view, state.keymaps)
       state.saved_keymaps = state.saved_keymaps or {}
       local default_map_opt = { silent = true, nowait = true, buffer = self.bufnr }
+      local existing_maps_by_mode = {}
 
       for _, mapping in ipairs(state.keymaps) do
         local modes = type(mapping[1]) == "table" and mapping[1] or { mapping[1] }
         for _, mode in ipairs(modes) do
-          save_existing_keymap(self.bufnr, state.saved_keymaps, mode, mapping[2])
+          save_existing_keymap(
+            self.bufnr,
+            state.saved_keymaps,
+            existing_maps_by_mode,
+            mode,
+            mapping[2]
+          )
         end
         local map_opt = vim.tbl_extend("force", default_map_opt, mapping[4] or {}, { buffer = self.bufnr })
         vim.keymap.set(mapping[1], mapping[2], mapping[3], map_opt)
