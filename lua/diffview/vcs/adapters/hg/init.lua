@@ -59,15 +59,24 @@ function HgAdapter.run_bootstrap()
   end
 
   local out = utils.job(utils.flatten({ hg_cmd, "version" }))
-  local version = out[1] and out[1]:match("Mercurial .*%(version (%S*)%)") or nil
+  local line = out[1]
+  local is_sapling = line and line:match("^Sapling") ~= nil
+  local version = is_sapling and line:match("Sapling (%S+)")
+    or (line and line:match("Mercurial .*%(version (%S*)%)"))
+    or nil
   if not version then
-    return err("Could not get Mercurial version!")
+    return err("Could not get Mercurial/Sapling version!")
   end
 
   -- Parse version string
-  local major, minor, patch = version:match("(%d+)%.?(%d*)%.?(%d*)")
+  local base_version = version:match("^([%d%.]+)")
+  if not base_version then
+    return err(fmt("Could not parse Mercurial/Sapling version: %s!", version))
+  end
+
+  local major, minor, patch = base_version:match("(%d+)%.?(%d*)%.?(%d*)")
   if not major then
-    return err(string.format("Could not parse Mercurial version: %s!", version))
+    return err(fmt("Could not parse Mercurial/Sapling version: %s!", version))
   end
 
   local v, target = bs.version, bs.target_version
@@ -78,7 +87,9 @@ function HgAdapter.run_bootstrap()
   bs.version_string = version
   bs.target_version_string = fmt("%d.%d.%d", target.major, target.minor, target.patch)
 
-  local version_ok = vcs_utils.check_semver(v, target)
+  -- Skip version check for Sapling
+  local version_ok = is_sapling or vcs_utils.check_semver(v, target)
+
   if not version_ok then
     return err(string.format(
       "Mercurial version is outdated! Some functionality might not work as expected, "
