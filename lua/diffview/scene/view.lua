@@ -81,7 +81,6 @@ local LayoutMode = oop.enum({
 ---@field default_layout Layout (class)
 ---@field ready boolean
 ---@field closing Signal
----@field _global_callbacks table<any, function> # Callbacks registered on the global emitter, keyed by event.
 local View = oop.create_class("View")
 
 ---@diagnostic disable unused-local
@@ -101,19 +100,15 @@ function View:init(opt)
   self.default_layout = opt.default_layout or View.get_default_layout()
   self.ready = utils.sate(opt.ready, false)
   self.closing = utils.sate(opt.closing, Signal())
-  self._global_callbacks = {}
 
   local function wrap_event(event)
-    local cb = function(_, view, ...)
+    DiffviewGlobal.emitter:on(event, function(_, view, ...)
       local cur_view = require("diffview.lib").get_current_view()
 
       if (view and view == self) or (not view and cur_view == self) then
         self.emitter:emit(event, view, ...)
       end
-    end
-
-    self._global_callbacks[event] = cb
-    DiffviewGlobal.emitter:on(event, cb)
+    end)
   end
 
   wrap_event("view_closed")
@@ -153,14 +148,6 @@ function View:close()
   end
 
   DiffviewGlobal.emitter:emit("view_closed", self)
-
-  -- Unsubscribe all global listeners to prevent leaked references.
-  for event, cb in pairs(self._global_callbacks) do
-    DiffviewGlobal.emitter:off(cb, event)
-  end
-
-  self._global_callbacks = {}
-  self.emitter:clear()
 end
 
 function View:is_cur_tabpage()
