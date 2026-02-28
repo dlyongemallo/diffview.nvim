@@ -4,6 +4,7 @@ local lazy = require("diffview.lazy")
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local JobStatus = lazy.access("diffview.vcs.utils", "JobStatus") ---@type JobStatus|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
+local config = lazy.require("diffview.config") ---@module "diffview.config"
 local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 local vcs_utils = lazy.require("diffview.vcs.utils") ---@module "diffview.vcs.utils"
@@ -113,7 +114,13 @@ return function(view)
       local entry_idx = utils.vec_indexof(view.panel.entries, cur_entry)
       if entry_idx == -1 then return end
 
-      local next_idx = (entry_idx + vim.v.count1 - 1) % #view.panel.entries + 1
+      local next_idx
+      if config.get_config().wrap_entries then
+        next_idx = (entry_idx + vim.v.count1 - 1) % #view.panel.entries + 1
+      else
+        next_idx = math.min(entry_idx + vim.v.count1, #view.panel.entries)
+        if next_idx == entry_idx then return end
+      end
       local next_entry = view.panel.entries[next_idx]
       view:set_file(next_entry.files[1])
     end,
@@ -123,11 +130,17 @@ return function(view)
       local entry_idx = utils.vec_indexof(view.panel.entries, cur_entry)
       if entry_idx == -1 then return end
 
-      local next_idx = (entry_idx - vim.v.count1 - 1) % #view.panel.entries + 1
+      local next_idx
+      if config.get_config().wrap_entries then
+        next_idx = (entry_idx - vim.v.count1 - 1) % #view.panel.entries + 1
+      else
+        next_idx = math.max(entry_idx - vim.v.count1, 1)
+        if next_idx == entry_idx then return end
+      end
       local next_entry = view.panel.entries[next_idx]
       view:set_file(next_entry.files[1])
     end,
-    ---Cycle to next file within the current commit (wrap around).
+    ---Navigate to next file within the current commit.
     next_entry_in_commit = function()
       local cur_entry = view.panel.cur_item[1]
       local cur_file = view.panel.cur_item[2]
@@ -136,10 +149,16 @@ return function(view)
       local file_idx = utils.vec_indexof(cur_entry.files, cur_file)
       if file_idx == -1 then return end
 
-      local next_idx = (file_idx % #cur_entry.files) + 1
+      local next_idx
+      if config.get_config().wrap_entries then
+        next_idx = (file_idx % #cur_entry.files) + 1
+      else
+        next_idx = math.min(file_idx + 1, #cur_entry.files)
+        if next_idx == file_idx then return end
+      end
       view:set_file(cur_entry.files[next_idx])
     end,
-    ---Cycle to previous file within the current commit (wrap around).
+    ---Navigate to previous file within the current commit.
     prev_entry_in_commit = function()
       local cur_entry = view.panel.cur_item[1]
       local cur_file = view.panel.cur_item[2]
@@ -148,7 +167,13 @@ return function(view)
       local file_idx = utils.vec_indexof(cur_entry.files, cur_file)
       if file_idx == -1 then return end
 
-      local prev_idx = ((file_idx - 2) % #cur_entry.files) + 1
+      local prev_idx
+      if config.get_config().wrap_entries then
+        prev_idx = ((file_idx - 2) % #cur_entry.files) + 1
+      else
+        prev_idx = math.max(file_idx - 1, 1)
+        if prev_idx == file_idx then return end
+      end
       view:set_file(cur_entry.files[prev_idx])
     end,
     next_entry = function()
