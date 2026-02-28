@@ -393,32 +393,39 @@ function FileHistoryPanel:_get_entry_by_file_offset(entry_idx, file_idx, offset,
     return cur_entry, cur_entry.files[file_idx + offset]
   end
 
-  if not wrap then
-    -- Clamp to boundary: return the first or last file overall.
-    local sign = utils.sign(offset)
-    if sign > 0 then
-      local last = self.entries[#self.entries]
-      return last, last.files[#last.files]
-    else
-      local first = self.entries[1]
-      return first, first.files[1]
-    end
-  end
-
   local sign = utils.sign(offset)
   local delta = math.abs(offset) - (sign > 0 and #cur_entry.files - file_idx or file_idx - 1)
-  local i = (entry_idx + (sign > 0 and 0 or -2)) % #self.entries + 1
 
-  while i ~= entry_idx do
-    local files = self.entries[i].files
+  if wrap then
+    local i = (entry_idx + (sign > 0 and 0 or -2)) % #self.entries + 1
 
-    if (#files - delta) >= 0 then
-      local target_file = sign > 0 and files[delta] or files[#files - (delta - 1)]
-      return self.entries[i], target_file
+    while i ~= entry_idx do
+      local files = self.entries[i].files
+
+      if (#files - delta) >= 0 then
+        local target_file = sign > 0 and files[delta] or files[#files - (delta - 1)]
+        return self.entries[i], target_file
+      end
+
+      delta = delta - #files
+      i = (i + (sign > 0 and 0 or -2)) % #self.entries + 1
+    end
+  else
+    local i = entry_idx + sign
+
+    while i >= 1 and i <= #self.entries do
+      local files = self.entries[i].files
+
+      if (#files - delta) >= 0 then
+        local target_file = sign > 0 and files[delta] or files[#files - (delta - 1)]
+        return self.entries[i], target_file
+      end
+
+      delta = delta - #files
+      i = i + sign
     end
 
-    delta = delta - #files
-    i = (i + (sign > 0 and 0 or -2)) % #self.entries + 1
+    -- Reached the boundary: return nil to signal no movement.
   end
 end
 
@@ -439,6 +446,9 @@ function FileHistoryPanel:set_file_by_offset(offset)
     if entry_idx ~= -1 and file_idx ~= -1 then
       local wrap = config.get_config().wrap_entries
       local next_entry, next_file = self:_get_entry_by_file_offset(entry_idx, file_idx, offset, wrap)
+
+      if not next_entry then return end
+
       self:set_cur_item({ next_entry, next_file })
 
       if next_entry ~= entry then
