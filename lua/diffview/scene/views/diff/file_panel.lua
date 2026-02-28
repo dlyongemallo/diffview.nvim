@@ -222,7 +222,14 @@ function FilePanel:prev_file()
 
   local i = utils.vec_indexof(files, self.cur_file)
   if i ~= -1 then
-    self:set_cur_file(files[(i - vim.v.count1 - 1) % #files + 1])
+    local new_idx
+    if config.get_config().wrap_entries then
+      new_idx = (i - vim.v.count1 - 1) % #files + 1
+    else
+      new_idx = math.max(i - vim.v.count1, 1)
+      if new_idx == i then return end
+    end
+    self:set_cur_file(files[new_idx])
     return self.cur_file
   end
 end
@@ -236,7 +243,14 @@ function FilePanel:next_file()
 
   local i = utils.vec_indexof(files, self.cur_file)
   if i ~= -1 then
-    self:set_cur_file(files[(i + vim.v.count1 - 1) % #files + 1])
+    local new_idx
+    if config.get_config().wrap_entries then
+      new_idx = (i + vim.v.count1 - 1) % #files + 1
+    else
+      new_idx = math.min(i + vim.v.count1, #files)
+      if new_idx == i then return end
+    end
+    self:set_cur_file(files[new_idx])
     return self.cur_file
   end
 end

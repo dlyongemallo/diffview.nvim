@@ -220,6 +220,7 @@ require("diffview").setup({
   watch_index = true,       -- Update views and index buffers when the git index changes.
   hide_merge_artifacts = false, -- Hide merge artifact files (*.orig, *.BACKUP.*, *.BASE.*, *.LOCAL.*, *.REMOTE.*)
   auto_close_on_empty = false, -- Close diffview when the last file is staged/resolved
+  wrap_entries = true,      -- Wrap around when navigating past the first/last file entry.
   diffopt = {},             -- Override diffopt settings while diffview is open. Restored on close.
   clean_up_buffers = false, -- Delete file buffers created by diffview on close.
   icons = {                 -- Only applies when use_icons is true.

@@ -386,11 +386,23 @@ end
 ---@param offset integer
 ---@return LogEntry?
 ---@return FileEntry?
-function FileHistoryPanel:_get_entry_by_file_offset(entry_idx, file_idx, offset)
+function FileHistoryPanel:_get_entry_by_file_offset(entry_idx, file_idx, offset, wrap)
   local cur_entry = self.entries[entry_idx]
 
   if cur_entry.files[file_idx + offset] then
     return cur_entry, cur_entry.files[file_idx + offset]
+  end
+
+  if not wrap then
+    -- Clamp to boundary: return the first or last file overall.
+    local sign = utils.sign(offset)
+    if sign > 0 then
+      local last = self.entries[#self.entries]
+      return last, last.files[#last.files]
+    else
+      local first = self.entries[1]
+      return first, first.files[1]
+    end
   end
 
   local sign = utils.sign(offset)
@@ -425,7 +437,8 @@ function FileHistoryPanel:set_file_by_offset(offset)
     local file_idx = utils.vec_indexof(entry.files, file)
 
     if entry_idx ~= -1 and file_idx ~= -1 then
-      local next_entry, next_file = self:_get_entry_by_file_offset(entry_idx, file_idx, offset)
+      local wrap = config.get_config().wrap_entries
+      local next_entry, next_file = self:_get_entry_by_file_offset(entry_idx, file_idx, offset, wrap)
       self:set_cur_item({ next_entry, next_file })
 
       if next_entry ~= entry then
