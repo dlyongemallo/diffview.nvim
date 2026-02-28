@@ -64,7 +64,7 @@ local function parse_describe_output(output_lines)
             -- Diff parsing is handled separately if needed, `p4 describe -du` gives unified diff
         end
         -- Look for the timestamp which is usually near the end
-        local time_unix = line:match("^\*edit @ (%d+)") or line:match("^\*add @ (%d+)") or line:match("^\*delete @ (%d+)") or line:match("^\*branch @ (%d+)") or line:match("^\*integrate @ (%d+)")
+        local time_unix = line:match("^%*edit @ (%d+)") or line:match("^%*add @ (%d+)") or line:match("^%*delete @ (%d+)") or line:match("^%*branch @ (%d+)") or line:match("^%*integrate @ (%d+)")
          if time_unix then
             data.time = tonumber(time_unix)
          end
