@@ -384,6 +384,7 @@ end
 ---@param entry_idx integer
 ---@param file_idx integer
 ---@param offset integer
+---@param wrap boolean
 ---@return LogEntry?
 ---@return FileEntry?
 function FileHistoryPanel:_get_entry_by_file_offset(entry_idx, file_idx, offset, wrap)
