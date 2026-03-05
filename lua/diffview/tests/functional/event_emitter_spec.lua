@@ -99,28 +99,32 @@ describe("diffview.events", function()
   describe("View lifecycle", function()
     local View = require("diffview.scene.view").View
 
-    it("does not accumulate global emitter listeners after repeated init/close", function()
-      -- Swap in a fresh global emitter so the test is isolated.
-      local orig_emitter = DiffviewGlobal.emitter
-      DiffviewGlobal.emitter = EventEmitter()
+    -- Swap in a fresh global emitter so tests are isolated. Using
+    -- before_each/after_each ensures restoration even if assertions fail.
+    local orig_emitter
 
+    before_each(function()
+      orig_emitter = DiffviewGlobal.emitter
+      DiffviewGlobal.emitter = EventEmitter()
+    end)
+
+    after_each(function()
+      DiffviewGlobal.emitter = orig_emitter
+    end)
+
+    it("does not accumulate global emitter listeners after repeated init/close", function()
       for _ = 1, 10 do
         local view = View({ default_layout = {} })
         view:close()
       end
 
       eq(0, #(DiffviewGlobal.emitter:get("view_closed") or {}))
-
-      DiffviewGlobal.emitter = orig_emitter
     end)
 
     -- Exercises the close path when local listeners are registered on the
     -- view's emitter, mirroring how DiffView/FileHistoryView register
     -- listeners via init_event_listeners().
     it("does not crash when local listeners exist during close", function()
-      local orig_emitter = DiffviewGlobal.emitter
-      DiffviewGlobal.emitter = EventEmitter()
-
       local call_log = {}
 
       local view = View({ default_layout = {} })
@@ -141,17 +145,12 @@ describe("diffview.events", function()
 
       -- Emitting on a cleared emitter should be a no-op, not a crash.
       view.emitter:emit("tab_enter")
-
-      DiffviewGlobal.emitter = orig_emitter
     end)
 
     -- Verifies that the on_any listener path (used by bootstrap.lua to
     -- forward global events via diffview.nore_emit) does not crash when
     -- view_closed is emitted during close.
     it("does not crash when global emitter has on_any listener during close", function()
-      local orig_emitter = DiffviewGlobal.emitter
-      DiffviewGlobal.emitter = EventEmitter()
-
       local any_events = {}
       DiffviewGlobal.emitter:on_any(function(e, args)
         table.insert(any_events, e.id)
@@ -166,16 +165,11 @@ describe("diffview.events", function()
 
       -- No listeners should remain on the global emitter.
       eq(0, #(DiffviewGlobal.emitter:get("view_closed") or {}))
-
-      DiffviewGlobal.emitter = orig_emitter
     end)
 
     -- Verifies that a listener emitting another event during close does
     -- not crash (reentrant emit on a soon-to-be-cleared emitter).
     it("survives reentrant emit on local emitter during close", function()
-      local orig_emitter = DiffviewGlobal.emitter
-      DiffviewGlobal.emitter = EventEmitter()
-
       local inner_fired = false
 
       local view = View({ default_layout = {} })
@@ -195,16 +189,11 @@ describe("diffview.events", function()
       eq(true, inner_fired)
       eq(nil, view.emitter:get("view_closed"))
       eq(nil, view.emitter:get("custom_event"))
-
-      DiffviewGlobal.emitter = orig_emitter
     end)
 
     -- Verifies that when two views exist, closing one does not affect
     -- the other's listeners.
     it("closing one view does not remove another view's global listeners", function()
-      local orig_emitter = DiffviewGlobal.emitter
-      DiffviewGlobal.emitter = EventEmitter()
-
       local view_a = View({ default_layout = {} })
       local view_b = View({ default_layout = {} })
 
@@ -226,8 +215,6 @@ describe("diffview.events", function()
 
       view_b:close()
       eq(0, #(DiffviewGlobal.emitter:get("view_closed") or {}))
-
-      DiffviewGlobal.emitter = orig_emitter
     end)
   end)
 end)
