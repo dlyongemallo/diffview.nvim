@@ -611,6 +611,117 @@ vim.keymap.set('n', '<leader>dm', function()
 end, { desc = 'Diff against main/master' })
 ```
 
+## Configuration Recipes
+
+Copy-paste these focused snippets to quickly configure diffview for common
+workflows. Each recipe shows only the relevant options.
+
+<details>
+<summary><b>Minimal / Clean</b></summary>
+
+Strip away visual noise and auto-clean resources on close.
+
+```lua
+require("diffview").setup({
+  show_help_hints = false,
+  hide_merge_artifacts = true,
+  clean_up_buffers = true,
+  auto_close_on_empty = true,
+})
+```
+
+</details>
+
+<details>
+<summary><b>PR Review</b></summary>
+
+Optimised for reviewing pull requests against a base branch. `--imply-local`
+makes the right-side buffer editable so you can fix things as you review.
+
+```lua
+require("diffview").setup({
+  default_args = {
+    DiffviewOpen = { "--imply-local" },
+  },
+  file_panel = {
+    show_branch_name = true,
+    always_show_sections = true,
+  },
+})
+```
+
+Open with a symmetric range to see only the changes introduced by the branch:
+
+```
+:DiffviewOpen origin/main...HEAD
+```
+
+</details>
+
+<details>
+<summary><b>Better Diffs</b></summary>
+
+Enable enhanced highlighting and use the histogram diff algorithm for more
+readable diffs. Pair with
+[diffchar.vim](https://github.com/rickhowe/diffchar.vim) for character-level
+precision (see [Companion Plugins](#recommended)).
+
+```lua
+require("diffview").setup({
+  enhanced_diff_hl = true,
+  diffopt = { algorithm = "histogram" },
+})
+```
+
+</details>
+
+<details>
+<summary><b>File History Power User</b></summary>
+
+Show both numeric and bar stats, use relative dates, and reorder commit info
+for a denser history view.
+
+```lua
+require("diffview").setup({
+  file_history_panel = {
+    stat_style = "both",
+    date_format = "relative",
+    commit_format = { "hash", "subject", "author", "date", "ref", "reflog", "status", "files", "stats" },
+  },
+  view = {
+    file_history = {
+      layout = "diff2_vertical",
+    },
+  },
+})
+```
+
+</details>
+
+<details>
+<summary><b>Merge Conflict Resolution</b></summary>
+
+Use a 4-way diff layout showing BASE, OURS, THEIRS, and the merge result.
+Winbar labels help identify each pane. Diagnostics are disabled to reduce
+noise during conflict resolution.
+
+```lua
+require("diffview").setup({
+  view = {
+    merge_tool = {
+      layout = "diff4_mixed",
+      disable_diagnostics = true,
+      winbar_info = true,
+    },
+    cycle_layouts = {
+      merge_tool = { "diff4_mixed", "diff3_mixed", "diff3_horizontal", "diff1_plain" },
+    },
+  },
+})
+```
+
+</details>
+
 ## Tips and FAQ
 
 - **Hide untracked files:**
