@@ -25,6 +25,7 @@ local M = {}
 local Window = oop.create_class("Window")
 
 Window.winopt_store = {}
+Window._set_buf_warned = false
 
 ---@class Window.init.opt
 ---@field id integer
@@ -156,7 +157,25 @@ Window.open_file = async.void(function(self)
   vim.b[self.file.bufnr].context_enabled = false    -- context.vim
 
   local conf = config.get_config()
-  api.nvim_win_set_buf(self.id, self.file.bufnr)
+  local set_buf_ok, set_buf_err, recovered = utils.set_win_buf(self.id, self.file.bufnr)
+  if recovered and not Window._set_buf_warned then
+    Window._set_buf_warned = true
+    utils.warn(
+      "An external autocommand failed while opening a Diffview buffer. "
+      .. "Diffview retried without window events.",
+      true
+    )
+  end
+
+  if recovered then
+    logger:warn(set_buf_err)
+  end
+
+  if not set_buf_ok then
+    logger:error(set_buf_err)
+    self:open_fallback()
+    return
+  end
 
   if self.file.rev.type == RevType.LOCAL then
     self:_save_winopts()
