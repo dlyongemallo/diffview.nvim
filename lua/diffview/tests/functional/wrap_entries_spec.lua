@@ -157,9 +157,7 @@ describe("diffview.wrap_entries", function()
       end)
 
       it("skips entries correctly with a large offset", function()
-        -- From entry1 file1, offset +6 should land on entry3 file1.
-        -- entry1 has 2 remaining (files 2,3), entry2 has 2, so 2+2=4
-        -- consumed; delta after entry2 = 6-2-2 = 2, but let's be exact:
+        -- From entry1 file1, offset +6 should land on entry3 file2 ("g").
         -- delta = 6 - (3 - 1) = 4, entry2 has 2 files (4-2=2), entry3
         -- needs delta=2 so files[2] = "g".
         local e, f = panel:_get_entry_by_file_offset(1, 1, 6, false)
@@ -167,7 +165,7 @@ describe("diffview.wrap_entries", function()
         eq(entries[3].files[2], f)
       end)
 
-      it("clamps a large forward offset at the boundary", function()
+      it("returns nil when a large forward offset exceeds the boundary", function()
         -- From entry3 file3, offset +5 exceeds total remaining files.
         local e, f = panel:_get_entry_by_file_offset(3, 3, 5, false)
         eq(nil, e)
