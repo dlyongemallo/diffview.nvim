@@ -289,7 +289,10 @@ function Panel:open()
     api.nvim_win_call(rel_winid, function()
       vim.cmd(split_dir .. " " .. split_cmd)
       self.winid = api.nvim_get_current_win()
-      api.nvim_win_set_buf(self.winid, self.bufid)
+      local ok, err = utils.set_win_buf(self.winid, self.bufid)
+      if not ok then
+        error(err)
+      end
 
       if config.relative == "editor" then
         local dir = ({ left = "H", bottom = "J", top = "K", right = "L" })[position]
