@@ -549,7 +549,10 @@ end
 ---@static
 function File.load_null_buffer(winid)
   local bn = File._get_null_buffer()
-  api.nvim_win_set_buf(winid, bn)
+  local ok, err = utils.set_win_buf(winid, bn)
+  if not ok then
+    error(err)
+  end
   File.NULL_FILE:attach_buffer()
 end
 

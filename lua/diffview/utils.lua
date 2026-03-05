@@ -79,6 +79,31 @@ function M.no_win_event_call(f)
   return ok, err
 end
 
+---Set a window buffer while gracefully handling external autocommand failures.
+---On failure, retry once while window and buffer enter/leave events are
+---ignored.
+---@param winid integer
+---@param bufnr integer
+---@return boolean success
+---@return string? err Error string on failure. When `success == true` and `recovered == true`, this contains the first failure message.
+---@return boolean recovered
+function M.set_win_buf(winid, bufnr)
+  local ok, err = pcall(api.nvim_win_set_buf, winid, bufnr)
+  if ok then
+    return true, nil, false
+  end
+
+  local retry_ok, retry_err = M.no_win_event_call(function()
+    api.nvim_win_set_buf(winid, bufnr)
+  end)
+
+  if retry_ok then
+    return true, tostring(err), true
+  end
+
+  return false, tostring(retry_err or err), false
+end
+
 ---Update a given window by briefly setting it as the current window.
 ---@param winid integer
 function M.update_win(winid)
