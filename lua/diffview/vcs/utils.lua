@@ -236,7 +236,7 @@ local DIFF_HEADER = [[^diff %-%-git ]]
 local DIFF_COMBINED_HEADER = [[^diff %-%-combined ]]
 local DIFF_CC_HEADER = [[^diff %-%-cc ]]
 local DIFF_SIMILARITY = [[^similarity index (%d+)%%]]
-local DIFF_INDEX = { [[^index ([%x,]+)%.%.(%x+) (%d+)]], [[^index ([%x,]+)%.%.(%x+)]] }
+local DIFF_INDEX = { [[^index ([%x,]-)%.%.(%x-) (%d+)]], [[^index ([%x,]-)%.%.(%x-)]] }
 local DIFF_PATH_OLD = { [[^%-%-%- a/(.*)]], [[^%-%-%- (/dev/null)]] }
 local DIFF_PATH_NEW = { [[^%+%+%+ b/(.*)]], [[^%+%+%+ (/dev/null)]] }
 local DIFF_HUNK_HEADER = [[^@@+ %-(%d+),(%d+) .-%+(%d+),(%d+) @@+]]
@@ -354,8 +354,6 @@ local function parse_file_diff(scanner)
     -- similarity index <number>
     -- dissimilarity index <number>
     -- index <hash>..<hash> <mode>
-    --
-    -- Note: Combined diffs have even more variations
 
     local last_line_idx = scanner:cur_line_idx()
 
@@ -436,8 +434,8 @@ local function parse_file_diff(scanner)
       scanner:skip_line()
 
       -- Consume any additional `---` lines from combined diffs.
-      -- Combined diffs use `--- a/`, `--- b/`, etc. or `--- /dev/null` for each parent.
-      while (scanner:peek_line() or ""):match("^%-%-%- .") do
+      -- Combined diffs use `--- a/`, `--- b/`, etc. for each parent.
+      while (scanner:peek_line() or ""):match("^%-%-%- [%a]/") do
         scanner:skip_line()
       end
 
@@ -484,7 +482,6 @@ function M.parse_diff(lines)
 
   while scanner:peek_line() do
     local line = scanner:next_line() --[[@as string ]]
-    -- TODO: Diff headers and patch format can take a few different forms. I.e. combined diffs
     if is_diff_header(line) then
       table.insert(ret, parse_file_diff(scanner))
     end
