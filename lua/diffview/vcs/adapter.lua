@@ -11,7 +11,9 @@ local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 local vcs_utils = lazy.require("diffview.vcs.utils") ---@module "diffview.vcs.utils"
 
 local await = async.await
+local fmt = string.format
 local logger = DiffviewGlobal.logger
+local pl = lazy.access(utils, "path") ---@type PathLib
 
 local M = {}
 
@@ -73,6 +75,76 @@ function VCSAdapter.get_repo_paths(path_args, cpath) oop.abstract_stub() end
 function VCSAdapter.find_toplevel(top_indicators) oop.abstract_stub() end
 
 ---@diagnostic enable: unused-local, missing-return
+
+---Build top-level indicators from path args and context.
+---This is the shared implementation used by most adapters.  Git overrides
+---this to handle its pathspec syntax.
+---@param path_args string[]
+---@param cpath string?
+---@return string[] paths # Resolved path args
+---@return string[] top_indicators
+function VCSAdapter.build_top_indicators(path_args, cpath)
+  local paths = {}
+  local top_indicators = {}
+
+  for _, path_arg in ipairs(path_args) do
+    for _, path in ipairs(pl:vim_expand(path_arg, false, true) --[[@as string[] ]]) do
+      path = pl:readlink(path) or path
+      table.insert(paths, path)
+    end
+  end
+
+  local cfile = pl:vim_expand("%")
+  cfile = pl:readlink(cfile) or cfile
+
+  for _, path in ipairs(paths) do
+    table.insert(top_indicators, pl:absolute(path, cpath))
+    break
+  end
+
+  table.insert(top_indicators, cpath and pl:realpath(cpath) or (
+    vim.bo.buftype == ""
+    and pl:absolute(cfile)
+    or nil
+  ))
+
+  if not cpath then
+    table.insert(top_indicators, pl:realpath("."))
+  end
+
+  return paths, top_indicators
+end
+
+---Iterate top-level indicators and resolve the repository root using a
+---VCS-specific lookup function.  Returns the first successful match or a
+---formatted error message.
+---@param top_indicators string[]
+---@param lookup_fn fun(path: string): string? # VCS-specific root lookup
+---@param vcs_name string # For the error message (e.g. "git", "mercurial")
+---@return string? err
+---@return string toplevel
+function VCSAdapter.find_toplevel_with(top_indicators, lookup_fn, vcs_name)
+  for _, p in ipairs(top_indicators) do
+    if not pl:is_dir(p) then
+      ---@diagnostic disable-next-line: cast-local-type
+      p = pl:parent(p)
+    end
+
+    if p and pl:readable(p) then
+      local toplevel = lookup_fn(p)
+      if toplevel then
+        return nil, toplevel
+      end
+    end
+  end
+
+  local msg_paths = vim.tbl_map(function(v)
+    local rel_path = pl:relative(v, ".")
+    return utils.str_quote(rel_path == "" and "." or rel_path)
+  end, top_indicators)
+
+  return fmt("Path not a %s repo (or any parent): %s", vcs_name, table.concat(msg_paths, ", ")), ""
+end
 
 ---@class vcs.adapter.VCSAdapter.Opt
 ---@field cpath string? # CWD path

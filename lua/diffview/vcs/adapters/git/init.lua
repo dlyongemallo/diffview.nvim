@@ -215,38 +215,11 @@ local function get_toplevel(path)
   return normalize_cygwin_path(out[1] and vim.trim(out[1]))
 end
 
----Try to find the top-level of a working tree by using the given indicative
----paths.
 ---@param top_indicators string[] A list of paths that might indicate what working tree we are in.
 ---@return string? err
 ---@return string toplevel # as an absolute path
 function GitAdapter.find_toplevel(top_indicators)
-  local toplevel
-  for _, p in ipairs(top_indicators) do
-    if not pl:is_dir(p) then
-      ---@diagnostic disable-next-line: cast-local-type
-      p = pl:parent(p)
-    end
-
-    if p and pl:readable(p) then
-      toplevel = get_toplevel(p)
-      if toplevel then
-        return nil, toplevel
-      end
-    end
-  end
-
-  local msg_paths = vim.tbl_map(function(v)
-    local rel_path = pl:relative(v, ".")
-    return utils.str_quote(rel_path == "" and "." or rel_path)
-  end, top_indicators) --[[@as vector ]]
-
-  local err = fmt(
-    "Path not a git repo (or any parent): %s",
-    table.concat(msg_paths, ", ")
-  )
-
-  return err, ""
+  return VCSAdapter.find_toplevel_with(top_indicators, get_toplevel, "git")
 end
 
 ---@param toplevel string

@@ -61,35 +61,7 @@ end
 ---@return string[] path_args # Resolved path args
 ---@return string[] top_indicators # Top-level indicators
 function JjAdapter.get_repo_paths(path_args, cpath)
-  local paths = {}
-  local top_indicators = {}
-
-  for _, path_arg in ipairs(path_args) do
-    for _, path in ipairs(pl:vim_expand(path_arg, false, true) --[[@as string[] ]]) do
-      path = pl:readlink(path) or path
-      table.insert(paths, path)
-    end
-  end
-
-  local cfile = pl:vim_expand("%")
-  cfile = pl:readlink(cfile) or cfile
-
-  for _, path in ipairs(paths) do
-    table.insert(top_indicators, pl:absolute(path, cpath))
-    break
-  end
-
-  table.insert(top_indicators, cpath and pl:realpath(cpath) or (
-    vim.bo.buftype == ""
-    and pl:absolute(cfile)
-    or nil
-  ))
-
-  if not cpath then
-    table.insert(top_indicators, pl:realpath("."))
-  end
-
-  return paths, top_indicators
+  return VCSAdapter.build_top_indicators(path_args, cpath)
 end
 
 ---@param path string
@@ -106,33 +78,7 @@ end
 ---@return string? err
 ---@return string toplevel
 function JjAdapter.find_toplevel(top_indicators)
-  local toplevel
-
-  for _, p in ipairs(top_indicators) do
-    if not pl:is_dir(p) then
-      ---@diagnostic disable-next-line: cast-local-type
-      p = pl:parent(p)
-    end
-
-    if p and pl:readable(p) then
-      toplevel = get_toplevel(p)
-      if toplevel then
-        return nil, toplevel
-      end
-    end
-  end
-
-  local msg_paths = vim.tbl_map(function(v)
-    local rel_path = pl:relative(v, ".")
-    return utils.str_quote(rel_path == "" and "." or rel_path)
-  end, top_indicators)
-
-  local err = fmt(
-    "Path not a Jujutsu repo (or any parent): %s",
-    table.concat(msg_paths, ", ")
-  )
-
-  return err, ""
+  return VCSAdapter.find_toplevel_with(top_indicators, get_toplevel, "Jujutsu")
 end
 
 ---@param toplevel string
