@@ -233,11 +233,22 @@ index 008beab..66116dc 100644
 --]]
 
 local DIFF_HEADER = [[^diff %-%-git ]]
+local DIFF_COMBINED_HEADER = [[^diff %-%-combined ]]
+local DIFF_CC_HEADER = [[^diff %-%-cc ]]
 local DIFF_SIMILARITY = [[^similarity index (%d+)%%]]
-local DIFF_INDEX = { [[^index (%x-)%.%.(%x-) (%d+)]], [[^index (%x-)%.%.(%x-)]] }
+local DIFF_INDEX = { [[^index ([%x,]+)%.%.(%x+) (%d+)]], [[^index ([%x,]+)%.%.(%x+)]] }
 local DIFF_PATH_OLD = { [[^%-%-%- a/(.*)]], [[^%-%-%- (/dev/null)]] }
 local DIFF_PATH_NEW = { [[^%+%+%+ b/(.*)]], [[^%+%+%+ (/dev/null)]] }
-local DIFF_HUNK_HEADER = [[^@@+ %-(%d+),(%d+) %+(%d+),(%d+) @@+]]
+local DIFF_HUNK_HEADER = [[^@@+ %-(%d+),(%d+) .-%+(%d+),(%d+) @@+]]
+
+---Check if a line matches any diff header format (standard, combined, or cc).
+---@param line string
+---@return boolean
+local function is_diff_header(line)
+  return line:match(DIFF_HEADER) ~= nil
+    or line:match(DIFF_COMBINED_HEADER) ~= nil
+    or line:match(DIFF_CC_HEADER) ~= nil
+end
 
 ---@class diff.Hunk
 ---@field old_row integer
@@ -328,7 +339,8 @@ local function parse_file_diff(scanner)
 
   -- Extended git diff headers
   while scanner:peek_line() and
-    not utils.str_match(scanner:peek_line() or "", { DIFF_HEADER, DIFF_HUNK_HEADER })
+    not is_diff_header(scanner:peek_line() or "")
+    and not (scanner:peek_line() or ""):match(DIFF_HUNK_HEADER)
   do
     -- Extended header lines:
     -- old mode <mode>
@@ -415,16 +427,23 @@ local function parse_file_diff(scanner)
       scanner:next_line()
     end
 
-    -- Paths
+    -- Paths (combined diffs may have multiple `---` lines, one per parent)
     local path_old = utils.str_match(scanner:peek_line() or "", DIFF_PATH_OLD)
     if path_old then
       if not ret.path_old then
         ret.path_old = path_old ~= "/dev/null" and path_old or nil
+      end
+      scanner:skip_line()
+
+      -- Consume any additional `---` lines from combined diffs.
+      -- Combined diffs use `--- a/`, `--- b/`, etc. or `--- /dev/null` for each parent.
+      while (scanner:peek_line() or ""):match("^%-%-%- .") do
         scanner:skip_line()
-        local path_new = utils.str_match(scanner:next_line() or "", DIFF_PATH_NEW)
+      end
+
+      local path_new = utils.str_match(scanner:next_line() or "", DIFF_PATH_NEW)
+      if not ret.path_new then
         ret.path_new = path_new ~= "/dev/null" and path_new or nil
-      else
-        scanner:skip_line(2)
       end
     end
 
@@ -436,7 +455,7 @@ local function parse_file_diff(scanner)
 
   -- Hunks
   local line = scanner:peek_line()
-  while line and not line:match(DIFF_HEADER) do
+  while line and not is_diff_header(line) do
     local old_row, old_size, new_row, new_size = line:match(DIFF_HUNK_HEADER)
     scanner:next_line() -- Current line is now the hunk header
 
@@ -466,7 +485,7 @@ function M.parse_diff(lines)
   while scanner:peek_line() do
     local line = scanner:next_line() --[[@as string ]]
     -- TODO: Diff headers and patch format can take a few different forms. I.e. combined diffs
-    if line:match(DIFF_HEADER) then
+    if is_diff_header(line) then
       table.insert(ret, parse_file_diff(scanner))
     end
   end
