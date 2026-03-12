@@ -3,6 +3,59 @@ local utils = require("diffview.utils")
 
 local eq = helpers.eq
 
+describe("diffview.utils.job", function()
+  it("returns stdout and exit code for a successful command", function()
+    local stdout, code, stderr = utils.job({ "echo", "hello" })
+
+    eq(0, code)
+    assert.is_true(#stdout > 0)
+    eq("hello", stdout[1])
+  end)
+
+  it("returns non-zero code for a failing command", function()
+    local stdout, code, stderr = utils.job({ "false" })
+
+    assert.is_true(code ~= 0)
+  end)
+
+  it("kills the process and returns non-zero code on timeout", function()
+    local stdout, code, stderr = utils.job({ "sleep", "60" }, { timeout = 100 })
+
+    eq(-1, code)
+  end)
+
+  it("captures output that arrives before a timeout", function()
+    -- Use sh -c to echo then sleep, so some stdout is produced before timeout.
+    local stdout, code, stderr = utils.job(
+      { "sh", "-c", "echo partial; sleep 60" },
+      { timeout = 500 }
+    )
+
+    eq(-1, code)
+    assert.is_true(#stdout > 0)
+    eq("partial", vim.trim(stdout[1]))
+  end)
+
+  it("respects the cwd option", function()
+    local stdout, code = utils.job({ "pwd" }, { cwd = "/tmp" })
+
+    eq(0, code)
+    -- Resolve symlinks for comparison (e.g., /tmp -> /private/tmp on macOS).
+    local expected = vim.fn.resolve("/tmp")
+    local actual = vim.fn.resolve(stdout[1])
+    eq(expected, actual)
+  end)
+
+  it("returns empty stdout for a command with no output", function()
+    local stdout, code = utils.job({ "true" })
+
+    eq(0, code)
+    -- stdout is either empty or contains a single empty string.
+    local text = table.concat(stdout)
+    eq("", text)
+  end)
+end)
+
 describe("diffview.utils.set_win_buf", function()
   it("does not retry when setting the window buffer succeeds", function()
     local original_set_win_buf = vim.api.nvim_win_set_buf

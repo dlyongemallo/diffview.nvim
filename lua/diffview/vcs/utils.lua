@@ -65,6 +65,43 @@ local JobStatus = oop.enum({
 local sync_jobs = {}
 local job_queue_sem = Semaphore(1)
 
+-- Maximum time (ms) a queued sync job is allowed to run before being killed.
+local SYNC_JOB_TIMEOUT = 30000
+
+local uv = vim.uv
+
+---@type table<diffview.Job, uv_timer_t>
+local job_watchdogs = {}
+
+---Start a watchdog timer that kills the job if it doesn't finish in time.
+---@param job diffview.Job
+local function start_job_watchdog(job)
+  local timer = uv.new_timer()
+  if not timer then return end
+
+  job_watchdogs[job] = timer
+
+  timer:start(SYNC_JOB_TIMEOUT, 0, function()
+    if not timer:is_closing() then timer:close() end
+    job_watchdogs[job] = nil
+
+    if not job:is_done() then
+      logger:warn("[vcs.utils] Sync job timed out, killing: " .. job.command)
+      job:kill(128, "sigterm")
+    end
+  end)
+end
+
+---Cancel and clean up the watchdog timer for a job.
+---@param job diffview.Job
+local function cancel_job_watchdog(job)
+  local timer = job_watchdogs[job]
+  if timer then
+    if not timer:is_closing() then timer:close() end
+    job_watchdogs[job] = nil
+  end
+end
+
 ---@param job diffview.Job
 M.resume_sync_queue = async.void(function(job)
   local permit = await(job_queue_sem:acquire()) --[[@as Permit ]]
@@ -75,6 +112,7 @@ M.resume_sync_queue = async.void(function(job)
   permit:forget()
 
   if sync_jobs[1] and not sync_jobs[1]:is_started() then
+    start_job_watchdog(sync_jobs[1])
     sync_jobs[1]:start()
   end
 end)
@@ -82,6 +120,7 @@ end)
 ---@param job diffview.Job
 M.queue_sync_job = async.void(function(job)
   job:on_exit(function()
+    cancel_job_watchdog(job)
     M.resume_sync_queue(job)
   end)
 
@@ -89,6 +128,7 @@ M.queue_sync_job = async.void(function(job)
   table.insert(sync_jobs, job)
 
   if #sync_jobs == 1 then
+    start_job_watchdog(job)
     job:start()
   end
 
@@ -236,7 +276,7 @@ local DIFF_HEADER = [[^diff %-%-git ]]
 local DIFF_COMBINED_HEADER = [[^diff %-%-combined ]]
 local DIFF_CC_HEADER = [[^diff %-%-cc ]]
 local DIFF_SIMILARITY = [[^similarity index (%d+)%%]]
-local DIFF_INDEX = { [[^index ([%x,]+)%.%.(%x+) (%d+)]], [[^index ([%x,]+)%.%.(%x+)]] }
+local DIFF_INDEX = { [[^index ([%x,]-)%.%.(%x-) (%d+)]], [[^index ([%x,]-)%.%.(%x-)]] }
 local DIFF_PATH_OLD = { [[^%-%-%- a/(.*)]], [[^%-%-%- (/dev/null)]] }
 local DIFF_PATH_NEW = { [[^%+%+%+ b/(.*)]], [[^%+%+%+ (/dev/null)]] }
 local DIFF_HUNK_HEADER = [[^@@+ %-(%d+),(%d+) .-%+(%d+),(%d+) @@+]]
@@ -354,8 +394,6 @@ local function parse_file_diff(scanner)
     -- similarity index <number>
     -- dissimilarity index <number>
     -- index <hash>..<hash> <mode>
-    --
-    -- Note: Combined diffs have even more variations
 
     local last_line_idx = scanner:cur_line_idx()
 
@@ -436,8 +474,8 @@ local function parse_file_diff(scanner)
       scanner:skip_line()
 
       -- Consume any additional `---` lines from combined diffs.
-      -- Combined diffs use `--- a/`, `--- b/`, etc. or `--- /dev/null` for each parent.
-      while (scanner:peek_line() or ""):match("^%-%-%- .") do
+      -- Combined diffs use `--- a/`, `--- b/`, etc. for each parent.
+      while (scanner:peek_line() or ""):match("^%-%-%- [%a]/") do
         scanner:skip_line()
       end
 
@@ -484,7 +522,6 @@ function M.parse_diff(lines)
 
   while scanner:peek_line() do
     local line = scanner:next_line() --[[@as string ]]
-    -- TODO: Diff headers and patch format can take a few different forms. I.e. combined diffs
     if is_diff_header(line) then
       table.insert(ret, parse_file_diff(scanner))
     end

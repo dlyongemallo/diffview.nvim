@@ -416,9 +416,10 @@ function Job:sync(timeout)
 
   if not ok then
     if status == -1 then
-      error("Synchronous job timed out!")
+      self:kill(-1)
+      return false, "Synchronous job timed out!"
     elseif status == -2 then
-      error("Synchronous job got interrupted!")
+      return false, "Synchronous job got interrupted!"
     end
 
     return false, "Unexpected state"

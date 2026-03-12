@@ -322,6 +322,7 @@ end
 ---@field silent boolean Supress log output.
 ---@field fail_on_empty boolean Return code 1 if stdout is empty.
 ---@field retry integer Number of times the job will be retried if it fails.
+---@field timeout integer? Max duration in ms (default: 30000).
 ---@field log_opt Logger.log_job.Opt
 
 ---@param cmd string[]
@@ -348,7 +349,7 @@ function M.job(cmd, cwd_or_opt)
     }),
   })
 
-  local ok = job:sync()
+  local ok = job:sync(opt.timeout)
   local code = job.code
 
   if not ok then
