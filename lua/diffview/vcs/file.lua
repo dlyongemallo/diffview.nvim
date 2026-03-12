@@ -317,6 +317,20 @@ File.create_buffer = async.wrap(function(self, callback)
     vim.cmd("filetype detect")
   end)
 
+  -- Match the index buffer's fileformat to the working tree file so that
+  -- saving the buffer does not inadvertently convert line endings.
+  if self.rev.type == RevType.STAGE and self.rev.stage == 0 then
+    local abs_path = self.absolute_path or pl:absolute(self.path, self.adapter.ctx.toplevel)
+    if vim.fn.filereadable(abs_path) == 1 then
+      local first_line = vim.fn.readfile(abs_path, "B", 1)
+      if first_line[1] and first_line[1]:find("\r$") then
+        vim.bo[self.bufnr].fileformat = "dos"
+      else
+        vim.bo[self.bufnr].fileformat = "unix"
+      end
+    end
+  end
+
   -- Disable context plugins that interfere with scrollbind alignment.
   -- Note: nvim-treesitter-context does NOT check this variable by default;
   -- users must configure `on_attach` callback to check it. context.vim does.
