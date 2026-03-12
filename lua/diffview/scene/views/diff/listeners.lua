@@ -78,6 +78,8 @@ return function(view)
     ---@diagnostic disable-next-line: unused-local
     files_updated = function(_, files)
       view.initialized = true
+      -- File entries are replaced on update; clear stale selections.
+      view.panel:clear_selections()
     end,
     close = function()
       if view.panel:is_focused() then
@@ -123,6 +125,75 @@ return function(view)
         end
       end
     end,
+    toggle_select_entry = function()
+      if not view.panel:is_open() then return end
+
+      -- Visual-mode: toggle all files in the selected line range.
+      local mode = api.nvim_get_mode().mode
+      if mode == "v" or mode == "V" or mode == "\22" then
+        local start_line = vim.fn.line("v")
+        local end_line = vim.fn.line(".")
+        if start_line > end_line then
+          start_line, end_line = end_line, start_line
+        end
+
+        for line = start_line, end_line do
+          local item = view.panel:get_item_at_line(line)
+          if item and type(item.collapsed) ~= "boolean" then
+            view.panel:toggle_selection(item)
+          end
+        end
+
+        -- Exit visual mode.
+        api.nvim_feedkeys(api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
+        view.panel:render()
+        view.panel:redraw()
+        return
+      end
+
+      ---@type any
+      local item = view.panel:get_item_at_cursor()
+      if not item then return end
+
+      if type(item.collapsed) == "boolean" then
+        -- Directory: select all if any child is unselected, else deselect all.
+        ---@cast item DirData
+        local node = item._node
+        if not node then return end
+
+        local leaves = node:leaves()
+        local all_selected = true
+        for _, leaf in ipairs(leaves) do
+          if leaf.data and not view.panel:is_selected(leaf.data) then
+            all_selected = false
+            break
+          end
+        end
+
+        for _, leaf in ipairs(leaves) do
+          if leaf.data then
+            if all_selected then
+              view.panel.selected_files[leaf.data] = nil
+            else
+              view.panel.selected_files[leaf.data] = true
+            end
+          end
+        end
+      else
+        ---@cast item FileEntry
+        view.panel:toggle_selection(item)
+      end
+
+      view.panel:render()
+      view.panel:redraw()
+      view.panel:highlight_next_file()
+    end,
+    clear_select_entries = function()
+      if not view.panel:is_open() then return end
+      view.panel:clear_selections()
+      view.panel:render()
+      view.panel:redraw()
+    end,
     focus_entry = function()
       if view.panel:is_open() then
         ---@type any
@@ -153,8 +224,60 @@ return function(view)
         return
       end
 
-      local item = view:infer_cur_file(true)
-      if item then
+      local selected = view.panel:get_selected_files()
+
+      if #selected > 0 then
+        -- Batch operation on selected files.
+        local to_stage = {}
+        local to_unstage = {}
+
+        for _, file in ipairs(selected) do
+          if file.kind == "working" or file.kind == "conflicting" then
+            to_stage[#to_stage + 1] = file.path
+          elseif file.kind == "staged" then
+            to_unstage[#to_unstage + 1] = file.path
+          end
+        end
+
+        if #to_stage == 0 and #to_unstage == 0 then
+          return
+        end
+
+        local failed = {}
+
+        if #to_stage > 0 then
+          if not view.adapter:add_files(to_stage) then
+            -- Batch failed; try one at a time to identify which files failed.
+            for _, path in ipairs(to_stage) do
+              if not view.adapter:add_files({ path }) then
+                failed[#failed + 1] = path
+              end
+            end
+          end
+        end
+
+        if #to_unstage > 0 then
+          if not view.adapter:reset_files(to_unstage) then
+            for _, path in ipairs(to_unstage) do
+              if not view.adapter:reset_files({ path }) then
+                failed[#failed + 1] = path
+              end
+            end
+          end
+        end
+
+        if #failed > 0 then
+          utils.err(("Failed to stage/unstage %d file(s): %s"):format(
+            #failed, table.concat(failed, ", ")
+          ))
+        end
+
+        view.panel:clear_selections()
+      else
+        -- Single file operation (existing behaviour).
+        local item = view:infer_cur_file(true)
+        if not item then return end
+
         local success
         if item.kind == "working" or item.kind == "conflicting" then
           success = view.adapter:add_files({ item.path })
@@ -201,21 +324,21 @@ return function(view)
           view.panel:set_cur_file(item)
           view:next_file()
         end
-
-        view:update_files(
-          vim.schedule_wrap(function()
-            view.panel:highlight_cur_file()
-            -- Auto-close if all working/conflicting files have been staged.
-            if config.get_config().auto_close_on_empty then
-              if #view.files.working == 0 and #view.files.conflicting == 0 then
-                view:close()
-                lib.dispose_view(view)
-              end
-            end
-          end)
-        )
-        view.emitter:emit(EventName.FILES_STAGED, view)
       end
+
+      view:update_files(
+        vim.schedule_wrap(function()
+          view.panel:highlight_cur_file()
+          -- Auto-close if all working/conflicting files have been staged.
+          if config.get_config().auto_close_on_empty then
+            if #view.files.working == 0 and #view.files.conflicting == 0 then
+              view:close()
+              lib.dispose_view(view)
+            end
+          end
+        end)
+      )
+      view.emitter:emit(EventName.FILES_STAGED, view)
     end,
     stage_all = function()
       local args = vim.tbl_map(function(file)
@@ -261,50 +384,67 @@ return function(view)
       end
 
       local commit
-
       if view.left.type ~= RevType.STAGE then
         commit = view.left.commit
       end
 
-      local item = view:infer_cur_file(true)
-      if not item then return end
+      local selected = view.panel:get_selected_files()
 
-      -- Check if item is a directory.
-      if type(item.collapsed) == "boolean" then
-        ---@cast item DirData
-        local node = item._node
-        if not node then return end
-
-        -- Get all files under this directory.
-        local leaves = node:leaves()
+      if #selected > 0 then
+        -- Batch restore selected files.
         local restored_count = 0
-        for _, leaf in ipairs(leaves) do
-          local file = leaf.data
-          if file and file.path then
-            local bufid = utils.find_file_buffer(file.path)
-            if bufid and vim.bo[bufid].modified then
-              utils.warn(("Skipping '%s': file has unsaved changes."):format(file.path))
-            else
-              await(vcs_utils.restore_file(view.adapter, file.path, file.kind, commit))
-              restored_count = restored_count + 1
-            end
+        for _, file in ipairs(selected) do
+          local bufid = utils.find_file_buffer(file.path)
+          if bufid and vim.bo[bufid].modified then
+            utils.warn(("Skipping '%s': file has unsaved changes."):format(file.path))
+          else
+            await(vcs_utils.restore_file(view.adapter, file.path, file.kind, commit))
+            restored_count = restored_count + 1
           end
         end
+
+        view.panel:clear_selections()
 
         if restored_count > 0 then
           utils.info(("Restored %d file(s)."):format(restored_count))
         end
       else
-        -- Single file restore.
-        local file = item
-        local bufid = utils.find_file_buffer(file.path)
+        -- Single item restore (existing behaviour).
+        local item = view:infer_cur_file(true)
+        if not item then return end
 
-        if bufid and vim.bo[bufid].modified then
-          utils.err("The file is open with unsaved changes! Aborting file restoration.")
-          return
+        if type(item.collapsed) == "boolean" then
+          ---@cast item DirData
+          local node = item._node
+          if not node then return end
+
+          local leaves = node:leaves()
+          local restored_count = 0
+          for _, leaf in ipairs(leaves) do
+            local file = leaf.data
+            if file and file.path then
+              local bufid = utils.find_file_buffer(file.path)
+              if bufid and vim.bo[bufid].modified then
+                utils.warn(("Skipping '%s': file has unsaved changes."):format(file.path))
+              else
+                await(vcs_utils.restore_file(view.adapter, file.path, file.kind, commit))
+                restored_count = restored_count + 1
+              end
+            end
+          end
+
+          if restored_count > 0 then
+            utils.info(("Restored %d file(s)."):format(restored_count))
+          end
+        else
+          local bufid = utils.find_file_buffer(item.path)
+          if bufid and vim.bo[bufid].modified then
+            utils.err("The file is open with unsaved changes! Aborting file restoration.")
+            return
+          end
+
+          await(vcs_utils.restore_file(view.adapter, item.path, item.kind, commit))
         end
-
-        await(vcs_utils.restore_file(view.adapter, file.path, file.kind, commit))
       end
 
       view:update_files()

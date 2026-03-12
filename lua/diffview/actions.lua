@@ -818,6 +818,8 @@ local action_names = {
   "toggle_files",
   "toggle_flatten_dirs",
   "toggle_fold",
+  "toggle_select_entry",
+  "clear_select_entries",
   "toggle_stage_entry",
   "toggle_untracked",
   "unstage_all",
