@@ -93,6 +93,11 @@ Window.load_file = async.wrap(function(self, callback)
 
   if self.file:is_valid() then return callback(true) end
 
+  -- Skip loading if the file has been deactivated (e.g. user navigated
+  -- away). This avoids queueing unnecessary git jobs during rapid
+  -- navigation.
+  if not self.file.active then return callback(false) end
+
   local ok, err = pawait(self.file.create_buffer, self.file)
 
   if ok and not self.file:is_valid() then
@@ -102,8 +107,14 @@ Window.load_file = async.wrap(function(self, callback)
   end
 
   if not ok then
-    logger:error(err)
-    utils.err(fmt("Failed to create diff buffer: '%s:%s'", self.file.rev, self.file.path), true)
+    -- Suppress error messages for cancelled buffer creation (e.g. user
+    -- navigated away during async loading).
+    if err and type(err) == "string" and err:find(File.CANCELLED, 1, true) then
+      logger:debug("Buffer creation cancelled for: " .. self.file.path)
+    else
+      logger:error(err)
+      utils.err(fmt("Failed to create diff buffer: '%s:%s'", self.file.rev, self.file.path), true)
+    end
   end
 
   callback(ok)

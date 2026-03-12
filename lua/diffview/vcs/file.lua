@@ -55,6 +55,9 @@ File.index_bufmap = {}
 ---@type table<integer, boolean>
 File.created_bufs = {}
 
+---Sentinel error value for cancelled buffer creation.
+File.CANCELLED = "diffview:cancelled"
+
 ---@static
 File.bufopts = {
   buftype = "nowrite",
@@ -80,7 +83,7 @@ function File:init(opt)
   self.commit = opt.commit
   self.symbol = opt.symbol
   self.get_data = opt.get_data
-  self.active = false
+  self.active = true
   self.ready = false
 
   self.winopts = opt.winopts or {
@@ -223,6 +226,14 @@ File.create_buffer = async.wrap(function(self, callback)
     return
   end
 
+  -- Bail out if the file was deactivated during the scheduler yield
+  -- (e.g. user navigated away). This covers all code paths below: binary
+  -- check, local buffer creation, stage blob lookup, and produce_data.
+  if not self.active then
+    error(File.CANCELLED)
+    return
+  end
+
   if self.binary == nil and not config.get_config().diff_binaries then
     self.binary = self.adapter:is_binary(self.path, self.rev)
   end
@@ -275,10 +286,27 @@ File.create_buffer = async.wrap(function(self, callback)
   self.bufnr = api.nvim_create_buf(false, false)
   api.nvim_buf_set_name(self.bufnr, fullname)
 
+  -- If the file was deactivated (e.g. the user navigated away) before we
+  -- start the expensive produce_data call, clean up and bail out.
+  if not self.active then
+    pcall(api.nvim_buf_delete, self.bufnr, { force = true })
+    self.bufnr = nil
+    error(File.CANCELLED)
+    return
+  end
+
   local err, lines = await(self:produce_data())
   if err then error(table.concat(err, "\n")) end
 
   await(async.scheduler())
+
+  -- If the file was deactivated while produce_data was running, clean up.
+  if not self.active then
+    pcall(api.nvim_buf_delete, self.bufnr, { force = true })
+    self.bufnr = nil
+    error(File.CANCELLED)
+    return
+  end
 
   -- Revalidate buffer in case the file was destroyed before `produce_data()`
   -- returned.
