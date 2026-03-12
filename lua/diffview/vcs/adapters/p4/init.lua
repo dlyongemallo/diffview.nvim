@@ -704,29 +704,72 @@ P4Adapter.tracked_files = async.wrap(function(self, left, right, args, kind, opt
             return
         end
 
-        local file_status = {} -- path -> { status, path, oldpath, stats }
+        local file_status = {} -- local_path -> { status, path }
 
-        -- Process opened files first to get status (add, edit, delete)
+        -- Process opened files first to get status (add, edit, delete).
+        -- p4 opened output format: //depot/path#rev - action change (type)
+        -- Strip the #rev suffix to get just the depot path.
+        local depot_paths = {}
+        local depot_status = {} -- depot_path -> status letter
         for _, line in ipairs(opened_job.stdout) do
-            local depot_path, change_type, cl_info = line:match("^(%S+)%s*-%s*([^%s]+)%s+(.*)")
+            local depot_path, change_type = line:match("^(.-)#%d+%s*-%s*([^%s]+)%s+")
             if depot_path then
                 local status_map = { add = "A", edit = "M", delete = "D", branch = "A", integrate = "M" }
-                local status = status_map[change_type] or "M" -- Default to modified
-                file_status[depot_path] = { status = status, path = depot_path }
+                depot_status[depot_path] = status_map[change_type] or "M"
+                table.insert(depot_paths, depot_path)
             end
         end
 
-        -- Process diff output, update status if needed, add files not in 'opened'
+        -- Map depot paths to local (workspace) paths via `p4 -ztag where`
+        -- so that all entries use paths relative to the client root.  Tagged
+        -- output gives us "... path /local/path" lines which are safe to
+        -- parse even when paths contain spaces.
+        local depot_to_local = {}
+        if #depot_paths > 0 then
+            local where_job = Job({
+                command = self:bin(),
+                args = utils.vec_join("-ztag", "where", depot_paths),
+                cwd = self.ctx.toplevel,
+                log_opt = { label = log_opt.label .. "(where)" },
+            })
+            await(Job.join({ where_job }))
+
+            local cur_depot = nil
+            for _, line in ipairs(where_job.stdout) do
+                local key, value = line:match("^%.%.%. (%S+) (.+)$")
+                if key == "depotFile" then
+                    cur_depot = value
+                elseif key == "path" and cur_depot then
+                    depot_to_local[cur_depot] = value
+                    cur_depot = nil
+                end
+            end
+        end
+
+        -- Build file_status from opened files, keyed by workspace-relative path.
+        local toplevel = self.ctx.toplevel
+        for dp, status in pairs(depot_status) do
+            local lp = depot_to_local[dp]
+            if lp then
+                local rel = pl:relative(lp, toplevel)
+                file_status[rel] = { status = status, path = rel }
+            else
+                -- Fallback: use depot path if `p4 where` did not resolve it
+                -- (e.g. the file only exists in the depot and has no local mapping).
+                file_status[dp] = { status = status, path = dp }
+            end
+        end
+
+        -- Process diff output, update status if needed, add files not in
+        -- 'opened'.  p4 diff -sl output format: "diff /local/path" or
+        -- "same /local/path".  We only care about files that differ.
         for _, line in ipairs(diff_job.stdout) do
-             -- Format is usually: //depot/path#rev - diff
-             local depot_path = line:match("^(%S+)#%d+ - ")
-             if depot_path then
-                 if not file_status[depot_path] then
-                     -- File differs but wasn't opened (maybe needs reconcile?)
-                     file_status[depot_path] = { status = "M", path = depot_path }
+             local diff_status, local_path = line:match("^(%S+) (.+)$")
+             if diff_status == "diff" and local_path then
+                 local rel = pl:relative(local_path, toplevel)
+                 if not file_status[rel] then
+                     file_status[rel] = { status = "M", path = rel }
                  end
-                 -- Could try to get diff stats here with `p4 diff -s`, but it's slow per file.
-                 file_status[depot_path].stats = nil -- Indicate stats unknown
              end
         end
 
@@ -770,27 +813,46 @@ P4Adapter.tracked_files = async.wrap(function(self, left, right, args, kind, opt
             return
         end
 
-        -- Parse `diff2 -ds` output: "==== //path - diff types"
+        -- Parse `diff2 -ds` output.  The format varies:
+        --   ==== //path#rev (type) - //path#rev (type) ==== content
+        --   ==== //path#rev (type) - //path#rev (type) ==== identical
+        --   ==== <none> - //path#rev ====               (added file)
+        --   ==== //path#rev - <none> ===                (deleted file, note 3 '=')
+        -- Stats lines like "add 0 chunks 0 lines" follow and are ignored.
         for _, line in ipairs(diff_job.stdout) do
-            local path, diff_type = line:match("^==== (%S+)%s*%- ([a-z]+)")
-            if path then
-                local status = "M" -- Default
-                if diff_type == "content" then status = "M"
-                elseif diff_type == "types" then status = "T" -- Type change
-                elseif diff_type == "branch" then status = "A" -- Treat branch as add
-                elseif diff_type == "delete" then status = "D"
-                elseif diff_type == "add" then status = "A"
-                end
+          if line:match("^====") then
+            local left_file, right_file, diff_type =
+              line:match("^==== (%S+).-%-(.-)===+%s*(%S*)")
+
+            if left_file then
+              right_file = right_file:match("(%S+)") or right_file
+
+              local status
+              if diff_type == "content" then status = "M"
+              elseif diff_type == "types" then status = "T"
+              elseif diff_type == "branch" then status = "A"
+              elseif left_file == "<none>" then status = "A"
+              elseif right_file == "<none>" then status = "D"
+              elseif diff_type == "identical" then status = nil
+              else status = "M"
+              end
+
+              if status then
+                -- Strip #rev suffix from depot paths.
+                local path = left_file ~= "<none>" and left_file or right_file
+                path = path:match("^(.-)#%d+") or path
 
                 table.insert(files, FileEntry.with_layout(opt.default_layout, {
                     adapter = self,
                     path = path,
                     status = status,
-                    stats = nil, -- diff2 doesn't give stats easily
-                    kind = "working", -- Use 'working' kind
+                    stats = nil,
+                    kind = "working",
                     revs = { a = left, b = right },
                 }))
+              end
             end
+          end
         end
     else
         logger:fmt_warn("Unsupported revision combination for tracked_files: %s vs %s", left, right)
