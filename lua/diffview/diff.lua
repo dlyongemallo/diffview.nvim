@@ -43,6 +43,9 @@ function Diff:init(a, b, eql_fn)
     return aa == bb
   end
 
+  -- Fast path: skip the full algorithm when there is nothing to diff.
+  if a == b or (#a == 0 and #b == 0) then return end
+
   for i = 1, #a do
     self.moda[i] = false
   end
@@ -57,8 +60,8 @@ end
 function Diff:create_edit_script()
   local astart = 1
   local bstart = 1
-  local aend = #self.moda
-  local bend = #self.modb
+  local aend = #self.a
+  local bend = #self.b
   local script = {}
 
   while astart <= aend or bstart <= bend do
