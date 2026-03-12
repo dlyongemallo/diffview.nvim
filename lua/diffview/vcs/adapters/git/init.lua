@@ -13,6 +13,7 @@ local VCSAdapter = require("diffview.vcs.adapter").VCSAdapter
 local arg_parser = require("diffview.arg_parser")
 local async = require("diffview.async")
 local config = require("diffview.config")
+local git_parser = require("diffview.vcs.adapters.git.parser")
 local lazy = require("diffview.lazy")
 local oop = require("diffview.oop")
 local utils = require("diffview.utils")
@@ -173,9 +174,15 @@ end
 ---@param path string?
 ---@return string?
 local has_cygpath ---@type boolean?
+---@type table<string, string>
+local cygpath_cache = {}
 local function normalize_cygwin_path(path)
   if not path or vim.fn.has("win32") ~= 1 or path:sub(1, 1) ~= "/" then
     return path
+  end
+
+  if cygpath_cache[path] then
+    return cygpath_cache[path]
   end
 
   if has_cygpath == nil then
@@ -187,6 +194,7 @@ local function normalize_cygwin_path(path)
     if vim.v.shell_error ~= 0 or result == "" then
       return path
     end
+    cygpath_cache[path] = result
     return result
   end
 
@@ -452,94 +460,8 @@ end
 -- :100644 100644 ea6555f005 2fd0aed601 M  runtime/syntax/checkhealth.vim
 -- 1       1       runtime/syntax/checkhealth.vim
 
----@param data string[]
----@param seek? integer
----@return string[] namestat
----@return string[] numstat
----@return integer data_end # First unprocessed data index. Marks the last index of stat data +1.
-local function structure_stat_data(data, seek)
-  local namestat, numstat = {}, {}
-  local i = seek or 1
-
-  while data[i] do
-    if data[i]:match("^:+[0-7]") then
-      namestat[#namestat + 1] = data[i]
-    elseif data[i]:match("^[%d-]+\t[%d-]+\t") then
-      numstat[#numstat + 1] = data[i]
-    else
-      -- We have hit unrelated data
-      break
-    end
-    i = i + 1
-  end
-
-  return namestat, numstat, i
-end
-
----@class GitAdapter.LogData
----@field left_hash? string
----@field right_hash string
----@field merge_hash? string
----@field author string
----@field time integer
----@field time_offset string
----@field rel_date string
----@field ref_names string
----@field reflog_selector string
----@field subject string
----@field namestat string[]
----@field numstat string[]
----@field diff? diff.FileEntry[]
----@field valid boolean
-
----@param stat_data string[]
----@param keep_diff? boolean
----@return GitAdapter.LogData data
-local function structure_fh_data(stat_data, keep_diff)
-  local right_hash, left_hash, merge_hash = unpack(utils.str_split(stat_data[1]))
-  local time_offset = utils.str_split(stat_data[4])[3]
-
-  ---@type GitAdapter.LogData
-  local ret = {
-    left_hash = left_hash ~= "" and left_hash or nil,
-    right_hash = right_hash,
-    merge_hash = merge_hash,
-    author = stat_data[2],
-    time = tonumber(stat_data[3]),
-    time_offset = time_offset,
-    rel_date = stat_data[5],
-    ref_names = stat_data[6] and stat_data[6]:sub(3) or "",
-    reflog_selector = stat_data[7] and stat_data[7]:sub(3) or "",
-    subject = stat_data[8] and stat_data[8]:sub(3) or "",
-  }
-
-  local namestat, numstat = structure_stat_data(stat_data, 9)
-  ret.namestat = namestat
-  ret.numstat = numstat
-
-  if keep_diff then
-    ret.diff = vcs_utils.parse_diff(stat_data)
-  end
-
-  -- Soft validate the data
-  ret.valid = #namestat == #numstat and pcall(
-    vim.validate,
-    {
-      left_hash = { ret.left_hash, "string", true },
-      right_hash = { ret.right_hash, "string" },
-      merge_hash = { ret.merge_hash, "string", true },
-      author = { ret.author, "string" },
-      time = { ret.time, "number" },
-      time_offset = { ret.time_offset, "string" },
-      rel_date = { ret.rel_date, "string" },
-      ref_names = { ret.ref_names, "string" },
-      reflog_selector = { ret.reflog_selector, "string" },
-      subject = { ret.subject, "string" },
-    }
-  )
-
-  return ret
-end
+local structure_stat_data = git_parser.structure_stat_data
+local structure_fh_data = git_parser.structure_fh_data
 
 ---@param state GitAdapter.FHState
 function GitAdapter:stream_fh_data(state)
@@ -721,7 +643,7 @@ function GitAdapter:is_single_file(path_args, lflags)
   elseif path_args and self.ctx.toplevel then
     return #path_args == 1
         and not pl:is_dir(path_args[1])
-        and #self:exec_sync({ "ls-files", "--", path_args }, self.ctx.toplevel) < 2
+        and #self:exec_sync({ "-c", "core.quotePath=false", "ls-files", "--", path_args }, self.ctx.toplevel) < 2
   end
 
   return true
@@ -1167,44 +1089,10 @@ function GitAdapter:parse_fh_data(data, commit, state)
   local files = {}
 
   for i = 1, #data.numstat do
-    local status, name, oldname
+    local entry = git_parser.parse_namestat_entry(data.namestat[i], data.numstat[i])
 
-    local line = data.namestat[i]
-    local num_parents = #(line:match("^(:+)"))
-    local offset = (num_parents + 1) * 2 + 1
-    local namestat_fields
-
-    local j = 1
-    for idx in line:gmatch("%s+()") do
-      ---@cast idx integer
-      j = j + 1
-      if j == offset then
-        namestat_fields = utils.str_split(line:sub(idx), "\t")
-        break
-      end
-    end
-
-    status = namestat_fields[1]:match("^%a%a?")
-
-    if num_parents == 1 and namestat_fields[3] then
-      -- Rename
-      oldname = namestat_fields[2]
-      name = namestat_fields[3]
-
-      if state.single_file then
-        state.old_path = oldname
-      end
-    else
-      name = namestat_fields[2]
-    end
-
-    local stats = {
-      additions = tonumber(data.numstat[i]:match("^%d+")),
-      deletions = tonumber(data.numstat[i]:match("^%d+%s+(%d+)")),
-    }
-
-    if not stats.additions or not stats.deletions then
-      stats = nil
+    if entry.oldname and state.single_file then
+      state.old_path = entry.oldname
     end
 
     table.insert(
@@ -1213,10 +1101,10 @@ function GitAdapter:parse_fh_data(data, commit, state)
         state.layout_opt.default_layout or Diff2Hor,
         {
           adapter = self,
-          path = name,
-          oldpath = oldname,
-          status = status,
-          stats = stats,
+          path = entry.name,
+          oldpath = entry.oldname,
+          status = entry.status,
+          stats = entry.stats,
           kind = "working",
           commit = commit,
           revs = {
@@ -1786,7 +1674,7 @@ function GitAdapter:stage_index_file(file)
 
     local blob_hash = out[1]
 
-    out, code = self:exec_sync({ "ls-files", "--stage", file.path }, self.ctx.toplevel)
+    out, code = self:exec_sync({ "-c", "core.quotePath=false", "ls-files", "--stage", file.path }, self.ctx.toplevel)
     local old_mode = out[1]:match("^(%d+)")
 
     if not old_mode then
@@ -1869,9 +1757,8 @@ GitAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, op
     command = self:bin(),
     args = utils.vec_join(
       self:args(),
-      "-c",
-      "core.quotePath=false",
       "diff",
+      "-z",
       rename_flag,
       "--ignore-submodules",
       "--name-status",
@@ -1884,9 +1771,8 @@ GitAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, op
     command = self:bin(),
     args = utils.vec_join(
       self:args(),
-      "-c",
-      "core.quotePath=false",
       "diff",
+      "-z",
       rename_flag,
       "--ignore-submodules",
       "--numstat",
@@ -1896,63 +1782,123 @@ GitAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, op
     log_opt = log_opt,
   })
 
-  local multi_job = MultiJob(
-    { namestat_job, numstat_job },
-    {
-      retry = 2,
-      fail_cond = function()
-        local sign = utils.sign(#namestat_job.stdout - #numstat_job.stdout)
-        if sign == 0 then return true end
-        local failed = sign < 0 and namestat_job or numstat_job
+  local max_attempts = 3
+  local namestat_entries
+  local numstat_entries
+  local numstat_count
 
-        return false, { failed }, "Inbalance in diff data!"
-      end,
-    }
-  )
+  for attempt = 1, max_attempts do
+    local multi_job = MultiJob(
+      { namestat_job, numstat_job },
+      { retry = 2 }
+    )
 
-  local ok, err = await(multi_job)
+    local ok, err = await(multi_job)
 
-  if not ok then
-    callback(utils.vec_join(err, namestat_job.stderr, numstat_job.stderr), nil)
-    return
+    if not ok then
+      callback(utils.vec_join(err, namestat_job.stderr, numstat_job.stderr), nil)
+      return
+    end
+
+    -- Both jobs use `-z` for NUL-delimited output, which is safe for
+    -- filenames containing tabs or newlines.  Reassemble stdout into a
+    -- single string and split on NUL.
+    local namestat_fields = vim.split(table.concat(namestat_job.stdout, "\n"), "\0", { plain = true })
+    local numstat_fields = vim.split(table.concat(numstat_job.stdout, "\n"), "\0", { plain = true })
+
+    -- Parse NUL-delimited --name-status: status\0name[\0oldname]\0...
+    namestat_entries = {}
+    local ni = 1
+    while ni <= #namestat_fields do
+      local field = namestat_fields[ni]
+      if field == "" then
+        ni = ni + 1
+      else
+        local status = field:sub(1, 1):gsub("%s", " ")
+        local name = namestat_fields[ni + 1]
+        local oldname
+
+        if status == "R" or status == "C" then
+          -- Renames and copies have an extra field: old\0new.
+          oldname = name
+          name = namestat_fields[ni + 2]
+          ni = ni + 3
+        else
+          ni = ni + 2
+        end
+
+        table.insert(namestat_entries, { status = status, name = name, oldname = oldname })
+      end
+    end
+
+    -- Parse NUL-delimited --numstat output.
+    -- Non-rename: "add\tdel\tpath\0" -> after split: "add\tdel\tpath"
+    -- Rename:     "add\tdel\t\0old\0new\0" -> after split: "add\tdel\t", "old", "new"
+    numstat_entries = {}
+    numstat_count = 0
+    local si = 1
+    while si <= #numstat_fields do
+      local field = numstat_fields[si]
+      if field == "" then
+        si = si + 1
+      else
+        local add_s, del_s, path = field:match("^([%d-]+)\t([%d-]+)\t(.*)")
+        if not add_s then
+          -- Malformed record; skip.
+          si = si + 1
+        else
+          local additions = tonumber(add_s)
+          local deletions = tonumber(del_s)
+
+          if path == "" then
+            -- Rename: the old and new paths follow as separate NUL fields.
+            si = si + 3
+          else
+            si = si + 1
+          end
+
+          -- Binary files have `-` for both additions and deletions, so
+          -- tonumber returns nil.  Use explicit indexing because
+          -- table.insert(t, nil) is a no-op in Lua.
+          numstat_count = numstat_count + 1
+          numstat_entries[numstat_count] = (additions and deletions)
+            and { additions = additions, deletions = deletions }
+            or nil
+        end
+      end
+    end
+
+    if #namestat_entries == numstat_count then
+      break
+    end
+
+    -- Imbalance detected; retry unless we have exhausted all attempts.
+    if attempt == max_attempts then
+      local msg = ("Imbalance in diff data: name-status has %d entries, numstat has %d. "
+        .. "This may indicate malformed or truncated git output and can be intermittent. "
+        .. "kind=%s"):format(#namestat_entries, numstat_count, tostring(kind))
+      callback({ msg }, nil)
+      return
+    end
   end
-
-  local numstat_out = numstat_job.stdout
-  local namestat_out = namestat_job.stdout
 
   local data = {}
   local conflict_map = {}
 
-  for i, s in ipairs(namestat_out) do
-    local status = s:sub(1, 1):gsub("%s", " ")
-    local name = s:match("[%a%s][^%s]*\t(.*)")
-    local oldname
+  for i, entry in ipairs(namestat_entries) do
+    local stats = numstat_entries[i]
 
-    if name:match("\t") ~= nil then
-      oldname = name:match("(.*)\t")
-      name = name:gsub("^.*\t", "")
-    end
-
-    local stats = {
-      additions = tonumber(numstat_out[i]:match("^%d+")),
-      deletions = tonumber(numstat_out[i]:match("^%d+%s+(%d+)")),
-    }
-
-    if not stats.additions or not stats.deletions then
-      stats = nil
-    end
-
-    if not (status == "U" and kind == "staged") then
+    if not (entry.status == "U" and kind == "staged") then
       table.insert(data, {
-        status = status,
-        name = name,
-        oldname = oldname,
+        status = entry.status,
+        name = entry.name,
+        oldname = entry.oldname,
         stats = stats,
       })
     end
 
-    if status == "U" then
-      conflict_map[name] = data[#data]
+    if entry.status == "U" then
+      conflict_map[entry.name] = data[#data]
     end
   end
 
@@ -2077,7 +2023,7 @@ function GitAdapter:is_binary(path, rev)
     return false
   end
 
-  local cmd = { "-c", "submodule.recurse=false", "grep", "-I", "--name-only", "-e", "." }
+  local cmd = { "-c", "submodule.recurse=false", "-c", "core.quotePath=false", "grep", "-I", "--name-only", "-e", "." }
   if rev.type == RevType.LOCAL then
     cmd[#cmd+1] = "--untracked"
     cmd[#cmd+1] = "--no-exclude-standard"
