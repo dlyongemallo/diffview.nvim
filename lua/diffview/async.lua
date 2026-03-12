@@ -546,7 +546,14 @@ end)
 ---Async task that resolves after the given `timeout` ms passes.
 ---@param timeout integer # Duration of the timeout (ms)
 M.timeout = M.wrap(function(timeout, callback)
-  local timer = assert(uv.new_timer())
+  local timer = uv.new_timer()
+
+  if not timer then
+    -- Ensure the callback is still invoked asynchronously even if the timer
+    -- handle could not be created.
+    vim.schedule(callback)
+    return
+  end
 
   timer:start(
     timeout,
@@ -556,7 +563,7 @@ M.timeout = M.wrap(function(timeout, callback)
       callback()
     end
   )
-end)
+end, 2)
 
 ---Yield until the Neovim API is available.
 ---@param fast_only? boolean # Only schedule if in an |api-fast| event.
@@ -570,7 +577,7 @@ M.scheduler = M.wrap(function(fast_only, callback)
   end
 
   vim.schedule(callback)
-end)
+end, 2)
 
 M.schedule_now = M.wrap(vim.schedule, 1)
 
