@@ -22,6 +22,7 @@ local M = {}
 ---@field components CompStruct
 ---@field constrain_cursor function
 ---@field help_mapping string
+---@field selected_files table<FileEntry, true>
 local FilePanel = oop.create_class("FilePanel", Panel)
 
 FilePanel.winopts = vim.tbl_extend("force", Panel.winopts, {
@@ -58,6 +59,7 @@ function FilePanel:init(adapter, files, path_args, rev_pretty_name)
   self.rev_pretty_name = rev_pretty_name
   self.listing_style = conf.file_panel.listing_style
   self.tree_options = conf.file_panel.tree_options
+  self.selected_files = {}
   self.is_loading = true
 
   self:on_autocmd("BufNew", {
@@ -255,18 +257,25 @@ function FilePanel:next_file()
   end
 end
 
----Get the file entry under the cursor.
+---Get the item (file or directory) at a given line number.
+---@param line integer 1-based line number
 ---@return (FileEntry|DirData)?
-function FilePanel:get_item_at_cursor()
-  if not (self:is_open() and self:buf_loaded()) then return end
-
-  local line = api.nvim_win_get_cursor(self.winid)[1]
+function FilePanel:get_item_at_line(line)
   local comp = self.components.comp:get_comp_on_line(line)
   if comp and comp.name == "file" then
     return comp.context
   elseif comp and comp.name == "dir_name" then
     return comp.parent.context
   end
+end
+
+---Get the file entry under the cursor.
+---@return (FileEntry|DirData)?
+function FilePanel:get_item_at_cursor()
+  if not (self:is_open() and self:buf_loaded()) then return end
+
+  local line = api.nvim_win_get_cursor(self.winid)[1]
+  return self:get_item_at_line(line)
 end
 
 ---Get the parent directory data of the item under the cursor.
@@ -409,6 +418,37 @@ end
 
 function FilePanel:toggle_item_fold(item)
   self:set_item_fold(item, item.collapsed)
+end
+
+---Toggle selection for a file entry.
+---@param file FileEntry
+function FilePanel:toggle_selection(file)
+  if self.selected_files[file] then
+    self.selected_files[file] = nil
+  else
+    self.selected_files[file] = true
+  end
+end
+
+---@param file FileEntry
+---@return boolean
+function FilePanel:is_selected(file)
+  return self.selected_files[file] == true
+end
+
+---Get all currently selected files.
+---@return FileEntry[]
+function FilePanel:get_selected_files()
+  local result = {}
+  for file in pairs(self.selected_files) do
+    result[#result + 1] = file
+  end
+  return result
+end
+
+---Clear all file selections.
+function FilePanel:clear_selections()
+  self.selected_files = {}
 end
 
 function FilePanel:render()

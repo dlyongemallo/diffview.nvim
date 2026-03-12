@@ -68,4 +68,74 @@ describe("diffview.ui.panel", function()
     assert_panel_interface(FilePanel, "FilePanel")
     assert_panel_interface(FileHistoryPanel, "FileHistoryPanel")
   end)
+
+  describe("FilePanel multi-selection", function()
+    local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
+
+    -- Minimal stub that satisfies FilePanel:init without needing a real adapter.
+    local function make_panel()
+      local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
+      local files = setmetatable({}, {
+        __index = function() return {} end,
+      })
+      return FilePanel(adapter, files, {})
+    end
+
+    -- Lightweight stand-in for a FileEntry (only identity matters).
+    local function make_entry(path)
+      return { path = path, kind = "working" }
+    end
+
+    it("starts with no selections", function()
+      local panel = make_panel()
+      eq({}, panel:get_selected_files())
+    end)
+
+    it("toggle_selection marks a file", function()
+      local panel = make_panel()
+      local f = make_entry("a.lua")
+      panel:toggle_selection(f)
+      eq(true, panel:is_selected(f))
+      eq(1, #panel:get_selected_files())
+    end)
+
+    it("toggle_selection unmarks a previously marked file", function()
+      local panel = make_panel()
+      local f = make_entry("a.lua")
+      panel:toggle_selection(f)
+      panel:toggle_selection(f)
+      eq(false, panel:is_selected(f))
+      eq(0, #panel:get_selected_files())
+    end)
+
+    it("tracks multiple selections independently", function()
+      local panel = make_panel()
+      local a = make_entry("a.lua")
+      local b = make_entry("b.lua")
+      local c = make_entry("c.lua")
+      panel:toggle_selection(a)
+      panel:toggle_selection(b)
+      eq(true, panel:is_selected(a))
+      eq(true, panel:is_selected(b))
+      eq(false, panel:is_selected(c))
+      eq(2, #panel:get_selected_files())
+    end)
+
+    it("clear_selections removes all marks", function()
+      local panel = make_panel()
+      local a = make_entry("a.lua")
+      local b = make_entry("b.lua")
+      panel:toggle_selection(a)
+      panel:toggle_selection(b)
+      panel:clear_selections()
+      eq(false, panel:is_selected(a))
+      eq(false, panel:is_selected(b))
+      eq(0, #panel:get_selected_files())
+    end)
+
+    it("is_selected returns false for unknown entries", function()
+      local panel = make_panel()
+      eq(false, panel:is_selected(make_entry("nope.lua")))
+    end)
+  end)
 end)

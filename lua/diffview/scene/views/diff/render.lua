@@ -4,17 +4,26 @@ local utils = require("diffview.utils")
 
 local pl = utils.path
 
+---@param panel FilePanel
 ---@param comp  RenderComponent
 ---@param show_path boolean
 ---@param depth integer|nil
-local function render_file(comp, show_path, depth)
+local function render_file(panel, comp, show_path, depth)
   ---@type FileEntry
   local file = comp.context
+
+  local marked = panel:is_selected(file)
 
   comp:add_text(hl.get_status_icon(file.status) .. " ", hl.get_git_hl(file.status))
 
   if depth then
     comp:add_text(string.rep(" ", depth * 2 + 2))
+  end
+
+  if marked then
+    comp:add_text("* ", "DiffviewFilePanelMarked")
+  else
+    comp:add_text("  ")
   end
 
   local icon, icon_hl = hl.get_file_icon(file.basename, file.extension)
@@ -46,10 +55,11 @@ local function render_file(comp, show_path, depth)
   comp:ln()
 end
 
+---@param panel FilePanel
 ---@param comp RenderComponent
-local function render_file_list(comp)
+local function render_file_list(panel, comp)
   for _, file_comp in ipairs(comp.components) do
-    render_file(file_comp, true)
+    render_file(panel, file_comp, true)
   end
 end
 
@@ -66,13 +76,14 @@ local function get_dir_status_text(ctx, tree_options)
   return " "
 end
 
+---@param panel FilePanel
 ---@param depth integer
 ---@param comp RenderComponent
-local function render_file_tree_recurse(depth, comp)
+local function render_file_tree_recurse(panel, depth, comp)
   local conf = config.get_config()
 
   if comp.name == "file" then
-    render_file(comp, false, depth)
+    render_file(panel, comp, false, depth)
     return
   end
 
@@ -114,25 +125,27 @@ local function render_file_tree_recurse(depth, comp)
 
   if not ctx.collapsed then
     for _, item in ipairs(items.components) do
-      render_file_tree_recurse(depth + 1, item)
+      render_file_tree_recurse(panel, depth + 1, item)
     end
   end
 end
 
+---@param panel FilePanel
 ---@param comp RenderComponent
-local function render_file_tree(comp)
+local function render_file_tree(panel, comp)
   for _, c in ipairs(comp.components) do
-    render_file_tree_recurse(0, c)
+    render_file_tree_recurse(panel, 0, c)
   end
 end
 
+---@param panel FilePanel
 ---@param listing_style "list"|"tree"
 ---@param comp RenderComponent
-local function render_files(listing_style, comp)
+local function render_files(panel, listing_style, comp)
   if listing_style == "list" then
-    return render_file_list(comp)
+    return render_file_list(panel, comp)
   end
-  render_file_tree(comp)
+  render_file_tree(panel, comp)
 end
 
 ---@param panel FilePanel
@@ -177,7 +190,7 @@ return function(panel)
     comp:add_text("(" .. #panel.files.conflicting .. ")", "DiffviewFilePanelCounter")
     comp:ln()
 
-    render_files(panel.listing_style, panel.components.conflicting.files.comp)
+    render_files(panel, panel.listing_style, panel.components.conflicting.files.comp)
     panel.components.conflicting.margin.comp:add_line()
   end
 
@@ -198,7 +211,7 @@ return function(panel)
     elseif #panel.files.working == 0 then
       panel.components.working.files.comp:add_line("  (empty)", "DiffviewDim1")
     else
-      render_files(panel.listing_style, panel.components.working.files.comp)
+      render_files(panel, panel.listing_style, panel.components.working.files.comp)
     end
     panel.components.working.margin.comp:add_line()
   end
@@ -212,7 +225,7 @@ return function(panel)
     if #panel.files.staged == 0 then
       panel.components.staged.files.comp:add_line("  (empty)", "DiffviewDim1")
     else
-      render_files(panel.listing_style, panel.components.staged.files.comp)
+      render_files(panel, panel.listing_style, panel.components.staged.files.comp)
     end
     panel.components.staged.margin.comp:add_line()
   end

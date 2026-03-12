@@ -1355,7 +1355,8 @@ restore_entry                                   *diffview-actions-restore_entry*
 
             Revert the selected file entry to the state from the left side of
             the diff. This only works if the right side of the diff is showing
-            the local state of the file.
+            the local state of the file. If files are selected (via
+            `toggle_select_entry`), restores all selected files.
 
             NOTE: "Restoring" an untracked file will delete it from disk. It
             still gets backed up in the local git database, so it is
@@ -1442,10 +1443,28 @@ toggle_fold                                     *diffview-actions-toggle_fold*
 
         Collapse / expand the fold of the subject.
 
+toggle_select_entry                             *diffview-actions-toggle_select_entry*
+        Contexts: `file_panel`
+
+        Toggle file selection for multi-file operations. When used on a
+        directory (tree view), selects all files under it if any are
+        unselected, or deselects all if every file is already selected.
+        Also works in visual mode to toggle all files in the selected
+        line range. When files are selected, `toggle_stage_entry` and
+        `restore_entry` will operate on all selected files as a batch.
+        Selections are cleared after a batch operation or when the file
+        list is refreshed.
+
+clear_select_entries                            *diffview-actions-clear_select_entries*
+        Contexts: `file_panel`
+
+        Clear all file selections.
+
 toggle_stage_entry                              *diffview-actions-toggle_stage_entry*
         Contexts: `diff_view`, `file_panel`
 
-        Stage / unstage the subject.
+        Stage / unstage the subject. If files are selected (via
+        `toggle_select_entry`), operates on all selected files.
 
 unstage_all                                     *diffview-actions-unstage_all*
         Contexts: `diff_view`, `file_panel`
@@ -1607,8 +1626,16 @@ o                       Open the diff for the selected file entry.
 <CR>
 <2-LeftMouse>
 
+                                                *diffview-maps-toggle_select_entry*
+w                       Toggle file selection for multi-file operations.
+                        Works on directories and in visual mode.
+
+                                                *diffview-maps-clear_select_entries*
+W                       Clear all file selections.
+
                                                 *diffview-maps-toggle_stage_entry*
--                       Stage/unstage the selected file entry.
+-                       Stage/unstage the selected file entry. If files are
+                        selected, operates on all selected files as a batch.
 
                                                 *diffview-maps-stage_all*
 S                       Stage all entries.
