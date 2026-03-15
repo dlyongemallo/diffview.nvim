@@ -124,7 +124,7 @@ require("diffview").setup({
   },
   file_panel = {
     listing_style = "tree",
-    win_config = { position = "left", width = 35 },
+    win_config = { position = "left", width = 35 }, -- Use "auto" to fit content
   },
   hooks = {},   -- See :h diffview-config-hooks
   keymaps = {}, -- See :h diffview-config-keymaps
