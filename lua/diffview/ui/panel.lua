@@ -171,7 +171,11 @@ function Panel:get_config()
     vim.validate({
       position = valid_enum(config.position, { "left", "top", "right", "bottom" }),
       relative = valid_enum(config.relative, { "editor", "win" }),
-      width = { config.width, "number", true },
+      width = {
+        config.width,
+        function(v) return v == nil or v == "auto" or type(v) == "number" end,
+        "'auto' or number",
+      },
       height = { config.height, "number", true },
       win_opts = { config.win_opts, "table" }
     })
@@ -247,8 +251,17 @@ function Panel:resize()
   local config = self:get_config()
 
   if config.type == "split" then
-    if self.state.form == "column" and config.width then
-      api.nvim_win_set_width(self.winid, config.width)
+    if self.state.form == "column" then
+      local width = config.width
+      if width == "auto" then
+        width = self:compute_content_width()
+        -- Clamp and use pcall: the computed width may exceed available space.
+        local max_width = math.floor(vim.o.columns * 0.5)
+        width = math.min(width, max_width)
+        pcall(api.nvim_win_set_width, self.winid, width)
+      elseif width then
+        api.nvim_win_set_width(self.winid, width)
+      end
     elseif self.state.form == "row" and config.height then
       api.nvim_win_set_height(self.winid, config.height)
     end
@@ -309,9 +322,9 @@ function Panel:open()
     end
   end
 
-  self:resize()
   utils.set_local(self.winid, self.class.winopts)
   utils.set_local(self.winid, config.win_opts)
+  self:resize()
 end
 
 function Panel:close()
@@ -412,6 +425,55 @@ function Panel:redraw()
   renderer.render(self.bufid, self.render_data)
   perf:time()
   logger:lvl(10):debug(perf)
+
+  -- Only resize on redraw when auto-fitting; fixed dimensions are applied
+  -- once in open() and should not override user-initiated resizing.
+  local config = self:get_config()
+  if config.type == "split" and config.width == "auto" then
+    self:resize()
+  end
+end
+
+---Compute the minimum window width needed to display all buffer content
+---without truncation, accounting for sign column and other gutter elements.
+---@return integer
+function Panel:compute_content_width()
+  if not self:buf_loaded() then
+    -- Fall back to configured width if numeric, otherwise a sensible default.
+    local config = self:get_config()
+    local default = self.class.default_config_split and self.class.default_config_split.width
+    if type(default) == "number" then
+      return default
+    elseif type(config.width) == "number" then
+      return config.width
+    end
+    return 35
+  end
+
+  local lines = api.nvim_buf_get_lines(self.bufid, 0, -1, false)
+  local max_width = 0
+
+  for _, line in ipairs(lines) do
+    local w = api.nvim_strwidth(line)
+    if w > max_width then
+      max_width = w
+    end
+  end
+
+  -- Account for gutter columns (sign column, etc.).
+  local textoff = 0
+  if self:is_open() then
+    local info = vim.fn.getwininfo(self.winid)
+    if info and info[1] then
+      textoff = info[1].textoff
+    end
+  else
+    -- Default: signcolumn = "yes" adds 2 columns.
+    textoff = 2
+  end
+
+  -- +1 for a bit of right-side breathing room.
+  return max_width + textoff + 1
 end
 
 ---Update components, render and redraw.
@@ -518,10 +580,17 @@ function Panel:get_height()
 end
 
 function Panel:infer_width()
+  local config = self:get_config()
+
+  -- When auto-fitting, return a large value so that rendering does not
+  -- truncate content. The actual window width is set later by resize().
+  if config.width == "auto" then
+    return vim.o.columns
+  end
+
   local cur_width = self:get_width()
   if cur_width then return cur_width end
 
-  local config = self:get_config()
   if config.width then return config.width end
 
   -- PanelFloatSpec requires both width and height to be defined. If we get

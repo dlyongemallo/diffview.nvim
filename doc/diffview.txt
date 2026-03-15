@@ -806,10 +806,12 @@ win_config                                      *diffview-config-win_config*
                 Determines whether the window should be a float or a normal
                 split.
 
-            {width} (integer)
+            {width} (integer|"auto")
                 The width of the window (in character cells). If `type` is
                 `"split"` then this is only applicable when `position` is
-                `"left"|"right"`.
+                `"left"|"right"`. When set to `"auto"`, the panel
+                automatically sizes itself to fit all displayed content
+                (file names, stats, tree indentation, etc.).
 
             {height} (integer)
                 The height of the window (in character cells). If `type` is

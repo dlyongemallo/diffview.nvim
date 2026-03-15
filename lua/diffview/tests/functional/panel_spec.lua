@@ -48,6 +48,155 @@ describe("diffview.ui.panel", function()
     end)
   end)
 
+  describe("auto-width", function()
+    local api = vim.api
+
+    ---Create a minimal panel with the given width config.
+    local function make_panel(width)
+      local conf = vim.tbl_deep_extend("force", Panel.default_config_split, {
+        position = "left",
+        width = width,
+      })
+      return Panel({
+        bufname = "TestAutoWidth",
+        config = conf,
+      })
+    end
+
+    it("get_config accepts 'auto' as a width value", function()
+      local panel = make_panel("auto")
+      local config = panel:get_config()
+      eq("auto", config.width)
+    end)
+
+    it("get_config accepts a numeric width value", function()
+      local panel = make_panel(42)
+      local config = panel:get_config()
+      eq(42, config.width)
+    end)
+
+    it("get_config rejects an invalid width value", function()
+      local panel = make_panel("bogus")
+      assert.has_error(function()
+        panel:get_config()
+      end)
+    end)
+
+    it("infer_width returns vim.o.columns when width is 'auto'", function()
+      local panel = make_panel("auto")
+      eq(vim.o.columns, panel:infer_width())
+    end)
+
+    it("infer_width returns configured width for numeric values", function()
+      local panel = make_panel(50)
+      -- Panel is not open, so it falls through to config.width.
+      eq(50, panel:infer_width())
+    end)
+
+    it("compute_content_width measures buffer lines", function()
+      local panel = make_panel("auto")
+      -- Manually create a buffer and populate it so we can test measurement.
+      local bufid = api.nvim_create_buf(false, true)
+      panel.bufid = bufid
+      api.nvim_buf_set_lines(bufid, 0, -1, false, {
+        "short",
+        "a moderately long line here",
+        "x",
+      })
+
+      local width = panel:compute_content_width()
+      -- Panel is not open, so textoff defaults to 2 (signcolumn).
+      -- Expected: max display width (27) + 2 + 1 = 30.
+      local expected = api.nvim_strwidth("a moderately long line here") + 2 + 1
+      eq(expected, width)
+
+      api.nvim_buf_delete(bufid, { force = true })
+    end)
+
+    it("compute_content_width falls back when buffer is not loaded", function()
+      -- With "auto" width and no class-level default, falls back to 35.
+      local panel = make_panel("auto")
+      eq(35, panel:compute_content_width())
+    end)
+
+    it("compute_content_width uses class default width when buffer is not loaded", function()
+      -- When the panel subclass defines a numeric default width, use that.
+      local panel = make_panel("auto")
+      local saved = Panel.default_config_split.width
+      Panel.default_config_split.width = 40
+      eq(40, panel:compute_content_width())
+      Panel.default_config_split.width = saved
+    end)
+
+    it("compute_content_width clamps to half the editor width", function()
+      local panel = make_panel("auto")
+      local bufid = api.nvim_create_buf(false, true)
+      panel.bufid = bufid
+      -- Create a line wider than half the editor.
+      local long_line = string.rep("x", vim.o.columns)
+      api.nvim_buf_set_lines(bufid, 0, -1, false, { long_line })
+
+      local width = panel:compute_content_width()
+      -- Raw content width would exceed the clamp, but compute_content_width
+      -- itself does not clamp; clamping is done in resize(). So the raw
+      -- value should exceed half the editor width.
+      local raw_expected = api.nvim_strwidth(long_line) + 2 + 1
+      eq(raw_expected, width)
+
+      api.nvim_buf_delete(bufid, { force = true })
+    end)
+    it("resize applies computed auto-width to an open split panel", function()
+      local panel = make_panel("auto")
+      -- Stub abstract methods so init_buffer can complete.
+      panel.update_components = function() end
+      panel.render = function() end
+      panel:init_buffer()
+
+      -- Populate the buffer with known content.
+      vim.bo[panel.bufid].modifiable = true
+      api.nvim_buf_set_lines(panel.bufid, 0, -1, false, {
+        "short",
+        "a moderately long line here",
+      })
+      vim.bo[panel.bufid].modifiable = false
+
+      panel:open()
+      assert.truthy(panel:is_open())
+
+      -- The window should have been sized to fit the content.
+      local win_width = api.nvim_win_get_width(panel.winid)
+      local info = vim.fn.getwininfo(panel.winid)
+      local textoff = (info and info[1]) and info[1].textoff or 2
+      local expected = api.nvim_strwidth("a moderately long line here") + textoff + 1
+      eq(expected, win_width)
+
+      panel:destroy()
+    end)
+
+    it("resize clamps auto-width to half the editor width", function()
+      local panel = make_panel("auto")
+      panel.update_components = function() end
+      panel.render = function() end
+      panel:init_buffer()
+
+      -- Populate with an extremely long line.
+      vim.bo[panel.bufid].modifiable = true
+      api.nvim_buf_set_lines(panel.bufid, 0, -1, false, {
+        string.rep("x", vim.o.columns),
+      })
+      vim.bo[panel.bufid].modifiable = false
+
+      panel:open()
+      assert.truthy(panel:is_open())
+
+      local win_width = api.nvim_win_get_width(panel.winid)
+      local max_width = math.floor(vim.o.columns * 0.5)
+      assert.is_true(win_width <= max_width)
+
+      panel:destroy()
+    end)
+  end)
+
   describe("subclass contracts", function()
     -- The actual panels used by the two view types must inherit the same
     -- interface.
