@@ -103,6 +103,8 @@ end
 function DiffView:post_open()
   vim.cmd("redraw")
 
+  self:init_event_listeners()
+
   self.commit_log_panel = CommitLogPanel(self, self.adapter, {
     name = fmt("diffview://%s/log/%d/%s", self.adapter.ctx.dir, self.tabpage, "commit_log"),
   })
@@ -122,8 +124,6 @@ function DiffView:post_open()
       end)
     )
   end
-
-  self:init_event_listeners()
 
   vim.schedule(function()
     self:file_safeguard()
