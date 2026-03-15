@@ -283,7 +283,12 @@ return function(view)
       elseif view.panel:is_focused() then
         view.panel:close()
       elseif view:is_cur_tabpage() then
-        view:close()
+        -- Don't close the view if a floating window is focused; the float's
+        -- own close listener should handle it.
+        local win_conf = api.nvim_win_get_config(0)
+        if win_conf.relative == "" then
+          view:close()
+        end
       end
     end,
     options = function()

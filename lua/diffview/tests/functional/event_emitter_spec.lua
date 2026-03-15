@@ -217,4 +217,54 @@ describe("diffview.events", function()
       eq(0, #(DiffviewGlobal.emitter:get("view_closed") or {}))
     end)
   end)
+
+  -- Regression: closing a floating panel (commit log, help) must not close
+  -- the entire view. The fix relies on two layers:
+  --   1. Listener ordering: sub-panel listener registered last so it runs
+  --      first (EventEmitter:on inserts at position 1).
+  --   2. Float guard: the view's close listener skips view:close() when the
+  --      focused window is a float.
+  -- These tests exercise the emitter-level mechanics without needing real
+  -- Neovim windows.
+  describe("close event propagation with sub-panel listeners", function()
+    it("sub-panel listener registered AFTER view listener stops propagation", function()
+      local emitter = EventEmitter()
+      local view_closed = false
+
+      -- Simulate view close listener (registered first).
+      emitter:on("close", function()
+        view_closed = true
+      end)
+
+      -- Simulate sub-panel close listener (registered second, so it runs first
+      -- due to LIFO insertion).
+      emitter:on("close", function(e)
+        e:stop_propagation()
+      end)
+
+      emitter:emit("close")
+      eq(false, view_closed)
+    end)
+
+    it("sub-panel listener registered BEFORE view listener does NOT stop propagation in time", function()
+      local emitter = EventEmitter()
+      local view_closed = false
+
+      -- Simulate the buggy ordering: sub-panel registered first (pushed to
+      -- position 2), view listener registered second (inserted at position 1).
+      emitter:on("close", function(e)
+        e:stop_propagation()
+      end)
+
+      emitter:on("close", function()
+        view_closed = true
+      end)
+
+      emitter:emit("close")
+
+      -- The view listener ran first because it was at position 1; stop_propagation
+      -- came too late. This is the original bug.
+      eq(true, view_closed)
+    end)
+  end)
 end)
