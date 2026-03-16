@@ -51,7 +51,11 @@ return function(view)
       end
     end,
     file_open_new = function(_, entry)
-      utils.set_cursor(view.cur_layout:get_main_win().id, 1, 0)
+      api.nvim_win_call(view.cur_layout:get_main_win().id, function()
+        utils.set_cursor(0, 1, 0)
+        pcall(vim.cmd, "norm! ]c")
+        vim.cmd("norm! zz")
+      end)
       view.cur_layout:sync_scroll()
     end,
     open_in_diffview = function()
