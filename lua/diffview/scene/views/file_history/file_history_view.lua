@@ -120,24 +120,12 @@ FileHistoryView._set_file = async.void(function(self, file)
 
   await(self:use_entry(file))
 
-  local log_options = self.panel:get_log_options()
-
-  -- For line tracing diffs: create custom folds derived from the diff patch
-  -- hunks. Should not be used with custom `++base` as then we won't know
-  -- where to create the custom folds in the base file.
-  if log_options.L and next(log_options.L) and not log_options.base then
-    local log_entry = self.panel.cur_item[1]
-    local diff = log_entry:get_diff(file.path)
-
-    if diff and not file:has_patch_folds() then
-      file:update_patch_folds(diff)
-
-      for _, win in ipairs(self.cur_layout.windows) do
-        win:use_winopts({ foldmethod = "manual" })
-        win:apply_custom_folds()
-      end
-    end
-  end
+  -- NOTE: Do NOT set foldmethod=manual on these diff windows. The
+  -- combination of diff=true and foldmethod=manual triggers a Neovim bug
+  -- where the screen redraw enters an infinite loop for certain buffer
+  -- pairs, permanently freezing the editor. Neovim's built-in
+  -- foldmethod=diff already folds unchanged regions in the diff.
+  -- See: sindrets/diffview.nvim#552
 
   self.emitter:emit("file_open_post", file, cur_entry)
 
