@@ -451,6 +451,16 @@ function FilePanel:clear_selections()
   self.selected_files = {}
 end
 
+---@override
+function FilePanel:get_autosize_components()
+  if not self.components then return nil end
+  return {
+    self.components.conflicting.comp,
+    self.components.working.comp,
+    self.components.staged.comp,
+  }
+end
+
 function FilePanel:render()
   require("diffview.scene.views.diff.render")(self)
 end

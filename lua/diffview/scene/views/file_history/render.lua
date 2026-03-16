@@ -282,12 +282,6 @@ end
 local function prepare_panel_cache(panel)
   local c = {}
   cache[panel] = c
-  c.root_path = panel.state.form == "column"
-      and pl:truncate(
-        pl:vim_fnamemodify(panel.adapter.ctx.toplevel, ":~"),
-        panel:infer_width() - 6
-      )
-    or pl:vim_fnamemodify(panel.adapter.ctx.toplevel, ":~")
   c.args = table.concat(panel.log_options.single_file.path_args, " ")
 end
 
@@ -310,8 +304,15 @@ return {
     local log_options = panel:get_log_options()
     local cached = cache[panel]
 
-    -- root path
-    comp:add_text(cached.root_path, "DiffviewFilePanelRootPath")
+    -- root path (computed fresh each render so auto-resize truncation
+    -- reflects the current panel width)
+    local root_path = panel.state.form == "column"
+        and pl:truncate(
+          pl:vim_fnamemodify(panel.adapter.ctx.toplevel, ":~"),
+          math.max(panel:infer_width() - 6, 1)
+        )
+      or pl:vim_fnamemodify(panel.adapter.ctx.toplevel, ":~")
+    comp:add_text(root_path, "DiffviewFilePanelRootPath")
     comp:ln()
 
     if panel.single_file then
