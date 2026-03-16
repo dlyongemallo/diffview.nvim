@@ -248,17 +248,25 @@ function Panel:resize()
     return
   end
 
+  self._programmatic_resize = true
   local config = self:get_config()
 
   if config.type == "split" then
     if self.state.form == "column" then
       local width = config.width
       if width == "auto" then
+        local old_width = api.nvim_win_get_width(self.winid)
         width = self:compute_content_width()
         -- Clamp and use pcall: the computed width may exceed available space.
         local max_width = math.floor(vim.o.columns * 0.5)
         width = math.min(width, max_width)
         pcall(api.nvim_win_set_width, self.winid, width)
+        -- Re-render so that header lines (path, revision info, etc.) are
+        -- truncated to the actual panel width rather than left at full length.
+        if width ~= old_width then
+          self:render()
+          renderer.render(self.bufid, self.render_data)
+        end
       elseif width then
         api.nvim_win_set_width(self.winid, width)
       end
@@ -269,6 +277,8 @@ function Panel:resize()
     api.nvim_win_set_width(self.winid, config.width)
     api.nvim_win_set_height(self.winid, config.height)
   end
+
+  self._programmatic_resize = nil
 end
 
 function Panel:open()
@@ -325,9 +335,33 @@ function Panel:open()
   utils.set_local(self.winid, self.class.winopts)
   utils.set_local(self.winid, config.win_opts)
   self:resize()
+
+  -- Re-render on manual window resize so header/footer lines re-truncate
+  -- to the new width.
+  if not self._win_resized_au then
+    self._win_resized_au = api.nvim_create_autocmd("WinResized", {
+      group = Panel.au.group,
+      callback = function()
+        if self._programmatic_resize then return end
+        if not self:is_open() or not self:buf_loaded() then return end
+        for _, w in ipairs(vim.v.event.windows) do
+          if w == self.winid then
+            self:render()
+            renderer.render(self.bufid, self.render_data)
+            return
+          end
+        end
+      end,
+    })
+  end
 end
 
 function Panel:close()
+  if self._win_resized_au then
+    api.nvim_del_autocmd(self._win_resized_au)
+    self._win_resized_au = nil
+  end
+
   if self:is_open() then
     local num_wins = api.nvim_tabpage_list_wins(api.nvim_win_get_tabpage(self.winid))
 
@@ -434,6 +468,14 @@ function Panel:redraw()
   end
 end
 
+---Get the components whose content drives auto-sizing.
+---Override in subclasses to restrict which content affects the computed
+---width. When nil is returned, all buffer lines are measured.
+---@return RenderComponent[]|nil
+function Panel:get_autosize_components()
+  return nil
+end
+
 ---Compute the minimum window width needed to display all buffer content
 ---without truncation, accounting for sign column and other gutter elements.
 ---@return integer
@@ -453,10 +495,30 @@ function Panel:compute_content_width()
   local lines = api.nvim_buf_get_lines(self.bufid, 0, -1, false)
   local max_width = 0
 
-  for _, line in ipairs(lines) do
-    local w = api.nvim_strwidth(line)
-    if w > max_width then
-      max_width = w
+  -- When the subclass specifies autosize components, only measure lines
+  -- that fall within those components (e.g. file entries, not headers).
+  -- Fall back to all lines when no valid lines are marked (e.g. during
+  -- initial loading when components have zero height).
+  local autosize_comps = self:get_autosize_components()
+  local valid_lines
+  if autosize_comps then
+    valid_lines = {}
+    for _, comp in ipairs(autosize_comps) do
+      for j = comp.lstart, comp.lend - 1 do
+        valid_lines[j] = true
+      end
+    end
+    if not next(valid_lines) then
+      valid_lines = nil
+    end
+  end
+
+  for i, line in ipairs(lines) do
+    if not valid_lines or valid_lines[i - 1] then
+      local w = api.nvim_strwidth(line)
+      if w > max_width then
+        max_width = w
+      end
     end
   end
 
@@ -582,9 +644,13 @@ end
 function Panel:infer_width()
   local config = self:get_config()
 
-  -- When auto-fitting, return a large value so that rendering does not
-  -- truncate content. The actual window width is set later by resize().
+  -- When auto-fitting and the panel is already open, use the current window
+  -- width so that header lines are truncated to fit. Before the panel opens
+  -- we fall through to vim.o.columns so that content renders at full width
+  -- for the initial measurement pass.
   if config.width == "auto" then
+    local cur_width = self:get_width()
+    if cur_width then return cur_width end
     return vim.o.columns
   end
 

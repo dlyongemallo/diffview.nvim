@@ -555,6 +555,14 @@ function FileHistoryPanel:toggle_entry_fold(entry)
   self:set_entry_fold(entry, entry.folded)
 end
 
+---@override
+function FileHistoryPanel:get_autosize_components()
+  if not self.components then return nil end
+  return {
+    self.components.log.comp,
+  }
+end
+
 function FileHistoryPanel:render()
   perf_render:reset()
   panel_renderer.file_history_panel(self)

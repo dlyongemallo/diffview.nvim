@@ -231,14 +231,18 @@ return function(panel)
   end
 
   if panel.rev_pretty_name or (panel.path_args and #panel.path_args > 0) then
-    local extra_info = utils.vec_join({ panel.rev_pretty_name }, panel.path_args or {})
-
     comp = panel.components.info.title.comp
     comp:add_line("Showing changes for:", "DiffviewFilePanelTitle")
 
     comp = panel.components.info.entries.comp
 
-    for _, arg in ipairs(extra_info) do
+    -- Truncate the revision name from the tail so the start of the hash
+    -- stays visible.
+    if panel.rev_pretty_name then
+      comp:add_line(utils.str_trunc(panel.rev_pretty_name, math.max(width - 5, 1)), "DiffviewFilePanelPath")
+    end
+
+    for _, arg in ipairs(panel.path_args or {}) do
       local relpath = pl:relative(arg, panel.adapter.ctx.toplevel)
       if relpath == "" then relpath = "." end
       comp:add_line(pl:truncate(relpath, width - 5), "DiffviewFilePanelPath")

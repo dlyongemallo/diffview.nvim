@@ -82,15 +82,34 @@ describe("diffview.ui.panel", function()
       end)
     end)
 
-    it("infer_width returns vim.o.columns when width is 'auto'", function()
+    it("infer_width returns vim.o.columns when width is 'auto' and panel is closed", function()
       local panel = make_panel("auto")
       eq(vim.o.columns, panel:infer_width())
+    end)
+
+    it("infer_width returns window width when width is 'auto' and panel is open", function()
+      local panel = make_panel("auto")
+      panel.update_components = function() end
+      panel.render = function() end
+      panel:init_buffer()
+      panel:open()
+      assert.truthy(panel:is_open())
+
+      local win_width = api.nvim_win_get_width(panel.winid)
+      eq(win_width, panel:infer_width())
+
+      panel:destroy()
     end)
 
     it("infer_width returns configured width for numeric values", function()
       local panel = make_panel(50)
       -- Panel is not open, so it falls through to config.width.
       eq(50, panel:infer_width())
+    end)
+
+    it("get_autosize_components returns nil by default", function()
+      local panel = make_panel("auto")
+      eq(nil, panel:get_autosize_components())
     end)
 
     it("compute_content_width measures buffer lines", function()
@@ -126,6 +145,49 @@ describe("diffview.ui.panel", function()
       Panel.default_config_split.width = 40
       eq(40, panel:compute_content_width())
       Panel.default_config_split.width = saved
+    end)
+
+    it("compute_content_width skips lines outside autosize components", function()
+      local panel = make_panel("auto")
+      local bufid = api.nvim_create_buf(false, true)
+      panel.bufid = bufid
+      api.nvim_buf_set_lines(bufid, 0, -1, false, {
+        "this is a very long header line that should be ignored",
+        "short file entry",
+        "another entry",
+      })
+
+      -- Mock a component covering only lines 1-2 (0-indexed: lstart=1, lend=3).
+      local mock_comp = { lstart = 1, lend = 3 }
+      panel.get_autosize_components = function() return { mock_comp } end
+
+      local width = panel:compute_content_width()
+      -- Should measure only "short file entry" (17 chars) + textoff(2) + 1 = 20.
+      local expected = api.nvim_strwidth("short file entry") + 2 + 1
+      eq(expected, width)
+
+      api.nvim_buf_delete(bufid, { force = true })
+    end)
+
+    it("compute_content_width falls back to all lines when autosize components are empty", function()
+      local panel = make_panel("auto")
+      local bufid = api.nvim_create_buf(false, true)
+      panel.bufid = bufid
+      api.nvim_buf_set_lines(bufid, 0, -1, false, {
+        "header line",
+        "another line here!",
+      })
+
+      -- Mock zero-height components (lend <= lstart), as during loading.
+      local mock_comp = { lstart = 0, lend = 0 }
+      panel.get_autosize_components = function() return { mock_comp } end
+
+      local width = panel:compute_content_width()
+      -- Should fall back to measuring all lines.
+      local expected = api.nvim_strwidth("another line here!") + 2 + 1
+      eq(expected, width)
+
+      api.nvim_buf_delete(bufid, { force = true })
     end)
 
     it("compute_content_width clamps to half the editor width", function()
