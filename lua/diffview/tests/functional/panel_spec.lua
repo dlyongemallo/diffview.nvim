@@ -283,18 +283,37 @@ describe("diffview.ui.panel", function()
   describe("FilePanel multi-selection", function()
     local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
 
-    -- Minimal stub that satisfies FilePanel:init without needing a real adapter.
-    local function make_panel()
+    ---Create a mock FileDict that supports iteration over the given entries.
+    ---@param entries table[]?
+    ---@return table
+    local function make_mock_files(entries)
+      local all = entries or {}
+      local files = {}
+      function files:iter()
+        local i = 0
+        return function()
+          i = i + 1
+          if i <= #all then
+            return i, all[i]
+          end
+        end
+      end
+      function files:len()
+        return #all
+      end
+      return files
+    end
+
+    ---Minimal stub that satisfies FilePanel:init without needing a real adapter.
+    ---@param entries table[]?
+    local function make_panel(entries)
       local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
-      local files = setmetatable({}, {
-        __index = function() return {} end,
-      })
-      return FilePanel(adapter, files, {})
+      return FilePanel(adapter, make_mock_files(entries), {})
     end
 
     -- Lightweight stand-in for a FileEntry (only identity matters).
-    local function make_entry(path)
-      return { path = path, kind = "working" }
+    local function make_entry(path, kind)
+      return { path = path, kind = kind or "working" }
     end
 
     it("starts with no selections", function()
@@ -303,16 +322,16 @@ describe("diffview.ui.panel", function()
     end)
 
     it("toggle_selection marks a file", function()
-      local panel = make_panel()
       local f = make_entry("a.lua")
+      local panel = make_panel({ f })
       panel:toggle_selection(f)
       eq(true, panel:is_selected(f))
       eq(1, #panel:get_selected_files())
     end)
 
     it("toggle_selection unmarks a previously marked file", function()
-      local panel = make_panel()
       local f = make_entry("a.lua")
+      local panel = make_panel({ f })
       panel:toggle_selection(f)
       panel:toggle_selection(f)
       eq(false, panel:is_selected(f))
@@ -320,10 +339,10 @@ describe("diffview.ui.panel", function()
     end)
 
     it("tracks multiple selections independently", function()
-      local panel = make_panel()
       local a = make_entry("a.lua")
       local b = make_entry("b.lua")
       local c = make_entry("c.lua")
+      local panel = make_panel({ a, b, c })
       panel:toggle_selection(a)
       panel:toggle_selection(b)
       eq(true, panel:is_selected(a))
@@ -333,9 +352,9 @@ describe("diffview.ui.panel", function()
     end)
 
     it("clear_selections removes all marks", function()
-      local panel = make_panel()
       local a = make_entry("a.lua")
       local b = make_entry("b.lua")
+      local panel = make_panel({ a, b })
       panel:toggle_selection(a)
       panel:toggle_selection(b)
       panel:clear_selections()
@@ -347,6 +366,223 @@ describe("diffview.ui.panel", function()
     it("is_selected returns false for unknown entries", function()
       local panel = make_panel()
       eq(false, panel:is_selected(make_entry("nope.lua")))
+    end)
+
+    it("selections survive file entry replacement", function()
+      -- Simulate what happens on tab switch: a selected file entry is
+      -- replaced by a new object with the same path and kind.
+      local old = make_entry("src/foo.lua")
+      local panel = make_panel({ old })
+      panel:toggle_selection(old)
+      eq(true, panel:is_selected(old))
+
+      -- Replace with a new object (same path/kind, different identity).
+      local new = make_entry("src/foo.lua")
+      assert.is_not.equal(old, new)
+      panel.files = make_mock_files({ new })
+
+      -- Selection should carry over to the replacement entry.
+      eq(true, panel:is_selected(new))
+      local selected = panel:get_selected_files()
+      eq(1, #selected)
+      eq(new, selected[1])
+    end)
+
+    it("prune_selections removes stale entries", function()
+      local a = make_entry("a.lua")
+      local b = make_entry("b.lua")
+      local panel = make_panel({ a, b })
+      panel:toggle_selection(a)
+      panel:toggle_selection(b)
+
+      -- Remove 'b' from the file list (simulating a file disappearing).
+      panel.files = make_mock_files({ a })
+      panel:prune_selections()
+
+      eq(true, panel:is_selected(a))
+      -- 'b' is no longer in the file list, so it should be pruned.
+      eq(false, panel:is_selected(b))
+      eq(1, #panel:get_selected_files())
+    end)
+
+    it("select_file and deselect_file work", function()
+      local f = make_entry("x.lua")
+      local panel = make_panel({ f })
+      panel:select_file(f)
+      eq(true, panel:is_selected(f))
+      panel:deselect_file(f)
+      eq(false, panel:is_selected(f))
+    end)
+
+    it("distinguishes files by kind", function()
+      local working = make_entry("f.lua", "working")
+      local staged = make_entry("f.lua", "staged")
+      local panel = make_panel({ working, staged })
+      panel:toggle_selection(working)
+      eq(true, panel:is_selected(working))
+      eq(false, panel:is_selected(staged))
+    end)
+  end)
+
+  describe("FilePanel set_dir_collapsed", function()
+    local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
+    local Node = require("diffview.ui.models.file_tree.node").Node
+
+    local function make_panel()
+      local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
+      local files = {}
+      function files:iter() return function() end end
+      function files:len() return 0 end
+      return FilePanel(adapter, files, {})
+    end
+
+    it("propagates collapsed state to tree nodes in a flattened chain", function()
+      -- Build a simple tree chain: A -> B -> leaf
+      local a_data = { name = "a", path = "a", kind = "working", collapsed = false }
+      local b_data = { name = "b", path = "a/b", kind = "working", collapsed = false }
+
+      local a_node = Node("a", a_data)
+      local b_node = Node("b", b_data)
+      local leaf_node = Node("file.lua", { path = "a/b/file.lua" })
+      a_node:add_child(b_node)
+      b_node:add_child(leaf_node)
+
+      -- Simulate a flattened DirData created by create_comp_schema.
+      local flattened = {
+        name = "a/b",
+        path = "a/b",
+        kind = "working",
+        collapsed = false,
+        _node = a_node,
+      }
+
+      local panel = make_panel()
+      panel:set_dir_collapsed(flattened, true)
+
+      eq(true, flattened.collapsed)
+      eq(true, a_data.collapsed)
+      eq(true, b_data.collapsed)
+    end)
+
+    it("does not walk past the end of a flatten chain", function()
+      -- Tree: a -> b -> [c (dir), x.lua]
+      -- Flatten combines a/b (single-child chain). c is a separate subdir.
+      local a_data = { name = "a", path = "a", kind = "working", collapsed = false }
+      local b_data = { name = "b", path = "a/b", kind = "working", collapsed = false }
+      local c_data = { name = "c", path = "a/b/c", kind = "working", collapsed = false }
+
+      local a_node = Node("a", a_data)
+      local b_node = Node("b", b_data)
+      local c_node = Node("c", c_data)
+      local leaf1 = Node("x.lua", { path = "a/b/x.lua" })
+      local leaf2 = Node("y.lua", { path = "a/b/c/y.lua" })
+      a_node:add_child(b_node)
+      b_node:add_child(c_node)
+      b_node:add_child(leaf1)
+      c_node:add_child(leaf2)
+
+      local flattened = {
+        name = "a/b",
+        path = "a/b",
+        kind = "working",
+        collapsed = false,
+        _node = a_node,
+      }
+
+      local panel = make_panel()
+      panel:set_dir_collapsed(flattened, true)
+
+      eq(true, flattened.collapsed)
+      -- a and b are part of the flatten chain (a has one child: b).
+      eq(true, a_data.collapsed)
+      -- b has multiple children, so the walk stops after b.
+      eq(true, b_data.collapsed)
+      -- c is a separate subdir, not part of the flatten chain.
+      eq(false, c_data.collapsed)
+    end)
+
+    it("dir_selection_state reflects none/some/all", function()
+      local a_data = { name = "a", path = "a", kind = "working", collapsed = false }
+      local a_node = Node("a", a_data)
+      local f1 = { path = "a/x.lua", kind = "working" }
+      local f2 = { path = "a/y.lua", kind = "working" }
+      a_node:add_child(Node("x.lua", f1))
+      a_node:add_child(Node("y.lua", f2))
+      a_data._node = a_node
+
+      local panel = make_panel()
+      eq("none", panel:dir_selection_state(a_data))
+
+      panel:select_file(f1)
+      eq("some", panel:dir_selection_state(a_data))
+
+      panel:select_file(f2)
+      eq("all", panel:dir_selection_state(a_data))
+
+      panel:deselect_file(f1)
+      eq("some", panel:dir_selection_state(a_data))
+    end)
+
+    it("dir_selection_state returns none without _node", function()
+      local panel = make_panel()
+      eq("none", panel:dir_selection_state({ collapsed = false }))
+    end)
+  end)
+
+  describe("FileTree collapsed state with flatten_dirs", function()
+    local FileTree = require("diffview.ui.models.file_tree.file_tree").FileTree
+
+    ---Create a minimal FileEntry stub.
+    local function make_entry(path, kind)
+      return { path = path, kind = kind or "working", status = "M", basename = path }
+    end
+
+    it("get_collapsed_state reads from tree nodes (not flattened DirData)", function()
+      -- Build a tree with a flattenable chain: src/components/foo.lua
+      local tree = FileTree({ make_entry("src/components/foo.lua") })
+
+      -- Manually collapse the tree nodes (simulating set_dir_collapsed propagation).
+      local function collapse_nodes(node)
+        if node:has_children() and node.data and node.data.collapsed ~= nil then
+          node.data.collapsed = true
+        end
+        for _, child in ipairs(node.children) do
+          collapse_nodes(child)
+        end
+      end
+      for _, child in ipairs(tree.root.children) do
+        collapse_nodes(child)
+      end
+
+      local state = tree:get_collapsed_state()
+
+      -- Both intermediate nodes should report collapsed = true.
+      eq(true, state["src"])
+      eq(true, state["src/components"])
+    end)
+
+    it("set_collapsed_state restores to tree nodes", function()
+      local tree = FileTree({ make_entry("src/components/foo.lua") })
+
+      tree:set_collapsed_state({ ["src"] = true, ["src/components"] = true })
+
+      local state = tree:get_collapsed_state()
+      eq(true, state["src"])
+      eq(true, state["src/components"])
+    end)
+
+    it("create_comp_schema sets _node to outermost node in flattened chain", function()
+      local tree = FileTree({ make_entry("src/components/foo.lua") })
+      local schema = tree:create_comp_schema({ flatten_dirs = true })
+
+      -- With flatten_dirs, "src" and "components" should be combined into
+      -- a single directory component.
+      eq("directory", schema[1].name)
+      local dir_data = schema[1].context
+      assert.truthy(dir_data._node)
+
+      -- _node should point to the outermost node ("src"), not an inner one.
+      eq("src", dir_data._node.name)
     end)
   end)
 end)

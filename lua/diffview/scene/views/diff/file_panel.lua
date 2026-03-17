@@ -331,7 +331,7 @@ function FilePanel:highlight_file(file)
           while dir and dir.name == "directory" do
             if dir.context and dir.context.collapsed then
               was_concealed = true
-              dir.context.collapsed = false
+              self:set_dir_collapsed(dir.context, false)
             end
 
             dir = utils.tbl_access(dir, { "parent", "parent" })
@@ -397,11 +397,32 @@ function FilePanel:reconstrain_cursor()
   })
 end
 
+---Set collapsed state for a directory, propagating to underlying tree nodes
+---so that get_collapsed_state() picks up the correct value for flattened dirs.
+---@param item DirData
+---@param collapsed boolean
+function FilePanel:set_dir_collapsed(item, collapsed)
+  item.collapsed = collapsed
+  if item._node then
+    local node = item._node
+    while node do
+      if node.data and type(node.data.collapsed) == "boolean" then
+        node.data.collapsed = collapsed
+      end
+      if #node.children == 1 and node.children[1]:has_children() then
+        node = node.children[1]
+      else
+        break
+      end
+    end
+  end
+end
+
 ---@param item DirData|any
 ---@param open boolean
 function FilePanel:set_item_fold(item, open)
   if type(item.collapsed) == "boolean" and open == item.collapsed then
-    item.collapsed = not open
+    self:set_dir_collapsed(item, not open)
     self:render()
     self:redraw()
 
@@ -420,30 +441,86 @@ function FilePanel:toggle_item_fold(item)
   self:set_item_fold(item, item.collapsed)
 end
 
+---Compute a stable key for a file entry that survives object replacement.
+---@param file FileEntry
+---@return string
+function FilePanel.selection_key(file)
+  return file.kind .. ":" .. file.path
+end
+
+---Select a file entry.
+---@param file FileEntry
+function FilePanel:select_file(file)
+  self.selected_files[FilePanel.selection_key(file)] = true
+end
+
+---Deselect a file entry.
+---@param file FileEntry
+function FilePanel:deselect_file(file)
+  self.selected_files[FilePanel.selection_key(file)] = nil
+end
+
 ---Toggle selection for a file entry.
 ---@param file FileEntry
 function FilePanel:toggle_selection(file)
-  if self.selected_files[file] then
-    self.selected_files[file] = nil
+  local key = FilePanel.selection_key(file)
+  if self.selected_files[key] then
+    self.selected_files[key] = nil
   else
-    self.selected_files[file] = true
+    self.selected_files[key] = true
   end
 end
 
 ---@param file FileEntry
 ---@return boolean
 function FilePanel:is_selected(file)
-  return self.selected_files[file] == true
+  return self.selected_files[FilePanel.selection_key(file)] == true
+end
+
+---Return the selection state of a directory's files.
+---@param dir_data DirData
+---@return "all"|"some"|"none"
+function FilePanel:dir_selection_state(dir_data)
+  if not dir_data._node then return "none" end
+  local leaves = dir_data._node:leaves()
+  if #leaves == 0 then return "none" end
+  local selected, total = 0, 0
+  for _, leaf in ipairs(leaves) do
+    if leaf.data then
+      total = total + 1
+      if self:is_selected(leaf.data) then
+        selected = selected + 1
+      end
+    end
+  end
+  if selected == 0 then return "none" end
+  if selected == total then return "all" end
+  return "some"
 end
 
 ---Get all currently selected files.
 ---@return FileEntry[]
 function FilePanel:get_selected_files()
   local result = {}
-  for file in pairs(self.selected_files) do
-    result[#result + 1] = file
+  for _, file in self.files:iter() do
+    if self.selected_files[FilePanel.selection_key(file)] then
+      result[#result + 1] = file
+    end
   end
   return result
+end
+
+---Remove selections for files that no longer exist.
+function FilePanel:prune_selections()
+  local valid_keys = {}
+  for _, file in self.files:iter() do
+    valid_keys[FilePanel.selection_key(file)] = true
+  end
+  for key in pairs(self.selected_files) do
+    if not valid_keys[key] then
+      self.selected_files[key] = nil
+    end
+  end
 end
 
 ---Clear all file selections.

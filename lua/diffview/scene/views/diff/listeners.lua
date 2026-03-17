@@ -18,7 +18,9 @@ return function(view)
     tab_enter = function()
       local file = view.panel.cur_file
       if file then
-        view:set_file(file, false, true)
+        -- Suppress highlight_file to avoid expanding collapsed directories;
+        -- the panel cursor is restored separately below.
+        view:set_file(file, false, false)
       end
 
       -- Restore panel cursor position.
@@ -78,8 +80,8 @@ return function(view)
     ---@diagnostic disable-next-line: unused-local
     files_updated = function(_, files)
       view.initialized = true
-      -- File entries are replaced on update; clear stale selections.
-      view.panel:clear_selections()
+      -- File entries may be replaced on update; prune stale selections.
+      view.panel:prune_selections()
     end,
     close = function()
       if view.panel:is_focused() then
@@ -178,9 +180,9 @@ return function(view)
         for _, leaf in ipairs(leaves) do
           if leaf.data then
             if all_selected then
-              view.panel.selected_files[leaf.data] = nil
+              view.panel:deselect_file(leaf.data)
             else
-              view.panel.selected_files[leaf.data] = true
+              view.panel:select_file(leaf.data)
             end
           end
         end
@@ -501,7 +503,7 @@ return function(view)
       }) do
         file_set.comp:deep_some(function(comp, _, _)
           if comp.name == "directory" then
-            (comp.context --[[@as DirData ]]).collapsed = false
+            view.panel:set_dir_collapsed(comp.context --[[@as DirData ]], false)
           end
         end)
       end
@@ -519,7 +521,7 @@ return function(view)
       }) do
         file_set.comp:deep_some(function(comp, _, _)
           if comp.name == "directory" then
-            (comp.context --[[@as DirData ]]).collapsed = true
+            view.panel:set_dir_collapsed(comp.context --[[@as DirData ]], true)
           end
         end)
       end
