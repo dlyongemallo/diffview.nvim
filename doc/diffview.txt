@@ -555,6 +555,17 @@ signs                                           *diffview-config-signs*
             {done} (string)
                 Sign indicating completion/resolution.
 
+            {selected_file} (string)
+                Sign shown next to selected files.
+
+            {selected_dir} (string)
+                Sign shown next to directories where every file is
+                selected.
+
+            {partially_selected_dir} (string)
+                Sign shown next to directories where some (but not
+                all) files are selected.
+
 view.x.layout                                   *diffview-config-view.x.layout*
         Type: >
             "diff1_plain"
@@ -1454,8 +1465,11 @@ toggle_select_entry                             *diffview-actions-toggle_select_
         Also works in visual mode to toggle all files in the selected
         line range. When files are selected, `toggle_stage_entry` and
         `restore_entry` will operate on all selected files as a batch.
-        Selections are cleared after a batch operation or when the file
-        list is refreshed.
+        Selected files are indicated by `signs.selected_file`;
+        directories with some selected files show
+        `signs.partially_selected_dir`.
+        Selections are preserved across tab switches and file list
+        refreshes. Selections are cleared after a batch operation.
 
 clear_select_entries                            *diffview-actions-clear_select_entries*
         Contexts: `file_panel`

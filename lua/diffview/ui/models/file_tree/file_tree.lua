@@ -115,6 +115,7 @@ function FileTree:create_comp_schema(data)
     dir_data._node = node
 
     if data.flatten_dirs then
+      local flatten_root = node
       while #node.children == 1 and node.children[1]:has_children() do
         ---@type DirData
         local subdir_data = node.children[1].data
@@ -124,7 +125,7 @@ function FileTree:create_comp_schema(data)
           kind = subdir_data.kind,
           collapsed = dir_data.collapsed and subdir_data.collapsed,
           status = dir_data.status,
-          _node = node,
+          _node = flatten_root,
         }
         node = node.children[1]
       end

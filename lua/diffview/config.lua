@@ -77,6 +77,9 @@ M.defaults = {
     fold_closed = "",
     fold_open = "",
     done = "✓",
+    selected_file = "✓",
+    selected_dir = "●",
+    partially_selected_dir = "◐",
   },
   view = {
     default = {

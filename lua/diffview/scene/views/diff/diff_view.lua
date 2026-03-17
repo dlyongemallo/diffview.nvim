@@ -303,7 +303,7 @@ end
 ---@param self DiffView
 ---@param file FileEntry
 ---@param focus? boolean Bring focus to the diff buffers.
----@param highlight? boolean Bring the cursor to the file entry in the panel.
+---@param highlight? boolean|nil true=force highlight, false=suppress, nil=auto (highlight when panel not focused).
 DiffView.set_file = async.void(function(self, file, focus, highlight)
   ---@diagnostic disable: invisible
   self:ensure_layout()
@@ -314,7 +314,7 @@ DiffView.set_file = async.void(function(self, file, focus, highlight)
     if f == file then
       self.panel:set_cur_file(file)
 
-      if highlight or not self.panel:is_focused() then
+      if highlight ~= false and (highlight or not self.panel:is_focused()) then
         self.panel:highlight_file(file)
       end
 
@@ -595,7 +595,7 @@ DiffView.update_files = debounce.debounce_trailing(
     self.panel:render()
     self.panel:redraw()
 
-    self:set_file(self.panel.cur_file or self.panel:next_file(), false, not self.initialized)
+    self:set_file(self.panel.cur_file or self.panel:next_file(), false, not self.initialized or nil)
 
     -- Position cursor at the requested row on first open.
     if not self.initialized and self.options.selected_row then
