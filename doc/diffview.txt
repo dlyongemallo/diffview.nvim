@@ -1663,11 +1663,11 @@ o                       Open the diff for the selected file entry.
 <2-LeftMouse>
 
                                                 *diffview-maps-toggle_select_entry*
-w                       Toggle file selection for multi-file operations.
+<Space>                 Toggle file selection for multi-file operations.
                         Works on directories and in visual mode.
 
                                                 *diffview-maps-clear_select_entries*
-W                       Clear all file selections.
+C                       Clear all file selections.
 
                                                 *diffview-maps-toggle_stage_entry*
 -                       Stage/unstage the selected file entry. If files are
