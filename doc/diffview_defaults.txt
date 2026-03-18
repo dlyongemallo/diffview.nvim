@@ -17,6 +17,10 @@ DEFAULT CONFIG                                  *diffview.defaults*
     auto_close_on_empty = false, -- Close diffview when the last file is staged/resolved
     diffopt = {},             -- Override diffopt settings while diffview is open. Restored on close.
     clean_up_buffers = false, -- Delete file buffers created by diffview on close.
+    persist_selections = {
+      enabled = false,        -- Persist file selections to disk across Neovim restarts.
+      path = nil,             -- Storage path. Nil uses stdpath("data") .. "/diffview_selections.json".
+    },
     icons = {                 -- Only applies when use_icons is true.
       folder_closed = "",
       folder_open = "",

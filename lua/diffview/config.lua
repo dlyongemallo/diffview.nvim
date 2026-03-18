@@ -56,6 +56,10 @@ M.defaults = {
   -- Example: { algorithm = "histogram", indent_heuristic = true }
   diffopt = {},
   clean_up_buffers = false, -- Delete file buffers created by diffview on close (only buffers not open before diffview).
+  persist_selections = {
+    enabled = false, -- Persist file selections to disk across Neovim restarts.
+    path = nil, -- Storage path. Nil uses stdpath("data") .. "/diffview_selections.json".
+  },
   icons = {
     folder_closed = "",
     folder_open = "",

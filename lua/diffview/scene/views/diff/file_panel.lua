@@ -22,7 +22,8 @@ local M = {}
 ---@field components CompStruct
 ---@field constrain_cursor function
 ---@field help_mapping string
----@field selected_files table<FileEntry, true>
+---@field selected_files table<string, true>
+---@field on_selection_changed fun(selected_files: table<string, true>)?
 local FilePanel = oop.create_class("FilePanel", Panel)
 
 FilePanel.winopts = vim.tbl_extend("force", Panel.winopts, {
@@ -448,16 +449,36 @@ function FilePanel.selection_key(file)
   return file.kind .. ":" .. file.path
 end
 
+---Notify listeners that selections have changed.
+function FilePanel:_notify_selection_changed()
+  if self._suppress_notify then return end
+  if self.on_selection_changed then
+    self.on_selection_changed(self.selected_files)
+  end
+end
+
+---Run a function that mutates selections, emitting a single notification
+---at the end rather than one per mutation.
+---@param fn fun()
+function FilePanel:batch_selection(fn)
+  self._suppress_notify = true
+  fn()
+  self._suppress_notify = false
+  self:_notify_selection_changed()
+end
+
 ---Select a file entry.
 ---@param file FileEntry
 function FilePanel:select_file(file)
   self.selected_files[FilePanel.selection_key(file)] = true
+  self:_notify_selection_changed()
 end
 
 ---Deselect a file entry.
 ---@param file FileEntry
 function FilePanel:deselect_file(file)
   self.selected_files[FilePanel.selection_key(file)] = nil
+  self:_notify_selection_changed()
 end
 
 ---Toggle selection for a file entry.
@@ -469,6 +490,7 @@ function FilePanel:toggle_selection(file)
   else
     self.selected_files[key] = true
   end
+  self:_notify_selection_changed()
 end
 
 ---@param file FileEntry
@@ -516,16 +538,25 @@ function FilePanel:prune_selections()
   for _, file in self.files:iter() do
     valid_keys[FilePanel.selection_key(file)] = true
   end
+  local changed = false
   for key in pairs(self.selected_files) do
     if not valid_keys[key] then
       self.selected_files[key] = nil
+      changed = true
     end
+  end
+  if changed then
+    self:_notify_selection_changed()
   end
 end
 
 ---Clear all file selections.
 function FilePanel:clear_selections()
+  local had_selections = next(self.selected_files) ~= nil
   self.selected_files = {}
+  if had_selections then
+    self:_notify_selection_changed()
+  end
 end
 
 ---@override

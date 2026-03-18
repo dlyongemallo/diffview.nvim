@@ -566,6 +566,21 @@ signs                                           *diffview-config-signs*
                 Sign shown next to directories where some (but not
                 all) files are selected.
 
+persist_selections                              *diffview-config-persist_selections*
+        Type: `table`, Default: `{ enabled = false, path = nil }`
+
+        Persist file selections to disk so they survive Neovim restarts.
+        Selections are scoped per repository and revision, debounced,
+        and auto-pruned when the file list changes.
+
+        Fields: ~
+            {enabled} (boolean)
+                Enable or disable selection persistence.
+
+            {path} (string|nil)
+                Path to the JSON storage file. When `nil`, defaults to
+                `stdpath("data") .. "/diffview_selections.json"`.
+
 view.x.layout                                   *diffview-config-view.x.layout*
         Type: >
             "diff1_plain"
@@ -1556,6 +1571,11 @@ For information on how to use User autocommands, see |User|.
                       buffer and the correct diff window as the current window
                       such that |:setlocal| will apply settings to the
                       relevant buffer / window.
+
+`DiffviewSelectionChanged`
+                      Fires after file selections change in the file panel.
+                      This includes toggling, selecting, deselecting, clearing,
+                      and pruning of selections.
 
 ==============================================================================
 
