@@ -13,18 +13,28 @@ local function render_file(conf, panel, comp, show_path, depth)
   ---@type FileEntry
   local file = comp.context
 
-  local marked = panel:is_selected(file)
+  local show_marks = conf.file_panel.always_show_marks or panel:has_any_selections()
 
   comp:add_text(hl.get_status_icon(file.status) .. " ", hl.get_git_hl(file.status))
 
-  if depth then
-    comp:add_text(string.rep(" ", depth * 2 + 2))
-  end
+  if show_marks then
+    local mark, mark_hl
+    if panel:is_selected(file) then
+      mark = conf.signs.selected_file
+      mark_hl = "DiffviewFilePanelMarked"
+    else
+      mark = conf.signs.unselected_file
+    end
 
-  if marked then
-    comp:add_text(conf.signs.selected_file .. " ", "DiffviewFilePanelMarked")
+    if depth then
+      comp:add_text(string.rep(" ", depth * 2))
+    end
+
+    comp:add_text(mark .. " ", mark_hl)
   else
-    comp:add_text("  ")
+    if depth then
+      comp:add_text(string.rep(" ", depth * 2 + 2))
+    end
   end
 
   local icon, icon_hl = hl.get_file_icon(file.basename, file.extension)
@@ -102,11 +112,46 @@ local function render_file_tree_recurse(conf, panel, depth, comp)
   local items = comp.components[2]
   local ctx = comp.context --[[@as DirData ]]
 
-  dir:add_text(
-    hl.get_status_icon(get_dir_status_text(ctx, conf.file_panel.tree_options)) .. " ",
-    hl.get_git_hl(ctx.status)
-  )
-  dir:add_text(string.rep(" ", depth * 2))
+  local show_marks = conf.file_panel.always_show_marks or panel:has_any_selections()
+
+  if show_marks then
+    local sel_state = panel:dir_selection_state(ctx)
+    local sel_mark ---@type string
+    local sel_mark_hl ---@type string?
+
+    if sel_state == "all" then
+      sel_mark = conf.signs.selected_dir
+      sel_mark_hl = "DiffviewFilePanelMarked"
+    elseif sel_state == "some" then
+      sel_mark = conf.signs.partially_selected_dir
+      sel_mark_hl = "DiffviewFilePanelMarked"
+    else
+      sel_mark = conf.signs.unselected_dir
+    end
+
+    -- Place the selection mark just before the fold indicator, stealing 1 char
+    -- from indent (depth > 0) or from the status trailing space (depth 0).
+    if depth > 0 then
+      dir:add_text(
+        hl.get_status_icon(get_dir_status_text(ctx, conf.file_panel.tree_options)) .. " ",
+        hl.get_git_hl(ctx.status)
+      )
+      dir:add_text(string.rep(" ", depth * 2 - 1))
+    else
+      dir:add_text(
+        hl.get_status_icon(get_dir_status_text(ctx, conf.file_panel.tree_options)),
+        hl.get_git_hl(ctx.status)
+      )
+    end
+    dir:add_text(sel_mark, sel_mark_hl)
+  else
+    dir:add_text(
+      hl.get_status_icon(get_dir_status_text(ctx, conf.file_panel.tree_options)) .. " ",
+      hl.get_git_hl(ctx.status)
+    )
+    dir:add_text(string.rep(" ", depth * 2))
+  end
+
   dir:add_text(ctx.collapsed and conf.signs.fold_closed or conf.signs.fold_open, "DiffviewNonText")
 
   -- Always show folder icons since they're user-configurable and don't require
@@ -116,12 +161,6 @@ local function render_file_tree_recurse(conf, panel, depth, comp)
     "DiffviewFolderSign"
   )
 
-  local sel_state = panel:dir_selection_state(ctx)
-  if sel_state == "all" then
-    dir:add_text(conf.signs.selected_dir .. " ", "DiffviewFilePanelMarked")
-  elseif sel_state == "some" then
-    dir:add_text(conf.signs.partially_selected_dir .. " ", "DiffviewFilePanelMarked")
-  end
   dir:add_text(ctx.name .. "/", "DiffviewFolderName")
   -- Show file count when folder is collapsed.
   if ctx.collapsed and ctx._node then

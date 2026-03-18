@@ -81,9 +81,11 @@ M.defaults = {
     fold_closed = "",
     fold_open = "",
     done = "✓",
-    selected_file = "✓",
-    selected_dir = "●",
-    partially_selected_dir = "◐",
+    selected_file = "■",
+    unselected_file = "□",
+    selected_dir = "■",
+    partially_selected_dir = "▣",
+    unselected_dir = "□",
   },
   view = {
     default = {
@@ -121,6 +123,7 @@ M.defaults = {
     },
     show = true, -- Show the file panel by default when opening Diffview.
     always_show_sections = false, -- Always show Changes and Staged changes sections even when empty.
+    always_show_marks = false, -- Show selection marks even when no files are selected.
     show_branch_name = false, -- Show branch name in the file panel header.
   },
   file_history_panel = {

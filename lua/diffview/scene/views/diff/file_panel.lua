@@ -499,6 +499,12 @@ function FilePanel:is_selected(file)
   return self.selected_files[FilePanel.selection_key(file)] == true
 end
 
+---Return true when at least one file is selected.
+---@return boolean
+function FilePanel:has_any_selections()
+  return next(self.selected_files) ~= nil
+end
+
 ---Return the selection state of a directory's files.
 ---@param dir_data DirData
 ---@return "all"|"some"|"none"
