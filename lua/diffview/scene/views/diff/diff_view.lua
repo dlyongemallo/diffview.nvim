@@ -97,6 +97,7 @@ function DiffView:init(opt)
 
   self.attached_bufs = {}
   self.emitter:on("file_open_post", utils.bind(self.file_open_post, self))
+  self:_init_selection_events()
   self.valid = true
 end
 
@@ -189,10 +190,58 @@ function DiffView:file_open_post(e, new_entry, old_entry)
   end
 end
 
+---Wire up selection change events and, when enabled, persistence.
+function DiffView:_init_selection_events()
+  local conf = config.get_config()
+  local persist = conf.persist_selections and conf.persist_selections.enabled
+
+  if persist then
+    local selection_store = require("diffview.selection_store")
+    self._selection_scope_key = selection_store.scope_key(
+      self.adapter.ctx.toplevel, self.rev_arg
+    )
+
+    -- Load previously saved selections.
+    local saved = selection_store.load(self._selection_scope_key)
+    for _, key in ipairs(saved) do
+      self.panel.selected_files[key] = true
+    end
+
+    -- Debounced save (500ms trailing).
+    self._save_selections = debounce.debounce_trailing(500, false, function()
+      self:_save_selections_now()
+    end)
+  end
+
+  -- Always wire the panel callback so the User event fires regardless of
+  -- whether persistence is enabled.
+  self.panel.on_selection_changed = function(_)
+    if self._save_selections then
+      self._save_selections()
+    end
+    DiffviewGlobal.emitter:emit("selection_changed", self)
+  end
+end
+
+---Immediately persist current selections to disk.
+function DiffView:_save_selections_now()
+  if not self._selection_scope_key then return end
+  local selection_store = require("diffview.selection_store")
+  local keys = vim.tbl_keys(self.panel.selected_files)
+  selection_store.save(self._selection_scope_key, keys)
+end
+
 ---@override
 function DiffView:close()
   if not self.closing:check() then
     self.closing:send()
+
+    -- Final save and clean up the debounced handle.
+    if self._save_selections then
+      self:_save_selections_now()
+      self._save_selections:close()
+      self._save_selections = nil
+    end
 
     if self.watcher then
       self.watcher:stop()

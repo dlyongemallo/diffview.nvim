@@ -144,12 +144,14 @@ return function(view)
           start_line, end_line = end_line, start_line
         end
 
-        for line = start_line, end_line do
-          local item = view.panel:get_item_at_line(line)
-          if item and type(item.collapsed) ~= "boolean" then
-            view.panel:toggle_selection(item)
+        view.panel:batch_selection(function()
+          for line = start_line, end_line do
+            local item = view.panel:get_item_at_line(line)
+            if item and type(item.collapsed) ~= "boolean" then
+              view.panel:toggle_selection(item)
+            end
           end
-        end
+        end)
 
         -- Exit visual mode.
         api.nvim_feedkeys(api.nvim_replace_termcodes("<Esc>", true, false, true), "n", false)
@@ -177,15 +179,17 @@ return function(view)
           end
         end
 
-        for _, leaf in ipairs(leaves) do
-          if leaf.data then
-            if all_selected then
-              view.panel:deselect_file(leaf.data)
-            else
-              view.panel:select_file(leaf.data)
+        view.panel:batch_selection(function()
+          for _, leaf in ipairs(leaves) do
+            if leaf.data then
+              if all_selected then
+                view.panel:deselect_file(leaf.data)
+              else
+                view.panel:select_file(leaf.data)
+              end
             end
           end
-        end
+        end)
       else
         ---@cast item FileEntry
         view.panel:toggle_selection(item)

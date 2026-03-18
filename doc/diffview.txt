@@ -558,6 +558,11 @@ signs                                           *diffview-config-signs*
             {selected_file} (string)
                 Sign shown next to selected files.
 
+            {unselected_file} (string)
+                Sign shown next to unselected files. Only rendered
+                when at least one file is selected, unless
+                `always_show_marks` is enabled.
+
             {selected_dir} (string)
                 Sign shown next to directories where every file is
                 selected.
@@ -565,6 +570,26 @@ signs                                           *diffview-config-signs*
             {partially_selected_dir} (string)
                 Sign shown next to directories where some (but not
                 all) files are selected.
+
+            {unselected_dir} (string)
+                Sign shown next to directories where no files are
+                selected. Only rendered when at least one file is
+                selected, unless `always_show_marks` is enabled.
+
+persist_selections                              *diffview-config-persist_selections*
+        Type: `table`, Default: `{ enabled = false, path = nil }`
+
+        Persist file selections to disk so they survive Neovim restarts.
+        Selections are scoped per repository and revision, debounced,
+        and auto-pruned when the file list changes.
+
+        Fields: ~
+            {enabled} (boolean)
+                Enable or disable selection persistence.
+
+            {path} (string|nil)
+                Path to the JSON storage file. When `nil`, defaults to
+                `stdpath("data") .. "/diffview_selections.json"`.
 
 view.x.layout                                   *diffview-config-view.x.layout*
         Type: >
@@ -747,6 +772,11 @@ file_panel                                      *diffview-config-file_panel*
             {always_show_sections} (boolean)
                 Always show the Changes and Staged changes sections even
                 when empty. Default: `false`
+
+            {always_show_marks} (boolean)
+                Show selection marks even when no files are selected.
+                When `false`, marks only appear once at least one file
+                is selected. Default: `false`
 
             {show_branch_name} (boolean)
                 Show branch name in the file panel header. Default: `false`
@@ -1465,9 +1495,9 @@ toggle_select_entry                             *diffview-actions-toggle_select_
         Also works in visual mode to toggle all files in the selected
         line range. When files are selected, `toggle_stage_entry` and
         `restore_entry` will operate on all selected files as a batch.
-        Selected files are indicated by `signs.selected_file`;
-        directories with some selected files show
-        `signs.partially_selected_dir`.
+        Selection marks are shown using `signs.selected_file`,
+        `signs.unselected_file`, `signs.selected_dir`,
+        `signs.partially_selected_dir`, and `signs.unselected_dir`.
         Selections are preserved across tab switches and file list
         refreshes. Selections are cleared after a batch operation.
 
@@ -1557,6 +1587,11 @@ For information on how to use User autocommands, see |User|.
                       such that |:setlocal| will apply settings to the
                       relevant buffer / window.
 
+`DiffviewSelectionChanged`
+                      Fires after file selections change in the file panel.
+                      This includes toggling, selecting, deselecting, clearing,
+                      and pruning of selections.
+
 ==============================================================================
 
 MAPS                                            *diffview-maps*
@@ -1643,11 +1678,11 @@ o                       Open the diff for the selected file entry.
 <2-LeftMouse>
 
                                                 *diffview-maps-toggle_select_entry*
-w                       Toggle file selection for multi-file operations.
+<Space>                 Toggle file selection for multi-file operations.
                         Works on directories and in visual mode.
 
                                                 *diffview-maps-clear_select_entries*
-W                       Clear all file selections.
+C                       Clear all file selections.
 
                                                 *diffview-maps-toggle_stage_entry*
 -                       Stage/unstage the selected file entry. If files are

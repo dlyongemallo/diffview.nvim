@@ -56,6 +56,10 @@ M.defaults = {
   -- Example: { algorithm = "histogram", indent_heuristic = true }
   diffopt = {},
   clean_up_buffers = false, -- Delete file buffers created by diffview on close (only buffers not open before diffview).
+  persist_selections = {
+    enabled = false, -- Persist file selections to disk across Neovim restarts.
+    path = nil, -- Storage path. Nil uses stdpath("data") .. "/diffview_selections.json".
+  },
   icons = {
     folder_closed = "",
     folder_open = "",
@@ -77,9 +81,11 @@ M.defaults = {
     fold_closed = "",
     fold_open = "",
     done = "✓",
-    selected_file = "✓",
-    selected_dir = "●",
-    partially_selected_dir = "◐",
+    selected_file = "■",
+    unselected_file = "□",
+    selected_dir = "■",
+    partially_selected_dir = "▣",
+    unselected_dir = "□",
   },
   view = {
     default = {
@@ -117,6 +123,7 @@ M.defaults = {
     },
     show = true, -- Show the file panel by default when opening Diffview.
     always_show_sections = false, -- Always show Changes and Staged changes sections even when empty.
+    always_show_marks = false, -- Show selection marks even when no files are selected.
     show_branch_name = false, -- Show branch name in the file panel header.
   },
   file_history_panel = {
@@ -221,8 +228,8 @@ M.defaults = {
       { "n", "o",              actions.select_entry,                   { desc = "Open the diff for the selected entry" } },
       { "n", "l",              actions.select_entry,                   { desc = "Open the diff for the selected entry" } },
       { "n", "<2-LeftMouse>",  actions.select_entry,                   { desc = "Open the diff for the selected entry" } },
-      { { "n", "x" }, "w",    actions.toggle_select_entry,            { desc = "Toggle file selection for multi-file operations" } },
-      { "n", "W",              actions.clear_select_entries,           { desc = "Clear all file selections" } },
+      { { "n", "x" }, "<space>", actions.toggle_select_entry,          { desc = "Toggle file selection for multi-file operations" } },
+      { "n", "C",              actions.clear_select_entries,           { desc = "Clear all file selections" } },
       { "n", "-",              actions.toggle_stage_entry,             { desc = "Stage / unstage the selected entry" } },
       { "n", "s",              actions.toggle_stage_entry,             { desc = "Stage / unstage the selected entry" } },
       { "n", "S",              actions.stage_all,                      { desc = "Stage all entries" } },
