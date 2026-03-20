@@ -483,6 +483,8 @@ DiffView.update_files = debounce.debounce_trailing(
 
     perf:lap("received new file list")
 
+    local prev_cur_file = self.panel.cur_file
+
     local files = {
       { cur_files = self.files.conflicting, new_files = new_files.conflicting },
       { cur_files = self.files.working, new_files = new_files.working },
@@ -644,7 +646,17 @@ DiffView.update_files = debounce.debounce_trailing(
     self.panel:render()
     self.panel:redraw()
 
-    self:set_file(self.panel.cur_file or self.panel:next_file(), false, not self.initialized or nil)
+    local next_file = self.panel.cur_file or self.panel:next_file()
+
+    -- Only re-open the current entry when something actually changed:
+    -- first init, cur_file identity changed, or buffers were invalidated.
+    local needs_reopen = not self.initialized
+      or next_file ~= prev_cur_file
+      or not (self.cur_layout and self.cur_layout:is_valid() and self.cur_layout:is_files_loaded())
+
+    if needs_reopen then
+      self:set_file(next_file, false, not self.initialized or nil)
+    end
 
     -- Position cursor at the requested row on first open.
     if not self.initialized and self.options.selected_row then

@@ -262,7 +262,7 @@ function Panel:resize()
         width = math.min(width, max_width)
         local ok = pcall(api.nvim_win_set_width, self.winid, width)
         if ok and api.nvim_win_get_width(self.winid) ~= old_width then
-          vim.cmd("vertical wincmd =")
+          vim.cmd("wincmd =")
           -- Re-render so that header lines (path, revision info, etc.) are
           -- truncated to the actual panel width rather than left at full length.
           self:render()
