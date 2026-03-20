@@ -73,7 +73,10 @@ end
 ---@override
 function FilePanel:open()
   FilePanel.super_class.open(self)
-  vim.cmd("wincmd =")
+  local conf = self:get_config()
+  if not (conf.type == "split" and conf.width == "auto") then
+    vim.cmd("wincmd =")
+  end
 end
 
 function FilePanel:setup_buffer()
