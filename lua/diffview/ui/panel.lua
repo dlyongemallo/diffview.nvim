@@ -260,10 +260,11 @@ function Panel:resize()
         -- Clamp and use pcall: the computed width may exceed available space.
         local max_width = math.floor(vim.o.columns * 0.5)
         width = math.min(width, max_width)
-        pcall(api.nvim_win_set_width, self.winid, width)
-        -- Re-render so that header lines (path, revision info, etc.) are
-        -- truncated to the actual panel width rather than left at full length.
-        if width ~= old_width then
+        local ok = pcall(api.nvim_win_set_width, self.winid, width)
+        if ok and api.nvim_win_get_width(self.winid) ~= old_width then
+          vim.cmd("vertical wincmd =")
+          -- Re-render so that header lines (path, revision info, etc.) are
+          -- truncated to the actual panel width rather than left at full length.
           self:render()
           renderer.render(self.bufid, self.render_data)
         end
