@@ -3,6 +3,7 @@ local lazy = require("diffview.lazy")
 local oop = require("diffview.oop")
 
 local Job = lazy.access("diffview.job", "Job") ---@type diffview.Job|LazyModule
+local job_utils = require("diffview.job_utils")
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local await = async.await
@@ -73,24 +74,8 @@ function MultiJob:init(jobs, opt)
   self._started = false
   self._done = false
 
-  self.log_opt = vim.tbl_extend("keep", opt.log_opt or {}, {
-    func = "debug",
-    no_stdout = true,
-    debuginfo = debug.getinfo(3, "Sl"),
-  })
-
-  if opt.fail_cond then
-    if type(opt.fail_cond) == "string" then
-      self.check_status = MultiJob.FAIL_COND[opt.fail_cond]
-      assert(self.check_status, fmt("Unknown fail condition: '%s'", opt.fail_cond))
-    elseif type(opt.fail_cond) == "function" then
-      self.check_status = opt.fail_cond
-    else
-      error("Invalid fail condition: " .. vim.inspect(opt.fail_cond))
-    end
-  else
-    self.check_status = MultiJob.FAIL_COND.non_zero
-  end
+  self.log_opt = job_utils.default_log_opt(opt.log_opt, 4)
+  self.check_status = job_utils.resolve_fail_cond(opt.fail_cond, MultiJob.FAIL_COND)
 
   if opt.on_exit then self:on_exit(opt.on_exit) end
   if opt.on_retry then self:on_retry(opt.on_retry) end
