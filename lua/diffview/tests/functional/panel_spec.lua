@@ -585,4 +585,129 @@ describe("diffview.ui.panel", function()
       eq("src", dir_data._node.name)
     end)
   end)
+
+  describe("FilePanel update_components in list mode", function()
+    local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
+
+    ---Build a mock FileDict with named sub-lists.
+    local function make_files(conflicting, working, staged)
+      local files = { conflicting = conflicting or {}, working = working or {}, staged = staged or {} }
+      function files:iter()
+        local all = {}
+        for _, f in ipairs(self.conflicting) do all[#all + 1] = f end
+        for _, f in ipairs(self.working) do all[#all + 1] = f end
+        for _, f in ipairs(self.staged) do all[#all + 1] = f end
+        local i = 0
+        return function()
+          i = i + 1
+          if i <= #all then return i, all[i] end
+        end
+      end
+      function files:len() return #self.conflicting + #self.working + #self.staged end
+      return files
+    end
+
+    it("builds file components from list entries", function()
+      local renderer = require("diffview.renderer")
+      local orig_create_cursor_constraint = renderer.create_cursor_constraint
+
+      local f1 = { path = "a.lua" }
+      local f2 = { path = "b.lua" }
+      local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
+      local panel = FilePanel(adapter, make_files({}, { f1, f2 }, {}), {})
+      panel.listing_style = "list"
+
+      -- Capture the schema passed to render_data:create_component.
+      local comp_schema
+      panel.render_data = {
+        create_component = function(_, schema)
+          comp_schema = schema
+          return {
+            conflicting = { files = { comp = {} } },
+            working = { files = { comp = {} } },
+            staged = { files = { comp = {} } },
+          }
+        end,
+      }
+      renderer.create_cursor_constraint = function() return function() end end
+
+      local ok, err = pcall(function()
+        panel:update_components()
+
+        -- The working section is the 3rd top-level entry; its files sub-entry
+        -- should contain the two file components built by build_file_list.
+        local working_section = comp_schema[3] -- { name="working", title, files, margin }
+        eq("working", working_section.name)
+        local working_files = working_section[2] -- the files component
+        eq("files", working_files.name)
+        eq(f1, working_files[1].context)
+        eq(f2, working_files[2].context)
+      end)
+
+      renderer.create_cursor_constraint = orig_create_cursor_constraint
+      if not ok then error(err) end
+    end)
+
+    it("tree mode calls update_statuses and create_comp_schema on each tree", function()
+      local renderer = require("diffview.renderer")
+      local orig_create_cursor_constraint = renderer.create_cursor_constraint
+
+      local statuses_updated = {}
+      local schemas_created = {}
+
+      local function mock_tree(name)
+        return {
+          update_statuses = function() statuses_updated[#statuses_updated + 1] = name end,
+          create_comp_schema = function(_, opts)
+            schemas_created[#schemas_created + 1] = { name = name, opts = opts }
+            return { { name = "directory", context = {} } }
+          end,
+        }
+      end
+
+      local files = {
+        conflicting = {}, working = {}, staged = {},
+        conflicting_tree = mock_tree("conflicting"),
+        working_tree = mock_tree("working"),
+        staged_tree = mock_tree("staged"),
+      }
+      function files:iter()
+        local i = 0
+        return function() i = i + 1 end
+      end
+      function files:len() return 0 end
+
+      local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
+      local panel = FilePanel(adapter, files, {})
+      panel.listing_style = "tree"
+      panel.tree_options = { flatten_dirs = true }
+      panel.render_data = {
+        create_component = function()
+          return {
+            conflicting = { files = { comp = {} } },
+            working = { files = { comp = {} } },
+            staged = { files = { comp = {} } },
+          }
+        end,
+      }
+      renderer.create_cursor_constraint = function() return function() end end
+
+      local ok, err = pcall(function()
+        panel:update_components()
+
+        eq(3, #statuses_updated)
+        eq("conflicting", statuses_updated[1])
+        eq("working", statuses_updated[2])
+        eq("staged", statuses_updated[3])
+
+        eq(3, #schemas_created)
+        for _, entry in ipairs(schemas_created) do
+          eq(true, entry.opts.flatten_dirs)
+        end
+      end)
+
+      renderer.create_cursor_constraint = orig_create_cursor_constraint
+      if not ok then error(err) end
+    end)
+  end)
 end)
