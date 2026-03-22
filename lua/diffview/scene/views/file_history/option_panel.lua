@@ -161,12 +161,7 @@ function FHOptionPanel:open()
 end
 
 function FHOptionPanel:setup_buffer()
-  local conf = config.get_config()
-  local default_opt = { silent = true, buffer = self.bufid }
-  for _, mapping in ipairs(conf.keymaps.option_panel) do
-    local opt = vim.tbl_extend("force", default_opt, mapping[4] or {}, { buffer = self.bufid })
-    vim.keymap.set(mapping[1], mapping[2], mapping[3], opt)
-  end
+  self:apply_keymaps("option_panel")
 
   for _, group in pairs(self.flags) do
     ---@cast group FlagOption[]

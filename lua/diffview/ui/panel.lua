@@ -448,6 +448,21 @@ function Panel:init_buffer()
   return bn
 end
 
+---Apply keymaps from the config for the given keymap section.
+---@param keymap_key string Key into config.keymaps (e.g., "file_panel").
+---@param extra_defaults table? Additional default keymap options.
+---@return table config The full config table for further use.
+function Panel:apply_keymaps(keymap_key, extra_defaults)
+  local config = require("diffview.config")
+  local conf = config.get_config()
+  local default_opt = vim.tbl_extend("force", { silent = true, buffer = self.bufid }, extra_defaults or {})
+  for _, mapping in ipairs(conf.keymaps[keymap_key]) do
+    local opt = vim.tbl_extend("force", default_opt, mapping[4] or {}, { buffer = self.bufid })
+    vim.keymap.set(mapping[1], mapping[2], mapping[3], opt)
+  end
+  return conf
+end
+
 function Panel:update_components() oop.abstract_stub() end
 
 function Panel:render() oop.abstract_stub() end

@@ -710,4 +710,100 @@ describe("diffview.ui.panel", function()
       if not ok then error(err) end
     end)
   end)
+
+  describe("Panel apply_keymaps", function()
+    local Panel = require("diffview.ui.panel").Panel
+
+    it("calls vim.keymap.set for each mapping with merged options", function()
+      local orig_keymap_set = vim.keymap.set
+      local config = require("diffview.config")
+      local orig_get_config = config.get_config
+
+      local keymap_calls = {}
+      local ok, err = pcall(function()
+        vim.keymap.set = function(mode, lhs, rhs, opts)
+          keymap_calls[#keymap_calls + 1] = { mode = mode, lhs = lhs, opts = opts }
+        end
+
+        config.get_config = function()
+          return {
+            keymaps = {
+              test_panel = {
+                { "n", "q", function() end, { desc = "Quit" } },
+                { "n", "j", function() end },
+              },
+            },
+          }
+        end
+
+        local panel = Panel({ bufname = "TestKeymaps", config = Panel.default_config_split })
+        panel.bufid = vim.api.nvim_create_buf(false, true)
+
+        local conf = panel:apply_keymaps("test_panel", { nowait = true })
+
+        -- Should have called vim.keymap.set twice.
+        eq(2, #keymap_calls)
+
+        -- First mapping should have desc merged in plus nowait.
+        eq("n", keymap_calls[1].mode)
+        eq("q", keymap_calls[1].lhs)
+        eq(true, keymap_calls[1].opts.silent)
+        eq(true, keymap_calls[1].opts.nowait)
+        eq("Quit", keymap_calls[1].opts.desc)
+
+        -- Second mapping has no desc in the mapping, nowait from defaults.
+        eq(true, keymap_calls[2].opts.nowait)
+
+        -- Returns the config.
+        assert.is_table(conf)
+        assert.is_table(conf.keymaps)
+
+        vim.api.nvim_buf_delete(panel.bufid, { force = true })
+      end)
+
+      vim.keymap.set = orig_keymap_set
+      config.get_config = orig_get_config
+      if not ok then error(err) end
+    end)
+
+    it("apply_keymaps without extra_defaults omits nowait", function()
+      local orig_keymap_set = vim.keymap.set
+      local config = require("diffview.config")
+      local orig_get_config = config.get_config
+
+      local keymap_calls = {}
+      local ok, err = pcall(function()
+        vim.keymap.set = function(mode, lhs, rhs, opts)
+          keymap_calls[#keymap_calls + 1] = { opts = opts }
+        end
+
+        config.get_config = function()
+          return {
+            keymaps = {
+              option_panel = {
+                { "n", "<tab>", function() end, { desc = "Select" } },
+              },
+            },
+          }
+        end
+
+        local panel = Panel({ bufname = "TestNoWait", config = Panel.default_config_split })
+        panel.bufid = vim.api.nvim_create_buf(false, true)
+
+        -- FHOptionPanel calls apply_keymaps("option_panel") without extra defaults.
+        panel:apply_keymaps("option_panel")
+
+        eq(1, #keymap_calls)
+        eq(true, keymap_calls[1].opts.silent)
+        -- nowait should NOT be present since no extra_defaults were passed.
+        eq(nil, keymap_calls[1].opts.nowait)
+
+        vim.api.nvim_buf_delete(panel.bufid, { force = true })
+      end)
+
+      vim.keymap.set = orig_keymap_set
+      config.get_config = orig_get_config
+      if not ok then error(err) end
+    end)
+  end)
 end)
