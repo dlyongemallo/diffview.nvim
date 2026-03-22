@@ -23,13 +23,7 @@ return function(view)
         view:set_file(file, false, false)
       end
 
-      -- Restore panel cursor position.
-      if view.panel_cursor and view.panel:is_open() then
-        local winid = view.panel.winid
-        if winid and api.nvim_win_is_valid(winid) then
-          pcall(api.nvim_win_set_cursor, winid, view.panel_cursor)
-        end
-      end
+      view:restore_panel_cursor()
 
       if view.ready then
         view:update_files()
@@ -37,14 +31,7 @@ return function(view)
     end,
     tab_leave = function()
       local file = view.panel.cur_file
-
-      -- Save panel cursor position.
-      if view.panel:is_open() then
-        local winid = view.panel.winid
-        if winid and api.nvim_win_is_valid(winid) then
-          view.panel_cursor = api.nvim_win_get_cursor(winid)
-        end
-      end
+      view:save_panel_cursor()
 
       if file then
         file.layout:detach_files()
