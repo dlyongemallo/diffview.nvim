@@ -86,18 +86,8 @@ end
 function GitAdapter.run_bootstrap()
   local git_cmd = config.get_config().git_cmd
   local bs = GitAdapter.bootstrap
-  bs.done = true
-
-  local function err(msg)
-    if msg then
-      bs.err = msg
-      logger:error("[GitAdapter] " .. bs.err)
-    end
-  end
-
-  if vim.fn.executable(git_cmd[1]) ~= 1 then
-    return err(fmt("Configured `git_cmd` is not executable: '%s'", git_cmd[1]))
-  end
+  local err = VCSAdapter.bootstrap_preamble(bs, git_cmd, "GitAdapter")
+  if not err then return end
 
   local out = utils.job(utils.flatten({ git_cmd, "version" }))
   bs.version_string = out[1] and out[1]:match("git version (%S+)") or nil

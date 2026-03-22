@@ -57,6 +57,31 @@ function VCSAdapter.run_bootstrap()
   VCSAdapter.bootstrap.ok = false
 end
 
+---Common bootstrap preamble: marks bootstrap as started and checks the
+---configured command is executable. Returns the err reporting function on
+---success, or nil if the executable check failed.
+---@param bs vcs.adapter.VCSAdapter.Bootstrap
+---@param cmd string[]
+---@param adapter_name string
+---@return (fun(msg: string): nil)?
+function VCSAdapter.bootstrap_preamble(bs, cmd, adapter_name)
+  bs.done = true
+
+  local function err(msg)
+    if msg then
+      bs.err = msg
+      logger:error(fmt("[%s] %s", adapter_name, bs.err))
+    end
+  end
+
+  if vim.fn.executable(cmd[1]) ~= 1 then
+    err(fmt("Configured VCS command is not executable: '%s'", cmd[1]))
+    return nil
+  end
+
+  return err
+end
+
 ---@diagnostic disable: unused-local, missing-return
 
 ---@abstract
