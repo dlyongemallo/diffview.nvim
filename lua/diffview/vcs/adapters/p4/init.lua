@@ -43,22 +43,12 @@ P4Adapter.bootstrap = {
 }
 
 function P4Adapter.run_bootstrap()
-  local p4_cmd = config.get_config().p4_cmd -- Use p4_cmd from config
+  local p4_cmd = config.get_config().p4_cmd
   local bs = P4Adapter.bootstrap
-  bs.done = true
+  local err = VCSAdapter.bootstrap_preamble(bs, p4_cmd, "P4Adapter", "p4_cmd")
+  if not err then return end
 
-  local function err(msg)
-    if msg then
-      bs.err = msg
-      logger:error("[P4Adapter] " .. bs.err)
-    end
-  end
-
-  if vim.fn.executable(p4_cmd[1]) ~= 1 then
-    return err(fmt("Configured `p4_cmd` is not executable: '%s'", p4_cmd[1]))
-  end
-
-  -- Check if we can connect to the server using p4 info
+  -- Check if we can connect to the server using p4 info.
   local _, code, stderr = utils.job(utils.flatten({ p4_cmd, "info" }))
   if code ~= 0 then
       local err_msg = "Could not connect to Perforce server. Check P4PORT, P4USER, P4CLIENT settings."

@@ -45,18 +45,8 @@ HgAdapter.bootstrap = {
 function HgAdapter.run_bootstrap()
   local hg_cmd = config.get_config().hg_cmd
   local bs = HgAdapter.bootstrap
-  bs.done = true
-
-  local function err(msg)
-    if msg then
-      bs.err = msg
-      logger:error("[HgAdapter] " .. bs.err)
-    end
-  end
-
-  if vim.fn.executable(hg_cmd[1]) ~= 1 then
-    return err(fmt("Configured `hg_cmd` is not executable: '%s'", hg_cmd[1]))
-  end
+  local err = VCSAdapter.bootstrap_preamble(bs, hg_cmd, "HgAdapter", "hg_cmd")
+  if not err then return end
 
   local out = utils.job(utils.flatten({ hg_cmd, "version" }))
   local line = out[1]
