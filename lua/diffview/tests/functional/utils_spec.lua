@@ -155,3 +155,45 @@ describe("diffview.utils.set_win_buf", function()
     if not ok then error(err) end
   end)
 end)
+
+describe("diffview.utils.str_pad", function()
+  it("left-aligns by default (pads on the right)", function()
+    eq("hi   ", utils.str_pad("hi", 5))
+  end)
+
+  it("right-aligns (pads on the left)", function()
+    eq("   hi", utils.str_pad("hi", 5, nil, "right"))
+  end)
+
+  it("center-aligns (pads both sides)", function()
+    eq(" hi  ", utils.str_pad("hi", 5, nil, "center"))
+  end)
+
+  it("returns the string unchanged when already at min_size", function()
+    eq("hello", utils.str_pad("hello", 5))
+    eq("hello", utils.str_pad("hello", 3))
+  end)
+
+  it("supports a custom fill character", function()
+    eq("hi...", utils.str_pad("hi", 5, "."))
+    eq("...hi", utils.str_pad("hi", 5, ".", "right"))
+  end)
+
+  it("coerces non-string input via tostring", function()
+    eq("42  ", utils.str_pad(42, 4))
+  end)
+end)
+
+describe("diffview.utils.str_pad wrappers", function()
+  it("str_right_pad pads on the right", function()
+    eq("ab   ", utils.str_right_pad("ab", 5))
+  end)
+
+  it("str_left_pad pads on the left", function()
+    eq("   ab", utils.str_left_pad("ab", 5))
+  end)
+
+  it("str_center_pad pads both sides", function()
+    eq(" ab  ", utils.str_center_pad("ab", 5))
+  end)
+end)
