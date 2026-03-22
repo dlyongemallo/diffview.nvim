@@ -74,96 +74,52 @@ local function prepare_goto_file()
   end
 end
 
-function M.goto_file()
+---@param opts { cmd: string, target_tab?: boolean, target_tab_cmd?: string }
+local function open_goto_file(opts)
   local file, cursor = prepare_goto_file()
+  if not file then return end
 
-  if file then
+  local fpath = vim.fn.fnameescape(file.absolute_path)
+
+  if opts.target_tab then
     local target_tab = lib.get_prev_non_view_tabpage()
-
     if target_tab then
       api.nvim_set_current_tabpage(target_tab)
       file.layout:restore_winopts()
-      vim.cmd("sp " .. vim.fn.fnameescape(file.absolute_path))
-    else
-      vim.cmd("tabnew")
-      local temp_bufnr = api.nvim_get_current_buf()
-      file.layout:restore_winopts()
-      vim.cmd("keepalt edit " .. vim.fn.fnameescape(file.absolute_path))
-
-      if temp_bufnr ~= api.nvim_get_current_buf() then
-        api.nvim_buf_delete(temp_bufnr, { force = true })
-      end
-    end
-
-    if cursor then
-      utils.set_cursor(0, unpack(cursor))
+      vim.cmd(opts.target_tab_cmd .. " " .. fpath)
+      if cursor then utils.set_cursor(0, unpack(cursor)) end
+      return
     end
   end
+
+  vim.cmd(opts.cmd)
+  local temp_bufnr = api.nvim_get_current_buf()
+  file.layout:restore_winopts()
+  vim.cmd("keepalt edit " .. fpath)
+
+  if temp_bufnr ~= api.nvim_get_current_buf() then
+    api.nvim_buf_delete(temp_bufnr, { force = true })
+  end
+
+  if cursor then
+    utils.set_cursor(0, unpack(cursor))
+  end
+end
+
+function M.goto_file()
+  open_goto_file({ target_tab = true, target_tab_cmd = "sp", cmd = "tabnew" })
 end
 
 function M.goto_file_edit()
-  local file, cursor = prepare_goto_file()
-
-  if file then
-    local target_tab = lib.get_prev_non_view_tabpage()
-
-    if target_tab then
-      api.nvim_set_current_tabpage(target_tab)
-      file.layout:restore_winopts()
-      vim.cmd("edit " .. vim.fn.fnameescape(file.absolute_path))
-    else
-      vim.cmd("tabnew")
-      local temp_bufnr = api.nvim_get_current_buf()
-      file.layout:restore_winopts()
-      vim.cmd("keepalt edit " .. vim.fn.fnameescape(file.absolute_path))
-
-      if temp_bufnr ~= api.nvim_get_current_buf() then
-        api.nvim_buf_delete(temp_bufnr, { force = true })
-      end
-    end
-
-    if cursor then
-      utils.set_cursor(0, unpack(cursor))
-    end
-  end
+  open_goto_file({ target_tab = true, target_tab_cmd = "edit", cmd = "tabnew" })
 end
 
 function M.goto_file_split()
-  local file, cursor = prepare_goto_file()
-
-  if file then
-    vim.cmd("new")
-    local temp_bufnr = api.nvim_get_current_buf()
-    file.layout:restore_winopts()
-    vim.cmd("keepalt edit " .. vim.fn.fnameescape(file.absolute_path))
-
-    if temp_bufnr ~= api.nvim_get_current_buf() then
-      api.nvim_buf_delete(temp_bufnr, { force = true })
-    end
-
-    if cursor then
-      utils.set_cursor(0, unpack(cursor))
-    end
-  end
+  open_goto_file({ cmd = "new" })
 end
 
 function M.goto_file_tab()
-  local file, cursor = prepare_goto_file()
-
-  if file then
-    vim.cmd("tabnew")
-    local temp_bufnr = api.nvim_get_current_buf()
-    file.layout:restore_winopts()
-    vim.cmd("keepalt edit " .. vim.fn.fnameescape(file.absolute_path))
-
-    if temp_bufnr ~= api.nvim_get_current_buf() then
-      api.nvim_buf_delete(temp_bufnr, { force = true })
-    end
-
-    if cursor then
-      utils.set_cursor(0, unpack(cursor))
-    end
-  end
+  open_goto_file({ cmd = "tabnew" })
 end
 
 ---Open the current file with the system default application.
