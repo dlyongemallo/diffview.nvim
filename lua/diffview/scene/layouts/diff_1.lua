@@ -10,8 +10,6 @@ local Rev = lazy.access("diffview.vcs.rev", "Rev") ---@type Rev|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
 local Window = lazy.access("diffview.scene.window", "Window") ---@type Window|LazyModule
 
-local api = vim.api
-local await = async.await
 
 local M = {}
 
@@ -39,32 +37,9 @@ end
 ---@param self Diff1
 ---@param pivot integer?
 Diff1.create = async.void(function(self, pivot)
-  self:create_pre()
-  local curwin
-
-  pivot = pivot or self:find_pivot()
-  assert(api.nvim_win_is_valid(pivot), "Layout creation requires a valid window pivot!")
-
-  for _, win in ipairs(self.windows) do
-    if win.id ~= pivot then
-      win:close(true)
-    end
-  end
-
-  api.nvim_win_call(pivot, function()
-    vim.cmd("aboveleft vsp")
-    curwin = api.nvim_get_current_win()
-
-    if self.b then
-      self.b:set_id(curwin)
-    else
-      self.b = Window({ id = curwin })
-    end
-  end)
-
-  api.nvim_win_close(pivot, true)
-  self.windows = { self.b }
-  await(self:create_post())
+  self:create_wins(pivot, {
+    { "b", "aboveleft vsp" },
+  }, { "b" })
 end)
 
 function Diff1:get_main_win()

@@ -1,9 +1,14 @@
 local Diff1 = require("diffview.scene.layouts.diff_1").Diff1
 local Diff2 = require("diffview.scene.layouts.diff_2").Diff2
+local Diff2Hor = require("diffview.scene.layouts.diff_2_hor").Diff2Hor
+local Diff2Ver = require("diffview.scene.layouts.diff_2_ver").Diff2Ver
 local Diff3 = require("diffview.scene.layouts.diff_3").Diff3
+local Diff3Mixed = require("diffview.scene.layouts.diff_3_mixed").Diff3Mixed
 local Diff4 = require("diffview.scene.layouts.diff_4").Diff4
+local Diff4Mixed = require("diffview.scene.layouts.diff_4_mixed").Diff4Mixed
 local Layout = require("diffview.scene.layout").Layout
 local RevType = require("diffview.vcs.rev").RevType
+local async = require("diffview.async")
 local helpers = require("diffview.tests.helpers")
 
 local eq = helpers.eq
@@ -68,4 +73,193 @@ describe("diffview.layout.set_file_for", function()
     eq(file, stored_file)
     eq("a", file.symbol)
   end)
+end)
+
+describe("diffview.layout.create_wins", function()
+  -- Mock vim.api and vim.cmd to verify the window creation sequence
+  -- without needing real Neovim windows.
+  local orig_win_call, orig_win_close, orig_get_cur_win, orig_win_is_valid, orig_cmd
+
+  local cmds_recorded
+  local next_win_id
+
+  before_each(function()
+    orig_win_call = vim.api.nvim_win_call
+    orig_win_close = vim.api.nvim_win_close
+    orig_get_cur_win = vim.api.nvim_get_current_win
+    orig_win_is_valid = vim.api.nvim_win_is_valid
+    orig_cmd = vim.cmd
+
+    cmds_recorded = {}
+    next_win_id = 100
+
+    -- Execute the callback immediately (simulating nvim_win_call).
+    vim.api.nvim_win_call = function(_, fn) fn() end
+    vim.api.nvim_win_close = function() end
+    vim.api.nvim_get_current_win = function()
+      next_win_id = next_win_id + 1
+      return next_win_id
+    end
+    vim.api.nvim_win_is_valid = function() return true end
+    vim.cmd = function(c) cmds_recorded[#cmds_recorded + 1] = c end
+  end)
+
+  after_each(function()
+    vim.api.nvim_win_call = orig_win_call
+    vim.api.nvim_win_close = orig_win_close
+    vim.api.nvim_get_current_win = orig_get_cur_win
+    vim.api.nvim_win_is_valid = orig_win_is_valid
+    vim.cmd = orig_cmd
+  end)
+
+  ---Build a mock layout with the given symbol-keyed windows.
+  ---@param syms string[]
+  ---@return table
+  local function mock_layout(syms)
+    local layout = {
+      windows = {},
+      state = {},
+      create_pre = function(self) self.state.save_equalalways = vim.o.equalalways end,
+      create_post = async.void(function() end),
+      find_pivot = function() return 1 end,
+    }
+    for _, s in ipairs(syms) do
+      layout[s] = { set_id = function(self, id) self.id = id end, close = function() end, id = nil }
+    end
+    setmetatable(layout, { __index = Layout })
+    return layout
+  end
+
+  it("issues vim.cmd calls in spec order", helpers.async_test(function()
+    local layout = mock_layout({ "b", "a", "c" })
+    async.await(layout:create_wins(1, {
+      { "b", "belowright sp" },
+      { "a", "aboveleft vsp" },
+      { "c", "aboveleft vsp" },
+    }, { "a", "b", "c" }))
+
+    eq({ "belowright sp", "aboveleft vsp", "aboveleft vsp" }, cmds_recorded)
+  end))
+
+  it("builds self.windows in win_order, not creation order", helpers.async_test(function()
+    local layout = mock_layout({ "a", "b", "c" })
+    async.await(layout:create_wins(1, {
+      { "b", "belowright sp" },
+      { "a", "aboveleft vsp" },
+      { "c", "aboveleft vsp" },
+    }, { "a", "b", "c" }))
+
+    -- Windows should be ordered a, b, c regardless of creation order.
+    eq(layout.a, layout.windows[1])
+    eq(layout.b, layout.windows[2])
+    eq(layout.c, layout.windows[3])
+  end))
+
+  it("Diff4Mixed uses different creation order than window order", helpers.async_test(function()
+    -- Diff4Mixed creates b, a, d, c but windows should be a, b, c, d.
+    local layout = mock_layout({ "a", "b", "c", "d" })
+    async.await(layout:create_wins(1, {
+      { "b", "belowright sp" },
+      { "a", "aboveleft vsp" },
+      { "d", "aboveleft vsp" },
+      { "c", "aboveleft vsp" },
+    }, { "a", "b", "c", "d" }))
+
+    eq(layout.a, layout.windows[1])
+    eq(layout.b, layout.windows[2])
+    eq(layout.c, layout.windows[3])
+    eq(layout.d, layout.windows[4])
+    eq({ "belowright sp", "aboveleft vsp", "aboveleft vsp", "aboveleft vsp" }, cmds_recorded)
+  end))
+
+  it("assigns window IDs from nvim_get_current_win to each symbol", helpers.async_test(function()
+    local layout = mock_layout({ "a", "b" })
+    async.await(layout:create_wins(1, {
+      { "a", "aboveleft vsp" },
+      { "b", "aboveleft vsp" },
+    }, { "a", "b" }))
+
+    -- IDs should be 101 and 102 (starting from next_win_id = 100 + 1).
+    eq(101, layout.a.id)
+    eq(102, layout.b.id)
+  end))
+end)
+
+describe("diffview.layout.create_wins integration", function()
+  -- Test with real Neovim windows to verify splits actually work.
+
+  ---Build a layout that stubs create_post so we only test window creation.
+  local function real_layout(syms)
+    local layout = {
+      windows = {},
+      state = {},
+      emitter = require("diffview.events").EventEmitter(),
+    }
+    setmetatable(layout, { __index = Layout })
+    for _, s in ipairs(syms) do
+      layout[s] = { set_id = function(self, id) self.id = id end, close = function() end, id = nil }
+    end
+    -- Override create_post to skip file loading (no files to open).
+    layout.create_post = async.void(function(self)
+      vim.opt.equalalways = self.state.save_equalalways
+    end)
+    return layout
+  end
+
+  it("creates real window splits and produces valid window IDs", helpers.async_test(function()
+    local pivot = vim.api.nvim_get_current_win()
+    assert.True(vim.api.nvim_win_is_valid(pivot))
+
+    local layout = real_layout({ "a", "b" })
+    async.await(layout:create_wins(pivot, {
+      { "a", "aboveleft vsp" },
+      { "b", "aboveleft vsp" },
+    }, { "a", "b" }))
+
+    -- The pivot should have been closed.
+    assert.False(vim.api.nvim_win_is_valid(pivot))
+
+    -- Both windows should be valid and distinct.
+    assert.True(vim.api.nvim_win_is_valid(layout.a.id))
+    assert.True(vim.api.nvim_win_is_valid(layout.b.id))
+    assert.are_not.equal(layout.a.id, layout.b.id)
+
+    eq(layout.a, layout.windows[1])
+    eq(layout.b, layout.windows[2])
+    eq(2, #layout.windows)
+
+    -- Clean up: close extra windows, keeping at least one.
+    local wins = vim.api.nvim_tabpage_list_wins(0)
+    for i = 2, #wins do
+      if vim.api.nvim_win_is_valid(wins[i]) then
+        vim.api.nvim_win_close(wins[i], true)
+      end
+    end
+  end))
+
+  it("Diff3Mixed-style split: creation order differs from window order", helpers.async_test(function()
+    local pivot = vim.api.nvim_get_current_win()
+    local layout = real_layout({ "a", "b", "c" })
+
+    async.await(layout:create_wins(pivot, {
+      { "b", "belowright sp" },
+      { "a", "aboveleft vsp" },
+      { "c", "aboveleft vsp" },
+    }, { "a", "b", "c" }))
+
+    for _, sym in ipairs({ "a", "b", "c" }) do
+      assert.True(vim.api.nvim_win_is_valid(layout[sym].id), sym .. " should be valid")
+    end
+
+    eq(layout.a, layout.windows[1])
+    eq(layout.b, layout.windows[2])
+    eq(layout.c, layout.windows[3])
+
+    local wins = vim.api.nvim_tabpage_list_wins(0)
+    for i = 2, #wins do
+      if vim.api.nvim_win_is_valid(wins[i]) then
+        vim.api.nvim_win_close(wins[i], true)
+      end
+    end
+  end))
 end)
