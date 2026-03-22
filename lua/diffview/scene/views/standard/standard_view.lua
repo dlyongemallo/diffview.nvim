@@ -121,6 +121,26 @@ function StandardView:use_layout(layout)
   end
 end
 
+---Save the panel cursor position for later restoration.
+function StandardView:save_panel_cursor()
+  if self.panel:is_open() then
+    local winid = self.panel.winid
+    if winid and api.nvim_win_is_valid(winid) then
+      self.panel_cursor = api.nvim_win_get_cursor(winid)
+    end
+  end
+end
+
+---Restore the panel cursor position saved by save_panel_cursor.
+function StandardView:restore_panel_cursor()
+  if self.panel_cursor and self.panel:is_open() then
+    local winid = self.panel.winid
+    if winid and api.nvim_win_is_valid(winid) then
+      pcall(api.nvim_win_set_cursor, winid, self.panel_cursor)
+    end
+  end
+end
+
 ---@param self StandardView
 ---@param entry FileEntry
 StandardView.use_entry = async.void(function(self, entry)
