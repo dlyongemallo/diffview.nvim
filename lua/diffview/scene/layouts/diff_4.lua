@@ -1,4 +1,3 @@
-local async = require("diffview.async")
 local lazy = require("diffview.lazy")
 local Window = require("diffview.scene.window").Window
 local Layout = require("diffview.scene.layout").Layout
@@ -7,8 +6,6 @@ local oop = require("diffview.oop")
 local Diff1 = lazy.access("diffview.scene.layouts.diff_1", "Diff1") ---@type Diff1|LazyModule
 local Diff3 = lazy.access("diffview.scene.layouts.diff_3", "Diff3") ---@type Diff3|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
-
-local await = async.await
 
 local M = {}
 
@@ -31,6 +28,8 @@ local Diff4 = oop.create_class("Diff4", Layout)
 ---@field winid_c integer
 ---@field winid_d integer
 
+Diff4.symbols = { "a", "b", "c", "d" }
+
 ---@param opt Diff4.init.Opt
 function Diff4:init(opt)
   self:super()
@@ -40,46 +39,6 @@ function Diff4:init(opt)
   self.d = Window({ file = opt.d, id = opt.winid_d })
   self:use_windows(self.a, self.b, self.c, self.d)
 end
-
----@param file vcs.File
-function Diff4:set_file_a(file)
-  self.a:set_file(file)
-  file.symbol = "a"
-end
-
----@param file vcs.File
-function Diff4:set_file_b(file)
-  self.b:set_file(file)
-  file.symbol = "b"
-end
-
----@param file vcs.File
-function Diff4:set_file_c(file)
-  self.c:set_file(file)
-  file.symbol = "c"
-end
-
----@param file vcs.File
-function Diff4:set_file_d(file)
-  self.d:set_file(file)
-  file.symbol = "d"
-end
-
----@param self Diff4
----@param entry FileEntry
-Diff4.use_entry = async.void(function(self, entry)
-  local layout = entry.layout --[[@as Diff4 ]]
-  assert(layout:instanceof(Diff4))
-
-  self:set_file_a(layout.a.file)
-  self:set_file_b(layout.b.file)
-  self:set_file_c(layout.c.file)
-  self:set_file_d(layout.d.file)
-
-  if self:is_valid() then
-    await(self:open_files())
-  end
-end)
 
 function Diff4:get_main_win()
   return self.b

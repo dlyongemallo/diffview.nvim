@@ -26,6 +26,7 @@ local Diff1 = oop.create_class("Diff1", Layout)
 ---@field winid_b integer
 
 Diff1.name = "diff1_plain"
+Diff1.symbols = { "b" }
 
 ---@param opt Diff1.init.Opt
 function Diff1:init(opt)
@@ -64,25 +65,6 @@ Diff1.create = async.void(function(self, pivot)
   api.nvim_win_close(pivot, true)
   self.windows = { self.b }
   await(self:create_post())
-end)
-
----@param file vcs.File
-function Diff1:set_file_b(file)
-  self.b:set_file(file)
-  file.symbol = "b"
-end
-
----@param self Diff1
----@param entry FileEntry
-Diff1.use_entry = async.void(function(self, entry)
-  local layout = entry.layout --[[@as Diff1 ]]
-  assert(layout:instanceof(Diff1))
-
-  self:set_file_b(layout.b.file)
-
-  if self:is_valid() then
-    await(self:open_files())
-  end
 end)
 
 function Diff1:get_main_win()

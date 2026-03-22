@@ -39,10 +39,30 @@ Layout.create = async.void(function(self, pivot) oop.abstract_stub() end)
 ---@return boolean
 function Layout.should_null(rev, status, sym) oop.abstract_stub() end
 
----@abstract
+---Set a file on the window for the given symbol and tag it.
+---@param sym string
+---@param file vcs.File
+function Layout:set_file_for(sym, file)
+  self[sym]:set_file(file)
+  file.symbol = sym
+end
+
+---Default use_entry: copy files from the entry's layout using self.symbols.
+---Subclasses may override if they need different behaviour.
 ---@param self Layout
 ---@param entry FileEntry
-Layout.use_entry = async.void(function(self, entry) oop.abstract_stub() end)
+Layout.use_entry = async.void(function(self, entry)
+  local layout = entry.layout
+  assert(layout:instanceof(self.class))
+
+  for _, sym in ipairs(self.symbols) do
+    self:set_file_for(sym, layout[sym].file)
+  end
+
+  if self:is_valid() then
+    await(self:open_files())
+  end
+end)
 
 ---@abstract
 ---@return Window
