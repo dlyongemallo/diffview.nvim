@@ -170,6 +170,7 @@ describe("diffview.vcs.adapters.jj", function()
       local tmpfile = vim.fn.tempname()
       vim.fn.writefile({ "hello" }, tmpfile)
       vim.api.nvim_buf_set_name(bufnr, tmpfile)
+      vim.bo[bufnr].swapfile = false
       vim.fn.bufload(bufnr)
 
       -- Should not error.
