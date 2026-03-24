@@ -612,7 +612,20 @@ PathLib.mkdir = async.void(function(self, path, opt)
     local stat = self:stat(cur_path)
 
     if not stat then
-      handle_uv_err(uv.fs_mkdir(cur_path, mode))
+      -- Tolerate EEXIST only when the existing entry is a directory:
+      -- another async caller may have created the directory between
+      -- our stat() and mkdir() calls.
+      local ok, err, err_msg = uv.fs_mkdir(cur_path, mode)
+      if not ok then
+        if err == "EEXIST" then
+          local restat = self:stat(cur_path)
+          if not restat or restat.type ~= "directory" then
+            error(fmt("Cannot create directory '%s': Not a directory", cur_path))
+          end
+        else
+          handle_uv_err(ok, err, err_msg)
+        end
+      end
     else
       if stat.type ~= "directory" then
         error(fmt("Cannot create directory '%s': Not a directory", cur_path))
