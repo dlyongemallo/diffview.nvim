@@ -169,8 +169,8 @@ describe("diffview.vcs.adapters.jj", function()
       -- has a real name and checktime doesn't error.
       local tmpfile = vim.fn.tempname()
       vim.fn.writefile({ "hello" }, tmpfile)
-      vim.api.nvim_buf_set_name(bufnr, tmpfile)
       vim.bo[bufnr].swapfile = false
+      vim.api.nvim_buf_set_name(bufnr, tmpfile)
       vim.fn.bufload(bufnr)
 
       -- Should not error.
