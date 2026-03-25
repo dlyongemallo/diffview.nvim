@@ -655,13 +655,22 @@ DiffView.update_files = debounce.debounce_trailing(
       or not (self.cur_layout and self.cur_layout:is_valid() and self.cur_layout:is_files_loaded())
 
     if needs_reopen then
-      self:set_file(next_file, false, not self.initialized or nil)
+      local focus = false
+      if not self.initialized then
+        local conf = config.get_config()
+        local view_conf = next_file and next_file.kind == "conflicting"
+          and conf.view.merge_tool
+          or conf.view.default
+        focus = view_conf.focus_diff
+      end
+      self:set_file(next_file, focus, not self.initialized or nil)
     end
 
     -- Position cursor at the requested row on first open.
     if not self.initialized and self.options.selected_row then
       local win = self.cur_layout:get_main_win()
       if win and api.nvim_win_is_valid(win.id) then
+        api.nvim_set_current_win(win.id)
         local buf = api.nvim_win_get_buf(win.id)
         local line_count = api.nvim_buf_line_count(buf)
         local row = math.min(self.options.selected_row, line_count)

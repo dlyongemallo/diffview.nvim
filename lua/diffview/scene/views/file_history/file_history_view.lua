@@ -56,7 +56,8 @@ function FileHistoryView:post_open()
       if status < JobStatus.ERROR and not self.panel:cur_file() then
         local file = self.panel:next_file()
         if file then
-          self:set_file(file)
+          local conf = config.get_config()
+          self:set_file(file, conf.view.file_history.focus_diff)
         end
       end
     end)
