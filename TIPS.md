@@ -31,6 +31,16 @@ Common questions, useful patterns, and known compatibility issues.
 - **Trace line evolution:**
   - Visual select lines, then `:'<,'>DiffviewFileHistory --follow`
   - Or for single line: `:.DiffviewFileHistory --follow`
+- **Diff two arbitrary files (like `vimdiff`):**
+  - `:DiffviewDiffFiles file1 file2`
+  - This works without a VCS repository.
+  - To use it as a replacement for `nvim -d`, add a shell function:
+    ```bash
+    dvdiff() {
+      nvim -c "DiffviewDiffFiles ${1// /\\ } ${2// /\\ }"
+    }
+    ```
+  - Then run `dvdiff file1 file2` from the command line.
 
 ## Understanding Revision Arguments
 

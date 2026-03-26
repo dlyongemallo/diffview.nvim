@@ -138,6 +138,14 @@ function M.file_history(range, args)
   end
 end
 
+---@param args string[]
+function M.diff_files(args)
+  local view = lib.diffview_diff_files(args)
+  if view then
+    view:open()
+  end
+end
+
 function M.close(tabpage)
   if tabpage then
     vim.schedule(function()
@@ -228,6 +236,10 @@ M.completers = {
     end
 
     return candidates
+  end,
+  ---@param ctx CmdLineContext
+  DiffviewDiffFiles = function(ctx)
+    return vim.fn.getcompletion(ctx.arg_lead, "file", 0)
   end,
   ---@param ctx CmdLineContext
   DiffviewFileHistory = function(ctx)
