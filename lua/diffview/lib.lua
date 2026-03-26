@@ -4,7 +4,9 @@ local lazy = require("diffview.lazy")
 require("diffview.bootstrap")
 
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
+local FileDiffView = lazy.access("diffview.scene.views.diff.file_diff_view", "FileDiffView") ---@type FileDiffView|LazyModule
 local FileHistoryView = lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
+local NullAdapter = lazy.access("diffview.vcs.adapters.null", "NullAdapter") ---@type NullAdapter|LazyModule
 local StandardView = lazy.access("diffview.scene.views.standard.standard_view", "StandardView") ---@type StandardView|LazyModule
 local arg_parser = lazy.require("diffview.arg_parser") ---@module "diffview.arg_parser"
 local config = lazy.require("diffview.config") ---@module "diffview.config"
@@ -13,6 +15,7 @@ local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local api = vim.api
 local logger = DiffviewGlobal.logger
+local pl = lazy.access(utils, "path") ---@type PathLib
 
 local M = {}
 
@@ -135,6 +138,49 @@ function M.file_history(range, args)
 
   table.insert(M.views, v)
   logger:debug("FileHistoryView instantiation successful!")
+
+  return v
+end
+
+---@param args string[]
+function M.diffview_diff_files(args)
+  local argo = arg_parser.parse(args)
+
+  logger:info("[command call] :DiffviewDiffFiles " .. table.concat(args, " "))
+
+  if #argo.args ~= 2 then
+    utils.err("DiffviewDiffFiles requires exactly two file paths.")
+    return
+  end
+
+  local left_path = pl:absolute(pl:vim_expand(argo.args[1]))
+  local right_path = pl:absolute(pl:vim_expand(argo.args[2]))
+
+  if vim.fn.filereadable(left_path) ~= 1 then
+    utils.err(("File not readable: %s"):format(left_path))
+    return
+  end
+
+  if vim.fn.filereadable(right_path) ~= 1 then
+    utils.err(("File not readable: %s"):format(right_path))
+    return
+  end
+
+  local toplevel = pl:parent(left_path) or "."
+  local adapter = NullAdapter.create({ toplevel = toplevel })
+
+  local v = FileDiffView({
+    adapter = adapter,
+    left_path = left_path,
+    right_path = right_path,
+  })
+
+  if not v:is_valid() then
+    return
+  end
+
+  table.insert(M.views, v)
+  logger:debug("FileDiffView instantiation successful!")
 
   return v
 end

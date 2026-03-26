@@ -172,6 +172,29 @@ COMMANDS                                        *diffview-commands*
                         file. If the path doesn't match any of the files in
                         the initial set of files, this option does nothing.
 
+                                                *:DiffviewDiffFiles*
+:DiffviewDiffFiles {file1} {file2}
+
+        Opens a new Diffview comparing two arbitrary files on disk.
+        Unlike |:DiffviewOpen|, this command does not require a VCS repository.
+        Both {file1} and {file2} must be readable file paths.
+
+        This is useful for comparing files outside of version control, or for
+        ad-hoc comparisons within a repository (e.g. comparing a file against
+        a `.orig` backup created during a merge).
+
+        Examples: >vim
+
+            " Compare two files:
+            :DiffviewDiffFiles path/to/file1 path/to/file2
+
+            " Compare a file against a merge backup:
+            :DiffviewDiffFiles src/main.lua src/main.lua.orig
+
+            " Paths with spaces (use backslash escaping):
+            :DiffviewDiffFiles path/to/my\ file.txt path/to/other\ file.txt
+<
+
                                                 *:DiffviewFileHistory*
 :[range]DiffviewFileHistory [paths] [options]
 
