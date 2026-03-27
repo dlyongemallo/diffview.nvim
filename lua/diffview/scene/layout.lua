@@ -3,6 +3,7 @@ local lazy = require("diffview.lazy")
 local oop = require("diffview.oop")
 
 local EventEmitter = lazy.access("diffview.events", "EventEmitter") ---@type EventEmitter|LazyModule
+local Window = lazy.access("diffview.scene.window", "Window") ---@type Window|LazyModule
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local api = vim.api
@@ -39,10 +40,30 @@ Layout.create = async.void(function(self, pivot) oop.abstract_stub() end)
 ---@return boolean
 function Layout.should_null(rev, status, sym) oop.abstract_stub() end
 
----@abstract
+---Set a file on the window for the given symbol and tag it.
+---@param sym string
+---@param file vcs.File
+function Layout:set_file_for(sym, file)
+  self[sym]:set_file(file)
+  file.symbol = sym
+end
+
+---Default use_entry: copy files from the entry's layout using self.symbols.
+---Subclasses may override if they need different behaviour.
 ---@param self Layout
 ---@param entry FileEntry
-Layout.use_entry = async.void(function(self, entry) oop.abstract_stub() end)
+Layout.use_entry = async.void(function(self, entry)
+  local layout = entry.layout
+  assert(layout:instanceof(self.class))
+
+  for _, sym in ipairs(self.symbols) do
+    self:set_file_for(sym, layout[sym].file)
+  end
+
+  if self:is_valid() then
+    await(self:open_files())
+  end
+end)
 
 ---@abstract
 ---@return Window
@@ -79,6 +100,40 @@ Layout.create_post = async.void(function(self)
   self:open_null()
   await(self:open_files())
   vim.opt.equalalways = self.state.save_equalalways
+end)
+
+---Common window-creation helper used by concrete layout subclasses.
+---@param self Layout
+---@param pivot integer? Window ID to build the layout around.
+---@param win_specs { [1]: string, [2]: string }[] Ordered list of { symbol, vim_cmd } pairs describing the windows to create.
+---@param win_order string[] Symbols in the desired final self.windows order.
+Layout.create_wins = async.void(function(self, pivot, win_specs, win_order)
+  self:create_pre()
+  pivot = pivot or self:find_pivot()
+  assert(api.nvim_win_is_valid(pivot), "Layout creation requires a valid window pivot!")
+
+  for _, win in ipairs(self.windows) do
+    if win.id ~= pivot then
+      win:close(true)
+    end
+  end
+
+  for _, spec in ipairs(win_specs) do
+    local sym, cmd = spec[1], spec[2]
+    api.nvim_win_call(pivot, function()
+      vim.cmd(cmd)
+      local curwin = api.nvim_get_current_win()
+      if self[sym] then
+        self[sym]:set_id(curwin)
+      else
+        self[sym] = Window({ id = curwin })
+      end
+    end)
+  end
+
+  api.nvim_win_close(pivot, true)
+  self.windows = vim.tbl_map(function(s) return self[s] end, win_order)
+  await(self:create_post())
 end)
 
 ---Check if any of the windows in the lauout are focused.
