@@ -179,45 +179,41 @@ end
 ---@param s string
 ---@param min_size integer
 ---@param fill string? (default: `" "`)
-function M.str_right_pad(s, min_size, fill)
+---@param align ("left"|"right"|"center")? (default: `"left"`)
+function M.str_pad(s, min_size, fill, align)
   s = tostring(s)
   if #s >= min_size then
     return s
   end
-  if not fill then
-    fill = " "
+  fill = fill or " "
+  local pad = math.ceil((min_size - #s) / #fill)
+  if align == "center" then
+    return string.rep(fill, math.floor(pad / 2)) .. s .. string.rep(fill, math.ceil(pad / 2))
+  elseif align == "right" then
+    return string.rep(fill, math.ceil(pad)) .. s
   end
-  return s .. string.rep(fill, math.ceil((min_size - #s) / #fill))
+  return s .. string.rep(fill, math.ceil(pad))
+end
+
+---@param s string
+---@param min_size integer
+---@param fill string? (default: `" "`)
+function M.str_right_pad(s, min_size, fill)
+  return M.str_pad(s, min_size, fill, "left")
 end
 
 ---@param s string
 ---@param min_size integer
 ---@param fill string? (default: `" "`)
 function M.str_left_pad(s, min_size, fill)
-  s = tostring(s)
-  if #s >= min_size then
-    return s
-  end
-  if not fill then
-    fill = " "
-  end
-  return string.rep(fill, math.ceil((min_size - #s) / #fill)) .. s
+  return M.str_pad(s, min_size, fill, "right")
 end
 
 ---@param s string
 ---@param min_size integer
----@param fill string? (default: ` `)
+---@param fill string? (default: `" "`)
 function M.str_center_pad(s, min_size, fill)
-  s = tostring(s)
-  if #s >= min_size then
-    return s
-  end
-  if not fill then
-    fill = " "
-  end
-  local left_len = math.floor((min_size - #s) / #fill / 2)
-  local right_len = math.ceil((min_size - #s) / #fill / 2)
-  return string.rep(fill, left_len) .. s .. string.rep(fill, right_len)
+  return M.str_pad(s, min_size, fill, "center")
 end
 
 ---Truncate the tail of a given string with ellipsis if it exceeds the max
