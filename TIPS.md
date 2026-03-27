@@ -16,6 +16,18 @@ Common questions, useful patterns, and known compatibility issues.
 - **Compare against merge-base (PR-style diff):**
   - `DiffviewOpen origin/main...HEAD --merge-base`
   - Shows only changes introduced since branching.
+- **Use as a merge tool from the command line:**
+  - `:DiffviewOpen` automatically detects conflicts during a merge, rebase,
+    cherry-pick, or revert, so it can replace `git mergetool`. Add a git alias
+    for convenience:
+    ```gitconfig
+    # In ~/.gitconfig:
+    [alias]
+        diffview = "!nvim -c DiffviewOpen"
+    ```
+  - Then run `git diffview` after a conflicted merge or rebase. Stage
+    resolved files with `-` in the file panel before quitting, or with
+    `git add` afterwards.
 - **Trace line evolution:**
   - Visual select lines, then `:'<,'>DiffviewFileHistory --follow`
   - Or for single line: `:.DiffviewFileHistory --follow`
