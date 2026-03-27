@@ -330,7 +330,7 @@ function GitAdapter:get_merge_context()
 
   ret.theirs = code ~= 0 and {} or {
     hash = out[1],
-    rev_names = out[2],
+    ref_names = out[2],
   }
 
   out, code = self:exec_sync({ "merge-base", "HEAD", their_head }, self.ctx.toplevel)
