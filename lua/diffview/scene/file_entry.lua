@@ -198,7 +198,7 @@ function FileEntry:update_merge_context(ctx)
 
   local layout = self.layout --[[@as Diff4 ]]
 
-  if layout.a then
+  if layout.a and ctx.ours.hash then
     layout.a.file.winbar = (" OURS (Current changes) %s %s"):format(
       (ctx.ours.hash):sub(1, 10),
       ctx.ours.ref_names and ("(" .. ctx.ours.ref_names .. ")") or ""
@@ -209,14 +209,14 @@ function FileEntry:update_merge_context(ctx)
     layout.b.file.winbar = " LOCAL (Working tree)"
   end
 
-  if layout.c then
+  if layout.c and ctx.theirs.hash then
     layout.c.file.winbar = (" THEIRS (Incoming changes) %s %s"):format(
       (ctx.theirs.hash):sub(1, 10),
       ctx.theirs.ref_names and ("(" .. ctx.theirs.ref_names .. ")") or ""
     )
   end
 
-  if layout.d then
+  if layout.d and ctx.base.hash then
     layout.d.file.winbar = (" BASE (Common ancestor) %s %s"):format(
       (ctx.base.hash):sub(1, 10),
       ctx.base.ref_names and ("(" .. ctx.base.ref_names .. ")") or ""
