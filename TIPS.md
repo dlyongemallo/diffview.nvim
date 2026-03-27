@@ -133,7 +133,7 @@ known issues and workarounds:
     Two steps are needed. First, configure treesitter-context to disable
     itself for diffview buffers using the `on_attach` callback:
     ```lua
-    require('treesitter-context').setup({
+    require("treesitter-context").setup({
       on_attach = function(buf)
         return not vim.b[buf].ts_context_disable
       end,
@@ -145,9 +145,13 @@ known issues and workarounds:
     `BufReadPost`), so working-tree files that were loaded before diffview
     opened would otherwise keep context enabled:
     ```lua
-    require('diffview').setup({
+    require("diffview").setup({
       hooks = {
-        diff_buf_win_enter = function(bufnr)
+        diff_buf_win_enter = function(bufnr, winid, ctx)
+          -- Re-trigger treesitter-context's on_attach evaluation.
+          -- The group name is an internal detail of nvim-treesitter-context
+          -- and may differ across versions; verify it matches your install
+          -- or omit it to fire all BufReadPost handlers.
           pcall(vim.api.nvim_exec_autocmds, "BufReadPost", {
             buffer = bufnr,
             group = "treesitter_context_update",
@@ -164,13 +168,13 @@ known issues and workarounds:
     ```
 
   - **[barbecue.nvim](https://github.com/utilyre/barbecue.nvim)** and other
-    winbar plugins: Unlike treesitter-context, barbecue re-sets the winbar
+    winbar plugins: Unlike treesitter-context, barbecue resets the winbar
     on every `CursorMoved` and `BufWinEnter`, so clearing it per-window is
     not sufficient. Instead, toggle barbecue's visibility using
     `view_enter`/`view_leave` hooks (these fire when switching to and from
     the diffview tab):
     ```lua
-    require('diffview').setup({
+    require("diffview").setup({
       hooks = {
         view_enter = function()
           pcall(function() require("barbecue.ui").toggle(false) end)
@@ -188,10 +192,10 @@ known issues and workarounds:
     content. This has been fixed by setting `foldlevel=99` by default.
   - If you still experience issues, you can manually set foldlevel in hooks:
     ```lua
-    require('diffview').setup({
+    require("diffview").setup({
       hooks = {
         diff_buf_win_enter = function(bufnr, winid, ctx)
-          if ctx.layout_name == 'diff2_horizontal' then
+          if ctx.layout_name == "diff2_horizontal" then
             vim.wo[winid].foldlevel = 99
           end
         end,
