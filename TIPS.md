@@ -113,16 +113,60 @@ known issues and workarounds:
     }
     ```
 
-- **[nvim-treesitter-context](https://github.com/nvim-treesitter/nvim-treesitter-context):**
-  - Context plugins that show code context at the top of windows can cause
-    visual scrollbind misalignment.
-  - **Workaround:** Configure the plugin to disable itself for diffview buffers
-    using the `on_attach` callback:
+- **Scrollbind misalignment with context or winbar plugins:**
+  - Plugins that add lines at the top of windows (code context, breadcrumbs)
+    cause the diff panes to fall out of visual sync.
+
+  - **[nvim-treesitter-context](https://github.com/nvim-treesitter/nvim-treesitter-context):**
+    Two steps are needed. First, configure treesitter-context to disable
+    itself for diffview buffers using the `on_attach` callback:
     ```lua
     require('treesitter-context').setup({
       on_attach = function(buf)
         return not vim.b[buf].ts_context_disable
       end,
+    })
+    ```
+    Then add diffview hooks to force treesitter-context to re-evaluate
+    `on_attach` at the right times. This is necessary because
+    treesitter-context only evaluates `on_attach` once per buffer (on
+    `BufReadPost`), so working-tree files that were loaded before diffview
+    opened would otherwise keep context enabled:
+    ```lua
+    require('diffview').setup({
+      hooks = {
+        diff_buf_win_enter = function(bufnr)
+          pcall(vim.api.nvim_exec_autocmds, "BufReadPost", {
+            buffer = bufnr,
+            group = "treesitter_context_update",
+          })
+        end,
+        view_closed = function()
+          local ok, tsc = pcall(require, "treesitter-context")
+          if ok and tsc.enabled() then
+            tsc.enable()
+          end
+        end,
+      },
+    })
+    ```
+
+  - **[barbecue.nvim](https://github.com/utilyre/barbecue.nvim)** and other
+    winbar plugins: Unlike treesitter-context, barbecue re-sets the winbar
+    on every `CursorMoved` and `BufWinEnter`, so clearing it per-window is
+    not sufficient. Instead, toggle barbecue's visibility using
+    `view_enter`/`view_leave` hooks (these fire when switching to and from
+    the diffview tab):
+    ```lua
+    require('diffview').setup({
+      hooks = {
+        view_enter = function()
+          pcall(function() require("barbecue.ui").toggle(false) end)
+        end,
+        view_leave = function()
+          pcall(function() require("barbecue.ui").toggle(true) end)
+        end,
+      },
     })
     ```
 
