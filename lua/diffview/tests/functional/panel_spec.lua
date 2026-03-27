@@ -585,4 +585,223 @@ describe("diffview.ui.panel", function()
       eq("src", dir_data._node.name)
     end)
   end)
+
+  describe("FilePanel update_components", function()
+    local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
+
+    ---Build a mock FileDict with named sub-lists.
+    local function make_files(conflicting, working, staged)
+      local files = { conflicting = conflicting or {}, working = working or {}, staged = staged or {} }
+      function files:iter()
+        local all = {}
+        for _, f in ipairs(self.conflicting) do all[#all + 1] = f end
+        for _, f in ipairs(self.working) do all[#all + 1] = f end
+        for _, f in ipairs(self.staged) do all[#all + 1] = f end
+        local i = 0
+        return function()
+          i = i + 1
+          if i <= #all then return i, all[i] end
+        end
+      end
+      function files:len() return #self.conflicting + #self.working + #self.staged end
+      return files
+    end
+
+    it("list mode builds file components from list entries", function()
+      local renderer = require("diffview.renderer")
+      local orig_create_cursor_constraint = renderer.create_cursor_constraint
+
+      local f1 = { path = "a.lua" }
+      local f2 = { path = "b.lua" }
+      local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
+      local panel = FilePanel(adapter, make_files({}, { f1, f2 }, {}), {})
+      panel.listing_style = "list"
+
+      -- Capture the schema passed to render_data:create_component.
+      local comp_schema
+      panel.render_data = {
+        create_component = function(_, schema)
+          comp_schema = schema
+          return {
+            conflicting = { files = { comp = {} } },
+            working = { files = { comp = {} } },
+            staged = { files = { comp = {} } },
+          }
+        end,
+      }
+      renderer.create_cursor_constraint = function() return function() end end
+
+      local ok, err = pcall(function()
+        panel:update_components()
+
+        -- The working section is the 3rd top-level entry; its files sub-entry
+        -- should contain the two file components built by build_file_list.
+        local working_section = comp_schema[3] -- { name="working", title, files, margin }
+        eq("working", working_section.name)
+        local working_files = working_section[2] -- the files component
+        eq("files", working_files.name)
+        eq(f1, working_files[1].context)
+        eq(f2, working_files[2].context)
+      end)
+
+      renderer.create_cursor_constraint = orig_create_cursor_constraint
+      if not ok then error(err) end
+    end)
+
+    it("tree mode calls update_statuses and create_comp_schema on each tree", function()
+      local renderer = require("diffview.renderer")
+      local orig_create_cursor_constraint = renderer.create_cursor_constraint
+
+      local statuses_updated = {}
+      local schemas_created = {}
+
+      local function mock_tree(name)
+        return {
+          update_statuses = function() statuses_updated[#statuses_updated + 1] = name end,
+          create_comp_schema = function(_, opts)
+            schemas_created[#schemas_created + 1] = { name = name, opts = opts }
+            return { { name = "directory", context = {} } }
+          end,
+        }
+      end
+
+      local files = {
+        conflicting = {}, working = {}, staged = {},
+        conflicting_tree = mock_tree("conflicting"),
+        working_tree = mock_tree("working"),
+        staged_tree = mock_tree("staged"),
+      }
+      function files:iter()
+        local i = 0
+        return function() i = i + 1 end
+      end
+      function files:len() return 0 end
+
+      local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
+      local panel = FilePanel(adapter, files, {})
+      panel.listing_style = "tree"
+      panel.tree_options = { flatten_dirs = true }
+      panel.render_data = {
+        create_component = function()
+          return {
+            conflicting = { files = { comp = {} } },
+            working = { files = { comp = {} } },
+            staged = { files = { comp = {} } },
+          }
+        end,
+      }
+      renderer.create_cursor_constraint = function() return function() end end
+
+      local ok, err = pcall(function()
+        panel:update_components()
+
+        eq(3, #statuses_updated)
+        eq("conflicting", statuses_updated[1])
+        eq("working", statuses_updated[2])
+        eq("staged", statuses_updated[3])
+
+        eq(3, #schemas_created)
+        for _, entry in ipairs(schemas_created) do
+          eq(true, entry.opts.flatten_dirs)
+        end
+      end)
+
+      renderer.create_cursor_constraint = orig_create_cursor_constraint
+      if not ok then error(err) end
+    end)
+  end)
+
+  describe("Panel apply_keymaps", function()
+    local Panel = require("diffview.ui.panel").Panel
+
+    it("calls vim.keymap.set for each mapping with merged options", function()
+      local orig_keymap_set = vim.keymap.set
+      local config = require("diffview.config")
+      local orig_get_config = config.get_config
+
+      local keymap_calls = {}
+      local panel = Panel({ bufname = "TestKeymaps", config = Panel.default_config_split })
+      panel.bufid = vim.api.nvim_create_buf(false, true)
+
+      local ok, err = pcall(function()
+        vim.keymap.set = function(mode, lhs, rhs, opts)
+          keymap_calls[#keymap_calls + 1] = { mode = mode, lhs = lhs, opts = opts }
+        end
+
+        config.get_config = function()
+          return {
+            keymaps = {
+              test_panel = {
+                { "n", "q", function() end, { desc = "Quit" } },
+                { "n", "j", function() end },
+              },
+            },
+          }
+        end
+
+        local conf = panel:apply_keymaps("test_panel", { nowait = true })
+
+        -- Should have called vim.keymap.set twice.
+        eq(2, #keymap_calls)
+
+        -- First mapping should have desc merged in plus nowait.
+        eq("n", keymap_calls[1].mode)
+        eq("q", keymap_calls[1].lhs)
+        eq(true, keymap_calls[1].opts.silent)
+        eq(true, keymap_calls[1].opts.nowait)
+        eq("Quit", keymap_calls[1].opts.desc)
+
+        -- Second mapping has no desc in the mapping, nowait from defaults.
+        eq(true, keymap_calls[2].opts.nowait)
+
+        -- Returns the config.
+        assert.is_table(conf)
+        assert.is_table(conf.keymaps)
+      end)
+
+      pcall(vim.api.nvim_buf_delete, panel.bufid, { force = true })
+      vim.keymap.set = orig_keymap_set
+      config.get_config = orig_get_config
+      if not ok then error(err) end
+    end)
+
+    it("apply_keymaps without extra_defaults omits nowait", function()
+      local orig_keymap_set = vim.keymap.set
+      local config = require("diffview.config")
+      local orig_get_config = config.get_config
+
+      local keymap_calls = {}
+      local panel = Panel({ bufname = "TestNoWait", config = Panel.default_config_split })
+      panel.bufid = vim.api.nvim_create_buf(false, true)
+
+      local ok, err = pcall(function()
+        vim.keymap.set = function(mode, lhs, rhs, opts)
+          keymap_calls[#keymap_calls + 1] = { opts = opts }
+        end
+
+        config.get_config = function()
+          return {
+            keymaps = {
+              option_panel = {
+                { "n", "<tab>", function() end, { desc = "Select" } },
+              },
+            },
+          }
+        end
+
+        -- FHOptionPanel calls apply_keymaps("option_panel") without extra defaults.
+        panel:apply_keymaps("option_panel")
+
+        eq(1, #keymap_calls)
+        eq(true, keymap_calls[1].opts.silent)
+        -- nowait should NOT be present since no extra_defaults were passed.
+        eq(nil, keymap_calls[1].opts.nowait)
+      end)
+
+      pcall(vim.api.nvim_buf_delete, panel.bufid, { force = true })
+      vim.keymap.set = orig_keymap_set
+      config.get_config = orig_get_config
+      if not ok then error(err) end
+    end)
+  end)
 end)

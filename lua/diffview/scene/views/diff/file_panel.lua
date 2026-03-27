@@ -80,16 +80,30 @@ function FilePanel:open()
 end
 
 function FilePanel:setup_buffer()
-  local conf = config.get_config()
-
-  local default_opt = { silent = true, nowait = true, buffer = self.bufid }
-  for _, mapping in ipairs(conf.keymaps.file_panel) do
-    local opt = vim.tbl_extend("force", default_opt, mapping[4] or {}, { buffer = self.bufid })
-    vim.keymap.set(mapping[1], mapping[2], mapping[3], opt)
-  end
-
+  local conf = self:apply_keymaps("file_panel", { nowait = true })
   local help_keymap = config.find_help_keymap(conf.keymaps.file_panel)
   if help_keymap then self.help_mapping = help_keymap[2] end
+end
+
+---@param files FileEntry[]
+---@return table
+local function build_file_list(files)
+  local comp = { name = "files" }
+  for _, file in ipairs(files) do
+    comp[#comp + 1] = { name = "file", context = file }
+  end
+  return comp
+end
+
+---@param tree any
+---@param tree_options table
+---@return table
+local function build_file_tree(tree, tree_options)
+  tree:update_statuses()
+  return utils.tbl_merge(
+    { name = "files" },
+    tree:create_comp_schema({ flatten_dirs = tree_options.flatten_dirs })
+  )
 end
 
 function FilePanel:update_components()
@@ -98,56 +112,13 @@ function FilePanel:update_components()
   local staged_files
 
   if self.listing_style == "list" then
-    conflicting_files = { name = "files" }
-    working_files = { name = "files" }
-    staged_files = { name = "files" }
-
-    for _, file in ipairs(self.files.conflicting) do
-      table.insert(conflicting_files, {
-        name = "file",
-        context = file,
-      })
-    end
-
-    for _, file in ipairs(self.files.working) do
-      table.insert(working_files, {
-        name = "file",
-        context = file,
-      })
-    end
-
-    for _, file in ipairs(self.files.staged) do
-      table.insert(staged_files, {
-        name = "file",
-        context = file,
-      })
-    end
-
+    conflicting_files = build_file_list(self.files.conflicting)
+    working_files = build_file_list(self.files.working)
+    staged_files = build_file_list(self.files.staged)
   elseif self.listing_style == "tree" then
-    self.files.conflicting_tree:update_statuses()
-    self.files.working_tree:update_statuses()
-    self.files.staged_tree:update_statuses()
-
-    conflicting_files = utils.tbl_merge(
-      { name = "files" },
-      self.files.conflicting_tree:create_comp_schema({
-        flatten_dirs = self.tree_options.flatten_dirs,
-      })
-    )
-
-    working_files = utils.tbl_merge(
-      { name = "files" },
-      self.files.working_tree:create_comp_schema({
-        flatten_dirs = self.tree_options.flatten_dirs,
-      })
-    )
-
-    staged_files = utils.tbl_merge(
-      { name = "files" },
-      self.files.staged_tree:create_comp_schema({
-        flatten_dirs = self.tree_options.flatten_dirs,
-      })
-    )
+    conflicting_files = build_file_tree(self.files.conflicting_tree, self.tree_options)
+    working_files = build_file_tree(self.files.working_tree, self.tree_options)
+    staged_files = build_file_tree(self.files.staged_tree, self.tree_options)
   end
 
   ---@type CompStruct
