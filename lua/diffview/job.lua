@@ -3,6 +3,7 @@ local oop = require("diffview.oop")
 local async = require("diffview.async")
 local lazy = require("diffview.lazy")
 
+local job_utils = require("diffview.job_utils")
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local await = async.await
@@ -94,24 +95,8 @@ function Job:init(opt)
   self._done = false
   self._retry_count = 0
 
-  self.log_opt = vim.tbl_extend("keep", opt.log_opt or {}, {
-    func = "debug",
-    no_stdout = true,
-    debuginfo = debug.getinfo(3, "Sl"),
-  })
-
-  if opt.fail_cond then
-    if type(opt.fail_cond) == "string" then
-      self.check_status = Job.FAIL_COND[opt.fail_cond]
-      assert(self.check_status, fmt("Unknown fail condition: '%s'", opt.fail_cond))
-    elseif type(opt.fail_cond) == "function" then
-      self.check_status = opt.fail_cond
-    else
-      error("Invalid fail condition: " .. vim.inspect(opt.fail_cond))
-    end
-  else
-    self.check_status = Job.FAIL_COND.non_zero
-  end
+  self.log_opt = job_utils.default_log_opt(opt.log_opt, 4)
+  self.check_status = job_utils.resolve_fail_cond(opt.fail_cond, Job.FAIL_COND)
 
   if opt.on_stdout then self:on_stdout(opt.on_stdout) end
   if opt.on_stderr then self:on_stderr(opt.on_stderr) end
