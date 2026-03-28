@@ -30,6 +30,14 @@ Supported VCS (at least one required):
 {
     "dlyongemallo/diffview.nvim",
     version = "*",
+    -- optional: lazy-load on command
+    -- cmd = {
+    --     "DiffviewOpen",
+    --     "DiffviewToggle",
+    --     "DiffviewFileHistory",
+    --     "DiffviewDiffFiles",
+    --     "DiffviewLog",
+    -- },
 }
 ```
 
@@ -44,6 +52,7 @@ Plug 'dlyongemallo/diffview.nvim'
 :DiffviewOpen              " Diff working tree against index
 :DiffviewFileHistory %     " History for the current file
 :DiffviewFileHistory       " History for the whole repo
+:DiffviewDiffFiles a b     " Diff two arbitrary files
 :DiffviewClose             " Close the current diffview
 ```
 
@@ -75,6 +84,7 @@ and committing workflows.
 |---|---|
 | `:DiffviewOpen [rev] [options] [ -- {paths...}]` | Open a diff view |
 | `:DiffviewFileHistory [paths] [options]` | Browse file/commit history |
+| `:DiffviewDiffFiles {file1} {file2}` | Diff two arbitrary files |
 | `:DiffviewClose` | Close the current diffview |
 | `:DiffviewToggleFiles` | Toggle the file panel |
 | `:DiffviewFocusFiles` | Bring focus to the file panel |
