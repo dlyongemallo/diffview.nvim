@@ -33,18 +33,8 @@ JjAdapter.bootstrap = {
 function JjAdapter.run_bootstrap()
   local jj_cmd = config.get_config().jj_cmd
   local bs = JjAdapter.bootstrap
-  bs.done = true
-
-  local function err(msg)
-    if msg then
-      bs.err = msg
-      logger:error("[JjAdapter] " .. bs.err)
-    end
-  end
-
-  if vim.fn.executable(jj_cmd[1]) ~= 1 then
-    return err(fmt("Configured `jj_cmd` is not executable: '%s'", jj_cmd[1]))
-  end
+  local err = VCSAdapter.bootstrap_preamble(bs, jj_cmd, "JjAdapter", "jj_cmd")
+  if not err then return end
 
   local out = utils.job(utils.flatten({ jj_cmd, "--version" }))
   bs.version_string = out[1] and out[1]:match("jj (%S+)") or nil
