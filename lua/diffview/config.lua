@@ -127,16 +127,19 @@ M.defaults = {
       layout = "diff2_horizontal",
       disable_diagnostics = false,
       winbar_info = false,
+      focus_diff = false,
     },
     merge_tool = {
       layout = "diff3_horizontal",
       disable_diagnostics = true,
       winbar_info = true,
+      focus_diff = false,
     },
     file_history = {
       layout = "diff2_horizontal",
       disable_diagnostics = false,
       winbar_info = false,
+      focus_diff = false,
     },
     -- Layouts to cycle through with `cycle_layout` action.
     cycle_layouts = {
