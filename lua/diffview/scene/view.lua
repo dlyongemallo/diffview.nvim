@@ -149,7 +149,10 @@ function View:close()
     end
 
     local pagenr = api.nvim_tabpage_get_number(self.tabpage)
-    vim.cmd("tabclose " .. pagenr)
+    local ok, err = pcall(vim.cmd, "tabclose " .. pagenr)
+    if not ok and type(err) == "string" and err:match("E445") then
+      vim.cmd("tabclose! " .. pagenr)
+    end
   end
 
   DiffviewGlobal.emitter:emit("view_closed", self)
