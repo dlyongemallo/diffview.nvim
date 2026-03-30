@@ -270,6 +270,40 @@ describe("panel_render", function()
   end)
 
   -- -----------------------------------------------------------------------
+  -- folder_trailing_slash (commit 685fb58)
+  -- -----------------------------------------------------------------------
+
+  describe("folder_trailing_slash option", function()
+    it("renders folder name with trailing slash when enabled", function()
+      local conf = config.get_config()
+      conf.file_panel.tree_options.folder_trailing_slash = true
+      config.setup(conf)
+
+      local comp = make_comp()
+      local tree_options = config.get_config().file_panel.tree_options
+      comp:add_text("src" .. (tree_options.folder_trailing_slash and "/" or ""), "DiffviewFolderName")
+
+      eq("src/", comp:segments_by_hl("DiffviewFolderName")[1])
+    end)
+
+    it("renders folder name without trailing slash when disabled", function()
+      local conf = config.get_config()
+      conf.file_panel.tree_options.folder_trailing_slash = false
+      config.setup(conf)
+
+      local comp = make_comp()
+      local tree_options = config.get_config().file_panel.tree_options
+      comp:add_text("src" .. (tree_options.folder_trailing_slash and "/" or ""), "DiffviewFolderName")
+
+      eq("src", comp:segments_by_hl("DiffviewFolderName")[1])
+    end)
+
+    it("defaults to true", function()
+      eq(true, config.get_config().file_panel.tree_options.folder_trailing_slash)
+    end)
+  end)
+
+  -- -----------------------------------------------------------------------
   -- Loading indicator (commit 5f1603a)
   -- -----------------------------------------------------------------------
 

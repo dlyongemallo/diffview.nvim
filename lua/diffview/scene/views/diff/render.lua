@@ -161,28 +161,34 @@ local function render_file_tree_recurse(conf, panel, depth, comp)
     "DiffviewFolderSign"
   )
 
-  dir:add_text(ctx.name .. "/", "DiffviewFolderName")
-  -- Show file count grouped by status when folder is collapsed.
+  local tree_options = conf.file_panel.tree_options
+  dir:add_text(ctx.name .. (tree_options.folder_trailing_slash and "/" or ""), "DiffviewFolderName")
+  -- Show file count when folder is collapsed.
   if ctx.collapsed and ctx._node then
-    local leaves = ctx._node:leaves()
-    local status_counts = {}
-    for _, node in ipairs(leaves) do
-      local s = node.data.status or "?"
-      status_counts[s] = (status_counts[s] or 0) + 1
-    end
-
-    -- Sort status letters for consistent display order.
-    local statuses = vim.tbl_keys(status_counts)
-    table.sort(statuses)
-
-    dir:add_text(" (", "DiffviewDim1")
-    for i, s in ipairs(statuses) do
-      if i > 1 then
-        dir:add_text(" ", "DiffviewDim1")
+    if tree_options.folder_count_style == "grouped" then
+      local leaves = ctx._node:leaves()
+      local status_counts = {}
+      for _, node in ipairs(leaves) do
+        local s = node.data.status or "?"
+        status_counts[s] = (status_counts[s] or 0) + 1
       end
-      dir:add_text(tostring(status_counts[s]) .. hl.get_status_icon(s), hl.get_git_hl(s))
+
+      -- Sort status letters for consistent display order.
+      local statuses = vim.tbl_keys(status_counts)
+      table.sort(statuses)
+
+      dir:add_text(" (", "DiffviewDim1")
+      for i, s in ipairs(statuses) do
+        if i > 1 then
+          dir:add_text(" ", "DiffviewDim1")
+        end
+        dir:add_text(tostring(status_counts[s]) .. hl.get_status_icon(s), hl.get_git_hl(s))
+      end
+      dir:add_text(")", "DiffviewDim1")
+    else
+      local file_count = #ctx._node:leaves()
+      dir:add_text(" (" .. file_count .. ")", "DiffviewDim1")
     end
-    dir:add_text(")", "DiffviewDim1")
   end
   dir:ln()
 
