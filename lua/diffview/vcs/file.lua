@@ -336,6 +336,27 @@ File.create_buffer = async.wrap(function(self, callback)
   vim.bo[self.bufnr].modifiable = true
   api.nvim_buf_set_lines(self.bufnr, 0, -1, false, lines)
 
+  -- Prevent LSP clients from attaching to diffview:// buffers. LSP servers
+  -- may not support the custom URI scheme, and the buffer content may be
+  -- from a different revision making LSP features incorrect or harmful.
+  api.nvim_create_autocmd("LspAttach", {
+    buffer = self.bufnr,
+    callback = function(ev)
+      local client_id = ev.data and ev.data.client_id
+      if not client_id then return end
+      vim.schedule(function()
+        if api.nvim_buf_is_valid(ev.buf) then
+          pcall(vim.lsp.buf_detach_client, ev.buf, client_id)
+        end
+      end)
+    end,
+  })
+
+  -- Disable auto-formatting. Diffview buffers contain committed or staged
+  -- content that should not be reformatted. The `autoformat` variable is
+  -- a common convention (LazyVim, conform.nvim, etc.).
+  vim.b[self.bufnr].autoformat = false
+
   api.nvim_buf_call(self.bufnr, function()
     vim.cmd("filetype detect")
   end)

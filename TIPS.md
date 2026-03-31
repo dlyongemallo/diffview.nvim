@@ -75,16 +75,16 @@ Common questions, useful patterns, and known compatibility issues.
     character/word-level diff highlights. See
     [Companion Plugins](README.md#companion-plugins) for setup details.
 
-## LSP Diagnostics in Diff Buffers
+## LSP and Formatting in Diff Buffers
 
-- Diagnostics only appear for the working tree (LOCAL) side of diffs.
-- When comparing commits (e.g., `DiffviewOpen main..HEAD`), neither side is the
-  working tree, so LSP won't attach to those buffers.
-- To see diagnostics, compare against the working tree: `DiffviewOpen main`
-  (not `main..HEAD`). The right side will show your current files with
-  diagnostics.
-- Inlay hints are automatically disabled for non-working-tree buffers to
-  prevent position mismatch errors.
+- LSP clients are automatically detached from non-working-tree diff buffers
+  (those with `diffview://` URIs). This prevents errors from LSP servers that
+  do not support the custom URI scheme, and avoids incorrect LSP features on
+  historical content.
+- Auto-formatting is disabled on these buffers (`vim.b.autoformat = false`).
+- Diagnostics and other LSP features only appear for the working tree (LOCAL)
+  side of diffs. To see them, compare against the working tree:
+  `DiffviewOpen main` (not `main..HEAD`).
 
 ## Neogit Integration
 
