@@ -111,9 +111,10 @@ require("diffview").setup({
 })
 ```
 
-If your leader key is `<space>`, the file panel's multi-file selection
-toggle (bound to `<space>` by default) will intercept the keystroke.
-Remap or disable the binding to avoid this:
+If your leader key is `<space>`, then while your cursor is in the file panel
+buffer the panel's multi-file selection toggle (bound to `<space>` by default)
+will intercept `<leader>` sequences there. Remap or disable this buffer-local
+binding to avoid that conflict:
 
 ```lua
 local actions = require("diffview.actions")

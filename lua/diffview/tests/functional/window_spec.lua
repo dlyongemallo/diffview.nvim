@@ -61,6 +61,115 @@ describe("diffview.scene.window", function()
     assert.False(show_called)
   end))
 
+  describe("_save_winopts global-only options", function()
+    -- The global_only_opts set (e.g., "scrollopt") must be read via vim.o
+    -- rather than vim.wo, because they are global-only and vim.wo would error.
+
+    it("reads global-only options from vim.o", function()
+      local adapter = mock_adapter()
+      local win, file = make_window(adapter)
+
+      -- Ensure the file has a winopts table that includes scrollopt.
+      file.winopts = {
+        scrollopt = { "ver", "hor", "jump" },
+        diff = true,
+      }
+
+      -- Make the buffer valid so _save_winopts proceeds.
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      file.bufnr = bufnr
+
+      -- Clear any prior store entry.
+      Window.winopt_store[bufnr] = nil
+
+      -- Record the current global scrollopt value for comparison.
+      local expected_scrollopt = vim.o.scrollopt
+
+      win:_save_winopts()
+
+      local store = Window.winopt_store[bufnr]
+      assert.is_not_nil(store)
+      assert.equals(expected_scrollopt, store.scrollopt)
+
+      -- Clean up.
+      Window.winopt_store[bufnr] = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("reads non-global options from vim.wo", function()
+      local adapter = mock_adapter()
+      local win, file = make_window(adapter)
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      file.bufnr = bufnr
+      Window.winopt_store[bufnr] = nil
+
+      -- Use only a window-local option.
+      file.winopts = { diff = true }
+
+      -- Set a known value via vim.wo so we can verify it is read from there.
+      local winid = win.id
+      local orig_diff = vim.wo[winid].diff
+      vim.wo[winid].diff = false
+
+      win:_save_winopts()
+
+      local store = Window.winopt_store[bufnr]
+      assert.is_not_nil(store)
+      assert.is_false(store.diff)
+
+      -- Restore mutated window option.
+      vim.wo[winid].diff = orig_diff
+      Window.winopt_store[bufnr] = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("does not overwrite an existing store entry", function()
+      local adapter = mock_adapter()
+      local win, file = make_window(adapter)
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      file.bufnr = bufnr
+
+      -- Pre-populate the store.
+      Window.winopt_store[bufnr] = { diff = true }
+
+      file.winopts = { diff = false, scrollopt = { "ver" } }
+      win:_save_winopts()
+
+      -- The store should be unchanged.
+      assert.is_true(Window.winopt_store[bufnr].diff)
+      assert.is_nil(Window.winopt_store[bufnr].scrollopt)
+
+      Window.winopt_store[bufnr] = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("handles winopts with only global-only options", function()
+      local adapter = mock_adapter()
+      local win, file = make_window(adapter)
+
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      file.bufnr = bufnr
+      Window.winopt_store[bufnr] = nil
+
+      -- Only scrollopt, no window-local options.
+      file.winopts = { scrollopt = { "ver", "hor" } }
+
+      local expected = vim.o.scrollopt
+      win:_save_winopts()
+
+      local store = Window.winopt_store[bufnr]
+      assert.is_not_nil(store)
+      assert.equals(expected, store.scrollopt)
+      -- No other keys should be present.
+      assert.is_nil(store.diff)
+
+      Window.winopt_store[bufnr] = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   it("load_file suppresses error when create_buffer is cancelled mid-async", helpers.async_test(function()
     local yield_signal = Signal("yield")
     local produce_data_started = Signal("produce_data_started")
