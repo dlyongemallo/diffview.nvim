@@ -107,6 +107,10 @@ local function build_file_tree(tree, tree_options)
 end
 
 function FilePanel:update_components()
+  if not self.render_data then
+    return
+  end
+
   local conflicting_files
   local working_files
   local staged_files
