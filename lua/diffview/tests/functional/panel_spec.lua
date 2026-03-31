@@ -804,4 +804,138 @@ describe("diffview.ui.panel", function()
       if not ok then error(err) end
     end)
   end)
+
+  describe("FilePanel show=false lifecycle", function()
+    local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
+
+    ---Build a mock FileDict with named sub-lists and an iter method.
+    local function make_files(conflicting, working, staged)
+      local files = { conflicting = conflicting or {}, working = working or {}, staged = staged or {} }
+      function files:iter()
+        local all = {}
+        for _, f in ipairs(self.conflicting) do all[#all + 1] = f end
+        for _, f in ipairs(self.working) do all[#all + 1] = f end
+        for _, f in ipairs(self.staged) do all[#all + 1] = f end
+        local i = 0
+        return function()
+          i = i + 1
+          if i <= #all then return i, all[i] end
+        end
+      end
+      function files:len() return #self.conflicting + #self.working + #self.staged end
+      function files:update_file_trees() end
+      return files
+    end
+
+    local function make_entry(path) return { path = path, set_active = function() end } end
+
+    local function make_panel(entries)
+      local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
+      local panel = FilePanel(adapter, make_files({}, entries or {}, {}), {})
+      panel.listing_style = "list"
+      return panel
+    end
+
+    -- When show=false, the panel is never opened so init_buffer is never
+    -- called and render_data stays nil. The update_files code path in
+    -- DiffView calls these methods unconditionally; none should error.
+
+    it("update_components is safe when render_data is nil", function()
+      local panel = make_panel()
+      eq(nil, panel.render_data)
+      assert.has_no.errors(function() panel:update_components() end)
+      eq(nil, panel.components)
+    end)
+
+    it("render is safe when render_data is nil", function()
+      local panel = make_panel()
+      eq(nil, panel.render_data)
+      assert.has_no.errors(function() panel:render() end)
+    end)
+
+    it("redraw is safe when render_data is nil", function()
+      local panel = make_panel()
+      eq(nil, panel.render_data)
+      assert.has_no.errors(function() panel:redraw() end)
+    end)
+
+    it("reconstrain_cursor is safe when panel is not open", function()
+      local panel = make_panel({ make_entry("a.lua") })
+      assert.falsy(panel:is_open())
+      assert.has_no.errors(function() panel:reconstrain_cursor() end)
+    end)
+
+    it("ordered_file_list works without components", function()
+      local f1 = make_entry("a.lua")
+      local f2 = make_entry("b.lua")
+      local panel = make_panel({ f1, f2 })
+      eq(nil, panel.components)
+      local list = panel:ordered_file_list()
+      eq(2, #list)
+      eq(f1, list[1])
+      eq(f2, list[2])
+    end)
+
+    it("next_file and set_cur_file work without components", function()
+      local f1 = make_entry("a.lua")
+      local f2 = make_entry("b.lua")
+      local panel = make_panel({ f1, f2 })
+      eq(nil, panel.components)
+      local file = panel:next_file()
+      eq(f1, file)
+      eq(f1, panel.cur_file)
+    end)
+
+    it("highlight_file is safe when panel is not open", function()
+      local f = make_entry("a.lua")
+      local panel = make_panel({ f })
+      assert.falsy(panel:is_open())
+      assert.has_no.errors(function() panel:highlight_file(f) end)
+    end)
+
+    it("toggling on after show=false initialises the panel fully", function()
+      local panel = make_panel({ make_entry("a.lua") })
+
+      -- Panel starts without a buffer or render_data.
+      eq(nil, panel.render_data)
+      assert.falsy(panel:buf_loaded())
+
+      -- toggle(true) calls focus() which calls open() -> init_buffer().
+      panel:toggle(true)
+
+      assert.truthy(panel:is_open())
+      assert.truthy(panel:buf_loaded())
+      assert.truthy(panel.render_data)
+      assert.truthy(panel.components)
+
+      panel:destroy()
+    end)
+
+    it("toggling off and back on preserves a working panel", function()
+      local panel = make_panel({ make_entry("a.lua") })
+
+      -- First toggle on.
+      panel:toggle(true)
+      assert.truthy(panel:is_open())
+      local bufid = panel.bufid
+
+      -- Toggle off.
+      panel:toggle(true)
+      assert.falsy(panel:is_open())
+
+      -- Toggle back on; buffer should be reused.
+      panel:toggle(true)
+      assert.truthy(panel:is_open())
+      eq(bufid, panel.bufid)
+      assert.truthy(panel.render_data)
+
+      panel:destroy()
+    end)
+
+    it("get_autosize_components returns nil when components are unset", function()
+      local panel = make_panel()
+      eq(nil, panel.components)
+      eq(nil, panel:get_autosize_components())
+    end)
+  end)
 end)
