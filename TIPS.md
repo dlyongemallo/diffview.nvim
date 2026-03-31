@@ -111,6 +111,23 @@ require("diffview").setup({
 })
 ```
 
+If your leader key is `<space>`, the file panel's multi-file selection
+toggle (bound to `<space>` by default) will intercept the keystroke.
+Remap or disable the binding to avoid this:
+
+```lua
+local actions = require("diffview.actions")
+require("diffview").setup({
+  keymaps = {
+    file_panel = {
+      { { "n", "x" }, "<space>", false },
+      { { "n", "x" }, "w", actions.toggle_select_entry,
+        { desc = "Toggle file selection" } },
+    },
+  },
+})
+```
+
 ## Platform Notes
 
 - **MSYS2/Cygwin on Windows:**
