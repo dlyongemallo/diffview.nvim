@@ -153,6 +153,10 @@ function FileHistoryPanel:setup_buffer()
 end
 
 function FileHistoryPanel:update_components()
+  if not self.render_data then
+    return
+  end
+
   self.render_data:destroy()
   if self.components then
     renderer.destroy_comp_struct(self.components)
