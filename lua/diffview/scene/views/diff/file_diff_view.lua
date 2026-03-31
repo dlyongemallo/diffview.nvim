@@ -1,6 +1,7 @@
 local lazy = require("diffview.lazy")
 local oop = require("diffview.oop")
 
+local Diff2Hor = lazy.access("diffview.scene.layouts.diff_2_hor", "Diff2Hor") ---@type Diff2Hor|LazyModule
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local FileEntry = lazy.access("diffview.scene.file_entry", "FileEntry") ---@type FileEntry|LazyModule
 local NullRev = lazy.access("diffview.vcs.adapters.null.rev", "NullRev") ---@type NullRev|LazyModule
@@ -42,9 +43,9 @@ function FileDiffView:init(opt)
   local right_name = pl:basename(self.right_path)
   self.panel.rev_pretty_name = fmt("%s \u{2194} %s", left_name, right_name)
 
-  -- Force a 2-way layout: FileDiffView only has two revs (a, b), so 3/4-way
-  -- layouts from user config would crash when loading missing rev slots.
-  local layout_class = FileDiffView.get_default_diff2()
+  -- Default to side-by-side: this is the most natural layout for comparing
+  -- two arbitrary files. Users can cycle layouts at runtime with g<C-x>.
+  local layout_class = Diff2Hor.__get()
 
   local entry = FileEntry.with_layout(layout_class, {
     adapter = self.adapter,

@@ -1,5 +1,6 @@
 local helpers = require("diffview.tests.helpers")
 local lib = require("diffview.lib")
+local Diff2Hor = require("diffview.scene.layouts.diff_2_hor").Diff2Hor
 local NullAdapter = require("diffview.vcs.adapters.null").NullAdapter
 local NullRev = require("diffview.vcs.adapters.null.rev").NullRev
 local FileDiffView = require("diffview.scene.views.diff.file_diff_view").FileDiffView
@@ -81,6 +82,18 @@ describe("diffview.scene.views.diff.file_diff_view", function()
       local entry = view.files.working[1]
       eq(RevType.LOCAL, entry.revs.a.type)
       eq(RevType.LOCAL, entry.revs.b.type)
+    end)
+
+    it("defaults to Diff2Hor layout", function()
+      local adapter = NullAdapter.create({ toplevel = "/tmp" })
+      local view = FileDiffView({
+        adapter = adapter,
+        left_path = left_path,
+        right_path = right_path,
+      })
+
+      local entry = view.files.working[1]
+      assert.True(entry.layout:instanceof(Diff2Hor))
     end)
 
     it("uses a NullAdapter", function()
