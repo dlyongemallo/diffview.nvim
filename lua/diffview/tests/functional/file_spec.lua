@@ -138,4 +138,62 @@ describe("diffview.vcs.file", function()
     assert.is_nil(file.bufnr)
     assert.is_false(vim.api.nvim_buf_is_valid(pre_cancel_bufnr))
   end))
+
+  describe("diffview:// buffer guards", function()
+    local file_counter = 0
+    local created_files = {}
+
+    ---Create a File with a COMMIT rev whose create_buffer succeeds.
+    ---Uses a unique path each time so buffers are not reused across tests.
+    ---@return vcs.File
+    local function make_commit_file()
+      file_counter = file_counter + 1
+
+      local adapter = {
+        ctx = {
+          toplevel = vim.uv.cwd(),
+          dir = vim.uv.cwd(),
+        },
+        is_binary = function()
+          return false
+        end,
+        show = async.wrap(function(_, _, _, callback)
+          callback(nil, { "line1", "line2" })
+        end),
+      }
+
+      local file = File({
+        adapter = adapter,
+        path = "test_guard_" .. file_counter .. ".txt",
+        kind = "working",
+        rev = GitRev(RevType.COMMIT, "abc1234"),
+      })
+      table.insert(created_files, file)
+      return file
+    end
+
+    after_each(function()
+      for _, file in ipairs(created_files) do
+        File.safe_delete_buf(file.bufnr)
+      end
+      created_files = {}
+    end)
+
+    it("sets autoformat=false on diffview:// buffers", helpers.async_test(function()
+      local file = make_commit_file()
+      async.await(file:create_buffer())
+
+      assert.is_not_nil(file.bufnr)
+      assert.is_false(vim.b[file.bufnr].autoformat)
+    end))
+
+    it("registers an LspAttach autocmd on diffview:// buffers", helpers.async_test(function()
+      local file = make_commit_file()
+      async.await(file:create_buffer())
+
+      assert.is_not_nil(file.bufnr)
+      local aus = vim.api.nvim_get_autocmds({ event = "LspAttach", buffer = file.bufnr })
+      assert.is_true(#aus > 0)
+    end))
+  end)
 end)
