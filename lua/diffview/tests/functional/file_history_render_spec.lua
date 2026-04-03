@@ -341,6 +341,69 @@ describe("file_history_render", function()
   end)
 
   -- -----------------------------------------------------------------------
+  -- subject_highlight (commit 685fb58)
+  -- -----------------------------------------------------------------------
+
+  describe("subject_highlight", function()
+    ---Replicate the subject highlight selection logic from render.lua.
+    ---@param conf table
+    ---@param entry table
+    ---@param is_selected boolean
+    ---@return string
+    local function resolve_subject_hl(conf, entry, is_selected)
+      if is_selected then
+        return "DiffviewFilePanelSelected"
+      elseif conf.file_history_panel.subject_highlight == "ref_aware" and entry.has_remote_ref then
+        return "DiffviewCommitRemoteRef"
+      elseif conf.file_history_panel.subject_highlight == "ref_aware" then
+        return "DiffviewCommitLocalOnly"
+      else
+        return "DiffviewFilePanelFileName"
+      end
+    end
+
+    it("uses DiffviewFilePanelFileName for 'plain' mode", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "plain"
+      config.setup(conf)
+
+      local entry = { has_remote_ref = true }
+      eq("DiffviewFilePanelFileName", resolve_subject_hl(config.get_config(), entry, false))
+    end)
+
+    it("uses DiffviewCommitRemoteRef for 'ref_aware' with remote ref", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "ref_aware"
+      config.setup(conf)
+
+      local entry = { has_remote_ref = true }
+      eq("DiffviewCommitRemoteRef", resolve_subject_hl(config.get_config(), entry, false))
+    end)
+
+    it("uses DiffviewCommitLocalOnly for 'ref_aware' without remote ref", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "ref_aware"
+      config.setup(conf)
+
+      local entry = { has_remote_ref = false }
+      eq("DiffviewCommitLocalOnly", resolve_subject_hl(config.get_config(), entry, false))
+    end)
+
+    it("uses DiffviewFilePanelSelected when entry is selected", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "ref_aware"
+      config.setup(conf)
+
+      local entry = { has_remote_ref = true }
+      eq("DiffviewFilePanelSelected", resolve_subject_hl(config.get_config(), entry, true))
+    end)
+
+    it("defaults to 'ref_aware'", function()
+      eq("ref_aware", config.get_config().file_history_panel.subject_highlight)
+    end)
+  end)
+
+  -- -----------------------------------------------------------------------
   -- date_format config default
   -- -----------------------------------------------------------------------
 
