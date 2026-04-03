@@ -314,7 +314,7 @@ File.create_buffer = async.wrap(function(self, callback)
   if self.rev.type == RevType.STAGE and self.rev.stage == 0 then
     self.blob_hash = self.adapter:file_blob_hash(self.path)
     bufopts.modifiable = true
-    bufopts.buftype = nil
+    bufopts.buftype = "acwrite"
     bufopts.undolevels = nil
     utils.tbl_set(File.index_bufmap, { self.adapter.ctx.toplevel, self.path }, self.bufnr)
 

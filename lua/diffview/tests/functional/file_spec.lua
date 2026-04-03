@@ -195,5 +195,42 @@ describe("diffview.vcs.file", function()
       local aus = vim.api.nvim_get_autocmds({ event = "LspAttach", buffer = file.bufnr })
       assert.is_true(#aus > 0)
     end))
+
+    it("sets buftype=acwrite on stage-0 diffview:// buffers", helpers.async_test(function()
+      file_counter = file_counter + 1
+
+      local adapter = {
+        ctx = {
+          toplevel = vim.uv.cwd(),
+          dir = vim.uv.cwd(),
+        },
+        is_binary = function()
+          return false
+        end,
+        show = async.wrap(function(_, _, _, callback)
+          callback(nil, { "line1", "line2" })
+        end),
+        file_blob_hash = function()
+          return "abcdef1234"
+        end,
+      }
+
+      local file = File({
+        adapter = adapter,
+        path = "test_guard_" .. file_counter .. ".c",
+        kind = "working",
+        rev = GitRev(RevType.STAGE, 0),
+      })
+      table.insert(created_files, file)
+
+      async.await(file:create_buffer())
+
+      assert.is_not_nil(file.bufnr)
+      -- Stage-0 buffers write via BufWriteCmd, so buftype must be "acwrite"
+      -- rather than "" to prevent LSP clients and plugins (e.g. LazyVim)
+      -- from treating them as normal files.
+      assert.equals("acwrite", vim.bo[file.bufnr].buftype)
+      assert.is_true(vim.bo[file.bufnr].modifiable)
+    end))
   end)
 end)
