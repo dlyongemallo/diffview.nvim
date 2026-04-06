@@ -72,8 +72,26 @@ Common questions, useful patterns, and known compatibility issues.
 - **VSCode-style character-level highlighting:**
   - Pair diffview with
     [diffchar.vim](https://github.com/rickhowe/diffchar.vim) for precise
-    character/word-level diff highlights. See
-    [Companion Plugins](README.md#companion-plugins) for setup details.
+    character/word-level diff highlights. You may want to enable visual
+    indicators next to deleted
+    characters, or disable diffchar's default keymaps (`<leader>g`,
+    `<leader>p`) if they conflict with your mappings:
+    ```lua
+    {
+      'rickhowe/diffchar.vim',
+      config = function()
+        -- Use bold/underline on adjacent chars instead of virtual blank columns.
+        vim.g.DiffDelPosVisible = 1
+
+        -- Disable diffchar default keymaps.
+        -- See: https://github.com/rickhowe/diffchar.vim/issues/21
+        vim.cmd([[
+          nmap <Leader>g <Nop>
+          nmap <Leader>p <Nop>
+        ]])
+      end,
+    }
+    ```
 
 ## LSP and Formatting in Diff Buffers
 
