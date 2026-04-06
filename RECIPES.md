@@ -42,6 +42,32 @@ restore the file to the state from the left side of the diff (key binding `X`
 from the file panel by default). The current state of the file is stored in the
 git object database, and a command is echoed that shows how to undo the change.
 
+## Hooks
+
+The `hooks` table allows you to define callbacks for various events emitted
+from Diffview. The available hooks are documented in detail in
+`:h diffview-config-hooks`. The hook events are also available as User
+autocommands. See `:h diffview-user-autocmds` for more details.
+
+Examples:
+
+```lua
+hooks = {
+  diff_buf_read = function(bufnr)
+    -- Change local options in diff buffers
+    vim.opt_local.wrap = false
+    vim.opt_local.list = false
+    vim.opt_local.colorcolumn = { 80 }
+  end,
+  view_opened = function(view)
+    print(
+      ("A new %s was opened on tab page %d!")
+      :format(view.class:name(), vim.api.nvim_tabpage_get_number(view.tabpage))
+    )
+  end,
+}
+```
+
 ## Configuration Recipes
 
 <details>

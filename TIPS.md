@@ -70,12 +70,18 @@ Common questions, useful patterns, and known compatibility issues.
   - Alternatives: `algorithm:patience` or `algorithm:minimal`
   - This affects how Neovim's built-in diff mode displays changes.
 - **VSCode-style character-level highlighting:**
-  - Pair diffview with
-    [diffchar.vim](https://github.com/rickhowe/diffchar.vim) for precise
-    character/word-level diff highlights. You may want to enable visual
-    indicators next to deleted
-    characters, or disable diffchar's default keymaps (`<leader>g`,
-    `<leader>p`) if they conflict with your mappings:
+  - [diffchar.vim](https://github.com/rickhowe/diffchar.vim) enhances diff
+    mode with precise character and word-level highlighting. It automatically
+    activates in diff mode, adding a second layer of highlights on top of
+    Neovim's built-in line-level `DiffChange` backgrounds. This gives
+    VSCode-style dual-layer highlighting: light backgrounds for changed lines
+    plus fine-grained highlights for the exact characters that differ.
+  - diffchar.vim works with diffview out of the box. Install the plugin and
+    open a diff -- no additional configuration is needed. You may want to
+    enable visual indicators next to deleted characters to get VSCode-style
+    character-level diffs, or disable diffchar's
+    default keymaps (`<leader>g`, `<leader>p`) if they conflict with your
+    mappings:
     ```lua
     {
       'rickhowe/diffchar.vim',
@@ -86,12 +92,17 @@ Common questions, useful patterns, and known compatibility issues.
         -- Disable diffchar default keymaps.
         -- See: https://github.com/rickhowe/diffchar.vim/issues/21
         vim.cmd([[
-          nmap <Leader>g <Nop>
-          nmap <Leader>p <Nop>
+          nmap <leader>g <Nop>
+          nmap <leader>p <Nop>
         ]])
       end,
     }
     ```
+  - diffchar supports multiple diff granularities via `g:DiffUnit`: `'Char'`
+    (character-level), `'Word1'` (words separated by non-word characters),
+    `'Word2'` (whitespace-delimited words), and custom delimiter patterns. It
+    also offers multi-colour matching via `g:DiffColors` to visually correlate
+    corresponding changed units across windows.
 
 ## LSP and Formatting in Diff Buffers
 
@@ -100,6 +111,8 @@ Common questions, useful patterns, and known compatibility issues.
   do not support the custom URI scheme, and avoids incorrect LSP features on
   historical content.
 - Auto-formatting is disabled on these buffers (`vim.b.autoformat = false`).
+- Inlay hints are automatically disabled for non-working-tree buffers to
+  prevent position mismatch errors.
 - Diagnostics and other LSP features only appear for the working tree (LOCAL)
   side of diffs. To see them, compare against the working tree:
   `DiffviewOpen main` (not `main..HEAD`).
@@ -109,7 +122,66 @@ Common questions, useful patterns, and known compatibility issues.
 - Configure [Neogit](https://github.com/NeogitOrg/neogit) with
   `integrations = { diffview = true }` for seamless integration.
 
-## Customizing Default Keymaps
+## Keymap Configuration
+
+The keymaps config is structured as a table with sub-tables for various
+different contexts where mappings can be declared. In these sub-tables
+key-value pairs are treated as the `{lhs}` and `{rhs}` of a normal mode
+mapping. The implementation uses `vim.keymap.set()` (which implies `noremap`),
+and all mappings use `silent`. In most contexts, `nowait` is also set. The
+`{rhs}` can be either a vim command in the form of a string, or a lua
+function:
+
+```lua
+  view = {
+    -- Vim command:
+    ["a"] = "<Cmd>echom 'foo'<CR>",
+    -- Lua function:
+    ["b"] = function() print("bar") end,
+  }
+```
+
+For more control (i.e. mappings for other modes), you can also define index
+values as list-like tables containing the arguments for `vim.keymap.set()`.
+This way you can also change all the `:map-arguments` with the only exception
+being the `buffer` field, as this will be overridden with the target buffer
+number:
+
+```lua
+view = {
+  -- Normal and visual mode mapping to vim command:
+  { { "n", "v" }, "<leader>a", "<Cmd>echom 'foo'<CR>", { silent = true } },
+  -- Visual mode mapping to lua function:
+  { "v", "<leader>b", function() print("bar") end, { nowait = true } },
+}
+```
+
+To disable any single mapping without disabling them all, set its `{rhs}` to
+`false`:
+
+```lua
+  view = {
+    -- Disable the default normal mode mapping for `<tab>`:
+    ["<tab>"] = false,
+    -- Disable the default visual mode mapping for `gf`:
+    { "x", "gf", false },
+  }
+```
+
+Most of the mapped file panel actions also work from the view if they are added
+to the view maps (and vice versa). The exception is for actions that only
+really make sense specifically in the file panel, such as `next_entry`,
+`prev_entry`. Actions such as `toggle_stage_entry` and `restore_entry` work
+just fine from the view. When invoked from the view, these will target the file
+currently open in the view rather than the file under the cursor in the file
+panel.
+
+**For more details on how to set mappings for other modes, actions, and more
+see:**
+- `:h diffview-config-keymaps`
+- `:h diffview-actions`
+
+### Customizing Default Keymaps
 
 The default keymaps (`<leader>e`, `<leader>b`, `<leader>c*`) may conflict
 with your configuration. Override them in your setup:
