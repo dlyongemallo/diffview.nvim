@@ -427,23 +427,35 @@ function FilePanel.selection_key(file)
   return file.kind .. ":" .. file.path
 end
 
+---Suppress selection-change notifications for the duration of `fn`, then
+---fire a single notification afterwards if any changes occurred.
+---@param fn fun()
+function FilePanel:batch_selection(fn)
+  self._suppress_notify = true
+  self._batch_changed = false
+  local ok, err = xpcall(fn, debug.traceback)
+  local changed = self._batch_changed
+  self._suppress_notify = false
+  self._batch_changed = false
+  if changed then
+    self:_notify_selection_changed()
+  end
+  if not ok then
+    error(err, 0)
+  end
+end
+
 ---Notify listeners that selections have changed.
 function FilePanel:_notify_selection_changed()
-  if self._suppress_notify then return end
+  if self._suppress_notify then
+    self._batch_changed = true
+    return
+  end
   if self.on_selection_changed then
     self.on_selection_changed(self.selected_files)
   end
 end
 
----Run a function that mutates selections, emitting a single notification
----at the end rather than one per mutation.
----@param fn fun()
-function FilePanel:batch_selection(fn)
-  self._suppress_notify = true
-  fn()
-  self._suppress_notify = false
-  self:_notify_selection_changed()
-end
 
 ---Select a file entry.
 ---@param file FileEntry
