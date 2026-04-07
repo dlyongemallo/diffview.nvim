@@ -76,7 +76,11 @@ and committing workflows.
   ![merge tool](https://user-images.githubusercontent.com/2786478/188286293-13bbf0ab-3595-425d-ba4a-12f514c17eb6.png)
 
 - **Staging** — Stage and unstage individual files or all changes from the
-  file panel (`-` / `s` / `S` / `U`).
+  file panel (`-` / `s` / `S` / `U`). You can stage individual hunks by
+  editing any buffer that represents the index (after running `:DiffviewOpen`
+  with no `[rev]` the entries under "Changes" will have the index buffer
+  on the left side, and the entries under "Staged changes" will have it on the
+  right side). Once you write to an index buffer the index will be updated.
 
 ## Commands
 
@@ -85,7 +89,7 @@ and committing workflows.
 | `:DiffviewOpen [rev] [options] [ -- {paths...}]` | Open a diff view |
 | `:DiffviewFileHistory [paths] [options]` | Browse file/commit history |
 | `:DiffviewDiffFiles {file1} {file2}` | Diff two arbitrary files |
-| `:DiffviewClose` | Close the current diffview |
+| `:DiffviewClose` | Close the current diffview. You can also use `:tabclose`. |
 | `:DiffviewToggleFiles` | Toggle the file panel |
 | `:DiffviewFocusFiles` | Bring focus to the file panel |
 | `:DiffviewRefresh` | Update stats and entries in the file list |
