@@ -113,6 +113,49 @@ Open with a symmetric range to see only the changes introduced by the branch:
 </details>
 
 <details>
+<summary><b>PR Review Progress Tracking</b></summary>
+
+Use file selections (`<Space>` key) to track which files you've reviewed.
+Selected files show a `■` indicator; directories show `■` when all
+files are selected or `▣` when some are.
+
+To persist your progress across Neovim restarts, enable
+`persist_selections`:
+
+```lua
+require("diffview").setup({
+  persist_selections = { enabled = true },
+})
+```
+
+The `DiffviewSelectionChanged` User autocmd fires whenever selections
+change, allowing external plugins to react:
+
+```lua
+-- Example: log selection changes (replace with your own integration).
+vim.api.nvim_create_autocmd("User", {
+  pattern = "DiffviewSelectionChanged",
+  callback = function()
+    local view = require("diffview.lib").get_current_view()
+    if not view then return end
+    local selected = view.panel:get_selected_files()
+    local paths = vim.tbl_map(function(f) return f.path end, selected)
+    vim.notify(
+      #paths > 0
+        and ("Reviewed: " .. table.concat(paths, ", "))
+        or "No files marked as reviewed"
+    )
+  end,
+})
+```
+
+This pattern works for integrating with any external review tool. When
+the tool's API supports marking files as viewed (e.g., GitLab, GitHub),
+the autocmd handler can sync the selection state.
+
+</details>
+
+<details>
 <summary><b>Better Diffs</b></summary>
 
 Enable enhanced highlighting and use the histogram diff algorithm for more
