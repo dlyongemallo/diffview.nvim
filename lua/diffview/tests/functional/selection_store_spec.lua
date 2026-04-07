@@ -148,6 +148,55 @@ describe("diffview.selection_store", function()
       eq(1, called)
     end)
 
+    it("batch_selection fires once after multiple mutations", function()
+      local a = { path = "a.lua", kind = "working" }
+      local b = { path = "b.lua", kind = "working" }
+      local panel = make_panel({ a, b })
+      local called = 0
+      panel.on_selection_changed = function() called = called + 1 end
+
+      panel:batch_selection(function()
+        panel:select_file(a)
+        panel:select_file(b)
+      end)
+      eq(1, called)
+    end)
+
+    it("batch_selection does not fire when nothing changed", function()
+      local a = { path = "a.lua", kind = "working" }
+      local panel = make_panel({ a })
+      local called = 0
+      panel.on_selection_changed = function() called = called + 1 end
+
+      panel:batch_selection(function()
+        -- No mutations inside the batch.
+      end)
+      eq(0, called)
+    end)
+
+    it("batch_selection restores state after error", function()
+      local a = { path = "a.lua", kind = "working" }
+      local panel = make_panel({ a })
+      local called = 0
+      panel.on_selection_changed = function() called = called + 1 end
+
+      -- Error inside batch: flags must be restored so future notifications work.
+      pcall(function()
+        panel:batch_selection(function()
+          panel:select_file(a)
+          error("boom")
+        end)
+      end)
+
+      -- The batch should still have notified for the mutation before the error.
+      eq(1, called)
+
+      -- Subsequent non-batched mutations must not be suppressed.
+      called = 0
+      panel:deselect_file(a)
+      eq(1, called)
+    end)
+
     it("fires on prune_selections only when entries are removed", function()
       local a = { path = "a.lua", kind = "working" }
       local b = { path = "b.lua", kind = "working" }
