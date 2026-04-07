@@ -601,6 +601,8 @@ function M.cycle_layout()
     return
   end
 
+  if not files then return end
+
   for _, entry in ipairs(files) do
     local cur_layout = entry.layout
     local next_layout = layouts[utils.vec_indexof(layouts, cur_layout.class) % #layouts + 1]

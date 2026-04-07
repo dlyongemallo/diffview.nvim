@@ -184,6 +184,16 @@ describe("diffview.actions.cycle_layout cycling logic", function()
     eq(0, #converted_layouts)
   end)
 
+  it("returns early when cur_entry is nil (empty diff)", function()
+    local view = mock_diff_view({}, nil)
+
+    stub(lib, "get_current_view", function() return view end)
+
+    -- Should not error despite files being nil.
+    actions.cycle_layout()
+    eq(0, #converted_layouts)
+  end)
+
   it("cycles from diff2_horizontal to diff2_vertical (default list)", function()
     local file = mock_file_entry(Diff2Hor)
     local view = mock_diff_view({ file }, file)
