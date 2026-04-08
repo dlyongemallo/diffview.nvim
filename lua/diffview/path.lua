@@ -12,9 +12,32 @@ local M = {}
 
 local is_windows = uv.os_uname().version:match("Windows")
 
-local function handle_uv_err(x, err, err_msg)
+---Extract the error code from a libuv error return.
+---
+---Older Neovim returns (nil, code, message); newer returns (nil, message, code).
+---This normalises both layouts to the bare error code (e.g. "EEXIST").
+---@param err string?
+---@param err_name string?
+---@return string?
+local function uv_err_code(err, err_name)
+  -- When the third value looks like a bare code, prefer it.
+  if err_name and err_name:match("^%u+$") then return err_name end
+  -- Otherwise fall back to the leading code in the second value.
+  if err then return err:match("^(%u+)") end
+  return nil
+end
+
+local function handle_uv_err(x, err, err_name)
   if not x then
-    error(err .. " " .. err_msg, 2)
+    -- Pick whichever value carries the full descriptive message.
+    local msg = err or err_name or "unknown uv error"
+    if err_name and #err_name > #msg then msg = err_name end
+
+    local code = uv_err_code(err, err_name)
+    if code and not msg:find(code, 1, true) then
+      msg = code .. ": " .. msg
+    end
+    error(msg, 2)
   end
 
   return x
@@ -617,7 +640,7 @@ PathLib.mkdir = async.void(function(self, path, opt)
       -- our stat() and mkdir() calls.
       local ok, err, err_msg = uv.fs_mkdir(cur_path, mode)
       if not ok then
-        if err == "EEXIST" then
+        if uv_err_code(err, err_msg) == "EEXIST" then
           local restat = self:stat(cur_path)
           if not restat or restat.type ~= "directory" then
             error(fmt("Cannot create directory '%s': Not a directory", cur_path))

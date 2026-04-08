@@ -136,10 +136,8 @@ change, allowing external plugins to react:
 vim.api.nvim_create_autocmd("User", {
   pattern = "DiffviewSelectionChanged",
   callback = function()
-    local view = require("diffview.lib").get_current_view()
-    if not view then return end
-    local selected = view.panel:get_selected_files()
-    local paths = vim.tbl_map(function(f) return f.path end, selected)
+    local sel = require("diffview.api").selections
+    local paths = sel.get_paths()
     vim.notify(
       #paths > 0
         and ("Reviewed: " .. table.concat(paths, ", "))
@@ -149,9 +147,32 @@ vim.api.nvim_create_autocmd("User", {
 })
 ```
 
-This pattern works for integrating with any external review tool. When
-the tool's API supports marking files as viewed (e.g., GitLab, GitHub),
-the autocmd handler can sync the selection state.
+The public selections API (see `:h diffview-selections-api`) provides
+stable functions for programmatic access:
+
+```lua
+local sel = require("diffview.api").selections
+
+sel.get()                 -- { { path = "...", kind = "working" }, ... }
+sel.get_paths()           -- { "src/a.lua", "src/b.lua" }
+sel.is_selected("a.lua")  -- true / false
+sel.select({ "a.lua" })   -- additive
+sel.deselect({ "a.lua" })
+sel.set({ "a.lua" })      -- replace entire selection
+sel.clear()
+sel.any()                 -- true if anything is selected
+sel.count()               -- number of selected files
+```
+
+This is useful for integrating with external review tools. For example,
+to save and restore selections across a diffview reopen:
+
+```lua
+local sel = require("diffview.api").selections
+local saved = sel.get_paths()
+-- ... close and reopen diffview ...
+sel.set(saved)
+```
 
 </details>
 
