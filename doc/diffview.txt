@@ -810,6 +810,17 @@ file_panel                                      *diffview-config-file_panel*
                 When `false`, marks only appear once at least one file
                 is selected. Default: `false`
 
+            {mark_placement} ("inline"|"sign_column")
+                Where to render selection marks. `"inline"` places
+                marks in the line text next to file names.
+                `"sign_column"` places marks in the sign column to
+                the left of the panel, avoiding any text alignment
+                shift when selections change. When any configured
+                selection sign character is wide (>= 2 display
+                cells, e.g. emoji), a padding space is automatically
+                added between the sign column and the file status
+                to prevent crowding. Default: `"inline"`
+
             {show_branch_name} (boolean)
                 Show branch name in the file panel header. Default: `false`
 

@@ -711,4 +711,468 @@ describe("panel_render", function()
       end)
     end)
   end)
+
+  -- -----------------------------------------------------------------------
+  -- mark_placement option
+  -- -----------------------------------------------------------------------
+
+  describe("mark_placement", function()
+    local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
+    local selection_signs_ns = panel_render._test.selection_signs_ns
+
+    local function make_files(working)
+      local files = { conflicting = {}, working = working or {}, staged = {} }
+      function files:iter()
+        local all = {}
+        for _, f in ipairs(self.working) do all[#all + 1] = f end
+        local i = 0
+        return function()
+          i = i + 1
+          if i <= #all then return i, all[i] end
+        end
+      end
+      function files:len() return #self.conflicting + #self.working + #self.staged end
+      return files
+    end
+
+    local function make_panel(entries)
+      config.get_config().use_icons = false
+
+      local adapter = {
+        ctx = { toplevel = "/tmp", dir = "/tmp/.git" },
+        get_branch_name = function() return nil end,
+      }
+      local panel = FilePanel(adapter, make_files(entries or {}), {})
+      panel.listing_style = "list"
+      panel.is_loading = false
+      panel:init_buffer()
+      return panel
+    end
+
+    ---Get all sign extmarks in the selection signs namespace.
+    local function get_signs(panel)
+      return vim.api.nvim_buf_get_extmarks(
+        panel.bufid, selection_signs_ns, 0, -1, { details = true }
+      )
+    end
+
+    it("inline mode renders marks in line content when a file is selected", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "inline"
+      config.setup(conf)
+
+      local f = make_entry("a.lua")
+      local panel = make_panel({ f })
+      panel:select_file(f)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      local lines = vim.api.nvim_buf_get_lines(panel.bufid, 0, -1, false)
+      local joined = table.concat(lines, "\n")
+      local selected_mark = config.get_config().signs.selected_file
+      assert.truthy(
+        joined:find(selected_mark, 1, true),
+        "expected inline selection mark in buffer content"
+      )
+
+      -- No sign column signs should be placed.
+      eq(0, #get_signs(panel))
+
+      panel:destroy()
+    end)
+
+    it("sign_column mode does not render marks in line content", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "sign_column"
+      config.setup(conf)
+
+      local f = make_entry("a.lua")
+      local panel = make_panel({ f })
+      panel:select_file(f)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      local lines = vim.api.nvim_buf_get_lines(panel.bufid, 0, -1, false)
+      local joined = table.concat(lines, "\n")
+      local selected_mark = config.get_config().signs.selected_file
+      local unselected_mark = config.get_config().signs.unselected_file
+      assert.falsy(
+        joined:find(selected_mark, 1, true),
+        "inline selection mark should not appear in sign_column mode"
+      )
+      assert.falsy(
+        joined:find(unselected_mark, 1, true),
+        "inline unselected mark should not appear in sign_column mode"
+      )
+
+      panel:destroy()
+    end)
+
+    it("sign_column mode places signs when a file is selected", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "sign_column"
+      config.setup(conf)
+
+      local f1 = make_entry("a.lua")
+      local f2 = make_entry("b.lua")
+      local panel = make_panel({ f1, f2 })
+      panel:select_file(f1)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      local signs = get_signs(panel)
+      -- Should have signs for both files (selected + unselected).
+      eq(2, #signs)
+
+      -- Verify sign text matches configured marks.
+      -- Neovim pads sign_text to 2 display cells.
+      local sign_texts = {}
+      for _, s in ipairs(signs) do
+        sign_texts[#sign_texts + 1] = vim.trim(s[4].sign_text)
+      end
+      table.sort(sign_texts)
+      local expected = { conf.signs.selected_file, conf.signs.unselected_file }
+      table.sort(expected)
+      eq(expected, sign_texts)
+
+      panel:destroy()
+    end)
+
+    it("sign_column mode places no signs when nothing is selected and always_show_marks is false", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "sign_column"
+      conf.file_panel.always_show_marks = false
+      config.setup(conf)
+
+      local f = make_entry("a.lua")
+      local panel = make_panel({ f })
+      -- No selections.
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      eq(0, #get_signs(panel))
+
+      panel:destroy()
+    end)
+
+    it("sign_column mode places signs when always_show_marks is true even with no selections", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "sign_column"
+      conf.file_panel.always_show_marks = true
+      config.setup(conf)
+
+      local f1 = make_entry("a.lua")
+      local f2 = make_entry("b.lua")
+      local panel = make_panel({ f1, f2 })
+      -- No selections.
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      local signs = get_signs(panel)
+      eq(2, #signs)
+
+      -- All signs should show the unselected mark.
+      for _, s in ipairs(signs) do
+        eq(conf.signs.unselected_file, vim.trim(s[4].sign_text))
+      end
+
+      panel:destroy()
+    end)
+
+    it("sign_column mode uses DiffviewFilePanelMarked highlight for selected files", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "sign_column"
+      config.setup(conf)
+
+      local f = make_entry("a.lua")
+      local panel = make_panel({ f })
+      panel:select_file(f)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      local signs = get_signs(panel)
+      eq(1, #signs)
+      eq("DiffviewFilePanelMarked", signs[1][4].sign_hl_group)
+
+      panel:destroy()
+    end)
+
+    it("sign_column mode clears signs when selections are removed", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "sign_column"
+      conf.file_panel.always_show_marks = false
+      config.setup(conf)
+
+      local f = make_entry("a.lua")
+      local panel = make_panel({ f })
+
+      -- Select, render, verify signs are placed.
+      panel:select_file(f)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+      assert.truthy(#get_signs(panel) > 0, "expected signs after selection")
+
+      -- Deselect, re-render, verify signs are cleared.
+      panel:deselect_file(f)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+      eq(0, #get_signs(panel))
+
+      panel:destroy()
+    end)
+
+    it("switching from sign_column to inline clears stale signs", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "sign_column"
+      config.setup(conf)
+
+      local f = make_entry("a.lua")
+      local panel = make_panel({ f })
+      panel:select_file(f)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+      assert.truthy(#get_signs(panel) > 0, "expected signs in sign_column mode")
+
+      -- Switch to inline mode and re-render.
+      conf = config.get_config()
+      conf.file_panel.mark_placement = "inline"
+      config.setup(conf)
+
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      -- All sign extmarks should be cleared.
+      eq(0, #get_signs(panel))
+
+      panel:destroy()
+    end)
+
+    -- -----------------------------------------------------------------
+    -- Wide sign padding
+    -- -----------------------------------------------------------------
+
+    it("sign_column mode pads buffer text when a sign character is wide", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "sign_column"
+      conf.signs.selected_file = "\u{2705}" -- Check mark emoji (2 display cells).
+      config.setup(conf)
+
+      local f = make_entry("a.lua")
+      local panel = make_panel({ f })
+      panel:select_file(f)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      -- The first file line should start with a leading space for padding.
+      local lines = vim.api.nvim_buf_get_lines(panel.bufid, 0, -1, false)
+      local file_line
+      for _, line in ipairs(lines) do
+        if line:find("a.lua", 1, true) then
+          file_line = line
+          break
+        end
+      end
+      assert.truthy(file_line, "expected a line containing 'a.lua'")
+      assert.truthy(
+        file_line:match("^%s"),
+        "expected leading space for wide-sign padding, got: " .. file_line
+      )
+
+      panel:destroy()
+    end)
+
+    it("sign_column mode does not pad buffer text when all signs are narrow", function()
+      local conf = config.get_config()
+      conf.file_panel.mark_placement = "sign_column"
+      -- Default signs are all 1 display cell.
+      conf.signs.selected_file = "x"
+      conf.signs.unselected_file = "o"
+      conf.signs.selected_dir = "x"
+      conf.signs.partially_selected_dir = "p"
+      conf.signs.unselected_dir = "o"
+      config.setup(conf)
+
+      local f = make_entry("a.lua")
+      local panel = make_panel({ f })
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      local lines = vim.api.nvim_buf_get_lines(panel.bufid, 0, -1, false)
+      local file_line
+      for _, line in ipairs(lines) do
+        if line:find("a.lua", 1, true) then
+          file_line = line
+          break
+        end
+      end
+      assert.truthy(file_line, "expected a line containing 'a.lua'")
+      assert.falsy(
+        file_line:match("^%s"),
+        "expected no leading space when signs are narrow, got: " .. file_line
+      )
+
+      panel:destroy()
+    end)
+
+    -- -----------------------------------------------------------------
+    -- Directory signs in tree listing mode
+    -- -----------------------------------------------------------------
+
+    describe("directory signs in tree mode", function()
+      local function make_tree_panel(entries)
+        config.get_config().use_icons = false
+
+        local adapter = {
+          ctx = { toplevel = "/tmp", dir = "/tmp/.git" },
+          get_branch_name = function() return nil end,
+        }
+        local fd = FileDict()
+        for i, e in ipairs(entries) do
+          fd.working[i] = e
+        end
+        fd:update_file_trees()
+
+        local panel = FilePanel(adapter, fd, {})
+        panel.listing_style = "tree"
+        panel.is_loading = false
+        panel:init_buffer()
+        return panel
+      end
+
+      it("places selected_dir sign when all files in a directory are selected", function()
+        local conf = config.get_config()
+        conf.file_panel.mark_placement = "sign_column"
+        config.setup(conf)
+
+        local f1 = make_entry("src/a.lua")
+        local f2 = make_entry("src/b.lua")
+        local panel = make_tree_panel({ f1, f2 })
+        panel:select_file(f1)
+        panel:select_file(f2)
+        panel:update_components()
+        panel:render()
+        panel:redraw()
+
+        local signs = get_signs(panel)
+        local sign_texts = {}
+        for _, s in ipairs(signs) do
+          sign_texts[#sign_texts + 1] = vim.trim(s[4].sign_text)
+        end
+
+        -- Directory sign should be selected_dir.
+        assert.truthy(
+          vim.tbl_contains(sign_texts, conf.signs.selected_dir),
+          "expected selected_dir sign for fully selected directory"
+        )
+
+        panel:destroy()
+      end)
+
+      it("places partially_selected_dir sign when some files are selected", function()
+        local conf = config.get_config()
+        conf.file_panel.mark_placement = "sign_column"
+        config.setup(conf)
+
+        local f1 = make_entry("src/a.lua")
+        local f2 = make_entry("src/b.lua")
+        local panel = make_tree_panel({ f1, f2 })
+        -- Select only one file.
+        panel:select_file(f1)
+        panel:update_components()
+        panel:render()
+        panel:redraw()
+
+        local signs = get_signs(panel)
+        local sign_texts = {}
+        for _, s in ipairs(signs) do
+          sign_texts[#sign_texts + 1] = vim.trim(s[4].sign_text)
+        end
+
+        assert.truthy(
+          vim.tbl_contains(sign_texts, conf.signs.partially_selected_dir),
+          "expected partially_selected_dir sign when only some files are selected"
+        )
+
+        panel:destroy()
+      end)
+
+      it("places unselected_dir sign when no files are selected", function()
+        local conf = config.get_config()
+        conf.file_panel.mark_placement = "sign_column"
+        conf.file_panel.always_show_marks = true
+        config.setup(conf)
+
+        local f1 = make_entry("src/a.lua")
+        local f2 = make_entry("src/b.lua")
+        local panel = make_tree_panel({ f1, f2 })
+        -- No selections.
+        panel:update_components()
+        panel:render()
+        panel:redraw()
+
+        local signs = get_signs(panel)
+        local sign_texts = {}
+        for _, s in ipairs(signs) do
+          sign_texts[#sign_texts + 1] = vim.trim(s[4].sign_text)
+        end
+
+        assert.truthy(
+          vim.tbl_contains(sign_texts, conf.signs.unselected_dir),
+          "expected unselected_dir sign when no files are selected"
+        )
+        -- No selected or partially selected dir signs.
+        assert.falsy(
+          vim.tbl_contains(sign_texts, conf.signs.selected_dir),
+          "should not have selected_dir sign with no selections"
+        )
+        assert.falsy(
+          vim.tbl_contains(sign_texts, conf.signs.partially_selected_dir),
+          "should not have partially_selected_dir sign with no selections"
+        )
+
+        panel:destroy()
+      end)
+
+      it("uses DiffviewFilePanelMarked highlight for partially selected directories", function()
+        local conf = config.get_config()
+        conf.file_panel.mark_placement = "sign_column"
+        config.setup(conf)
+
+        local f1 = make_entry("src/a.lua")
+        local f2 = make_entry("src/b.lua")
+        local panel = make_tree_panel({ f1, f2 })
+        panel:select_file(f1)
+        panel:update_components()
+        panel:render()
+        panel:redraw()
+
+        local signs = get_signs(panel)
+        -- Find the directory sign (partially_selected_dir).
+        local dir_sign
+        for _, s in ipairs(signs) do
+          if vim.trim(s[4].sign_text) == conf.signs.partially_selected_dir then
+            dir_sign = s
+            break
+          end
+        end
+
+        assert.truthy(dir_sign, "expected a partially_selected_dir sign")
+        eq("DiffviewFilePanelMarked", dir_sign[4].sign_hl_group)
+
+        panel:destroy()
+      end)
+    end)
+  end)
 end)

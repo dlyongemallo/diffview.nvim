@@ -348,7 +348,7 @@ function Panel:open()
         for _, w in ipairs(vim.v.event.windows) do
           if w == self.winid then
             self:render()
-            renderer.render(self.bufid, self.render_data)
+            self:redraw()
             return
           end
         end

@@ -571,5 +571,10 @@ function FilePanel:render()
   require("diffview.scene.views.diff.render")(self)
 end
 
+function FilePanel:redraw()
+  FilePanel.super_class.redraw(self)
+  require("diffview.scene.views.diff.render").place_selection_signs(self)
+end
+
 M.FilePanel = FilePanel
 return M
