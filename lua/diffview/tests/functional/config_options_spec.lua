@@ -102,3 +102,25 @@ describe("status_icons", function()
     assert.equals("Z", hl.get_status_icon("Z"))
   end)
 end)
+
+describe("mark_placement", function()
+  local original
+
+  before_each(function()
+    original = vim.deepcopy(config.get_config())
+  end)
+
+  after_each(function()
+    config.setup(original)
+  end)
+
+  it("defaults to 'inline'", function()
+    local conf = setup_with({})
+    assert.equals("inline", conf.file_panel.mark_placement)
+  end)
+
+  it("survives setup() when set to 'sign_column'", function()
+    local conf = setup_with({ file_panel = { mark_placement = "sign_column" } })
+    assert.equals("sign_column", conf.file_panel.mark_placement)
+  end)
+end)

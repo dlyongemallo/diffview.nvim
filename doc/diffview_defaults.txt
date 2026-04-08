@@ -100,6 +100,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
       show = true,                        -- Show the file panel when opening Diffview.
       always_show_sections = false,       -- Always show Changes and Staged changes sections even when empty.
       always_show_marks = false,          -- Show selection marks even when no files are selected.
+      mark_placement = "inline",          -- Where to show selection marks: "inline" or "sign_column".
       show_branch_name = false,           -- Show branch name in the file panel header.
     },
     file_history_panel = {
