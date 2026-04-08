@@ -3,8 +3,12 @@ local config = require("diffview.config")
 local Node = require("diffview.ui.models.file_tree.node").Node
 local FileTree = require("diffview.ui.models.file_tree.file_tree").FileTree
 local FileDict = require("diffview.vcs.file_dict").FileDict
+local panel_render = require("diffview.scene.views.diff.render")
 
 local eq = helpers.eq
+
+local format_folder_name = panel_render._test.format_folder_name
+local render_folder_count = panel_render._test.render_folder_count
 
 -- ---------------------------------------------------------------------------
 -- Mock RenderComponent (same pattern as file_history_render_spec.lua)
@@ -248,6 +252,22 @@ describe("panel_render", function()
         eq(")", dim_segs[#dim_segs])
       end)
 
+      it("hides count entirely when folder_count_style is 'none'", function()
+        local conf = config.get_config()
+        conf.file_panel.tree_options.folder_count_style = "none"
+        config.setup(conf)
+
+        local dir_node = Node("src", { name = "src", path = "src", kind = "working", collapsed = true, status = "M" })
+        dir_node:add_child(Node("a.lua", { path = "src/a.lua", status = "M" }))
+        dir_node:add_child(Node("b.lua", { path = "src/b.lua", status = "A" }))
+
+        -- Call the real render_folder_count; it should produce no output.
+        local comp = make_comp()
+        render_folder_count(comp, dir_node, config.get_config().file_panel.tree_options)
+        eq(0, #comp:segments_by_hl("DiffviewDim1"))
+        eq("", comp:flat_text())
+      end)
+
       it("does not show count when directory is expanded", function()
         -- When collapsed is false, the count section is skipped.
         local dir_node = Node("src", { name = "src", path = "src", kind = "working", collapsed = false, status = "M" })
@@ -266,6 +286,32 @@ describe("panel_render", function()
         local should_show_count = ctx.collapsed and ctx._node
         assert.falsy(should_show_count)
       end)
+    end)
+  end)
+
+  -- -----------------------------------------------------------------------
+  -- folder_trailing_slash
+  -- -----------------------------------------------------------------------
+
+  describe("folder_trailing_slash option", function()
+    it("appends trailing slash when enabled", function()
+      local conf = config.get_config()
+      conf.file_panel.tree_options.folder_trailing_slash = true
+      config.setup(conf)
+
+      eq("src/", format_folder_name("src", config.get_config().file_panel.tree_options))
+    end)
+
+    it("omits trailing slash when disabled", function()
+      local conf = config.get_config()
+      conf.file_panel.tree_options.folder_trailing_slash = false
+      config.setup(conf)
+
+      eq("src", format_folder_name("src", config.get_config().file_panel.tree_options))
+    end)
+
+    it("defaults to true", function()
+      eq(true, config.get_config().file_panel.tree_options.folder_trailing_slash)
     end)
   end)
 

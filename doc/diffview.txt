@@ -785,6 +785,15 @@ file_panel                                      *diffview-config-file_panel*
                   contain a single directory. Default: `true`
                 • {folder_statuses} ("never"|"only_folded"|"always")
                   Show folder statuses. Default: `"only_folded"`
+                • {folder_count_style} ("grouped"|"simple"|"none")
+                  How to display file counts on collapsed folders.
+                  `"grouped"` shows per-status counts (e.g. "2M 1D"),
+                  `"simple"` shows a plain total (e.g. "3"),
+                  `"none"` hides the count entirely.
+                  Default: `"grouped"`
+                • {folder_trailing_slash} (boolean)
+                  Append "/" to folder names in the file tree.
+                  Default: `true`
 
             {win_config} (table|function)
                 See |diffview-config-win_config|.
@@ -814,6 +823,12 @@ file_history_panel                              *diffview-config-file_history_pa
                 How to display file change stats. `"number"` shows e.g.
                 "5, 3", `"bar"` shows e.g. "| 8 +++++---". Default:
                 `"number"`
+
+            {subject_highlight} ("ref_aware"|"plain")
+                How to highlight commit subjects. `"ref_aware"` uses
+                different colours for pushed vs unpushed commits.
+                `"plain"` uses a single colour for all.
+                Default: `"ref_aware"`
 
             {commit_format} (string[])
                 Ordered list of components to show for each commit entry.

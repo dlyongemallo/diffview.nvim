@@ -9,6 +9,8 @@ local M = {}
 ---@class TreeOptions
 ---@field flatten_dirs boolean
 ---@field folder_statuses "never"|"only_folded"|"always"
+---@field folder_count_style "grouped"|"simple"|"none"
+---@field folder_trailing_slash boolean
 
 ---@class FilePanel : Panel
 ---@field adapter VCSAdapter
