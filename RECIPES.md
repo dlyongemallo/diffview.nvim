@@ -174,6 +174,34 @@ local saved = sel.get_paths()
 sel.set(saved)
 ```
 
+You can also replace the revision range in-place with `set_revs`
+(see `:h diffview-set-revs-api`), which avoids the close/reopen
+entirely:
+
+```lua
+local api = require("diffview.api")
+api.set_revs("new_base_sha..HEAD")
+```
+
+Combining both APIs enables a seamless rebase workflow for tools like
+[gitlab.nvim](https://github.com/harrisoncramer/gitlab.nvim):
+
+```lua
+local api = require("diffview.api")
+local sel = api.selections
+
+-- Save reviewed files before rebase.
+local reviewed = sel.get_paths()
+
+-- ... perform server-side rebase, obtain new_base_sha ...
+
+-- Update the diff range in-place (no screen reshuffling).
+api.set_revs(new_base_sha .. ".." .. source_branch)
+
+-- Restore reviewed-file marks.
+sel.set(reviewed)
+```
+
 </details>
 
 <details>

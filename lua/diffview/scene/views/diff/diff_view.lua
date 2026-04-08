@@ -240,6 +240,60 @@ function DiffView:_save_selections_now()
   selection_store.save(self._selection_scope_key, keys)
 end
 
+---Replace the revision range for this view in-place and refresh the file
+---list.  Existing file selections are preserved for files whose paths
+---still appear in the new diff.
+---
+---NOTE: The underlying `update_files()` is gated on the view's tabpage
+---being focused.  If this view is not in the current tabpage the state
+---(rev_arg, left, right, scope key) will be updated immediately but the
+---file list refresh will be deferred until the view regains focus.
+---
+---@param new_rev_arg string New revision argument (e.g. "abc123..def456").
+---@param opts? { cached?: boolean, imply_local?: boolean, merge_base?: boolean }
+function DiffView:set_revs(new_rev_arg, opts)
+  opts = opts or {}
+  local new_left, new_right = self.adapter:parse_revs(new_rev_arg, opts)
+  if not (new_left and new_right) then
+    logger:error("[DiffView] Failed to parse new rev arg: " .. tostring(new_rev_arg))
+    return
+  end
+
+  -- Persist selections under the old scope key before switching.
+  if self._save_selections then
+    self:_save_selections_now()
+  end
+
+  -- Update the view identity.
+  self.rev_arg = new_rev_arg
+  self.left = new_left
+  self.right = new_right
+  self.panel.rev_pretty_name = new_rev_arg
+
+  -- Migrate selection persistence to the new scope key.
+  if self._selection_scope_key then
+    local selection_store = require("diffview.selection_store")
+    local old_scope = self._selection_scope_key
+    self._selection_scope_key = selection_store.scope_key(
+      self.adapter.ctx.toplevel, new_rev_arg
+    )
+
+    -- If the new scope already has saved selections, merge them with the
+    -- current in-memory set so nothing is lost.
+    if old_scope ~= self._selection_scope_key then
+      local saved = selection_store.load(self._selection_scope_key)
+      for _, key in ipairs(saved) do
+        self.panel.selected_files[key] = true
+      end
+    end
+  end
+
+  -- Refresh files.  The existing update_files machinery diffs old entries
+  -- against new ones and replaces those whose revisions changed, which
+  -- disposes stale buffers and lazily loads new content.
+  self:update_files()
+end
+
 ---@override
 function DiffView:close()
   if not self.closing:check() then
