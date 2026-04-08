@@ -191,23 +191,23 @@ describe("panel_render", function()
         dir_node:add_child(Node("b.lua", { path = "src/b.lua", status = "A" }))
         dir_node:add_child(Node("c.lua", { path = "src/c.lua", status = "M" }))
 
-        local leaves = dir_node:leaves()
-        eq(3, #leaves)
+        -- Call the real render_folder_count and inspect the output.
+        local comp = make_comp()
+        render_folder_count(comp, dir_node, config.get_config().file_panel.tree_options)
 
-        -- Replicate the grouped counting logic from render.lua.
-        local status_counts = {}
-        for _, node in ipairs(leaves) do
-          local s = node.data.status or "?"
-          status_counts[s] = (status_counts[s] or 0) + 1
-        end
+        -- Assert the grouped counts are attached to the expected status highlights.
+        local added_text = table.concat(comp:segments_by_hl("DiffviewStatusAdded"))
+        local modified_text = table.concat(comp:segments_by_hl("DiffviewStatusModified"))
 
-        local statuses = vim.tbl_keys(status_counts)
-        table.sort(statuses)
+        assert.truthy(added_text:find("1"), "expected A-status highlight to contain count 1")
+        assert.is_nil(added_text:find("2"), "did not expect A-status highlight to contain count 2")
+        assert.truthy(modified_text:find("2"), "expected M-status highlight to contain count 2")
+        assert.is_nil(modified_text:find("1"), "did not expect M-status highlight to contain count 1")
 
-        -- Should have "A" -> 1 and "M" -> 2, sorted alphabetically.
-        eq({ "A", "M" }, statuses)
-        eq(1, status_counts["A"])
-        eq(2, status_counts["M"])
+        -- The opening and closing parentheses should be DiffviewDim1.
+        local dim_segs = comp:segments_by_hl("DiffviewDim1")
+        eq(" (", dim_segs[1])
+        eq(")", dim_segs[#dim_segs])
       end)
 
       it("renders grouped count segments to a mock component", function()
@@ -220,31 +220,18 @@ describe("panel_render", function()
         dir_node:add_child(Node("y.lua", { path = "src/y.lua", status = "D" }))
         dir_node:add_child(Node("z.lua", { path = "src/z.lua", status = "A" }))
 
-        local leaves = dir_node:leaves()
-        local status_counts = {}
-        for _, node in ipairs(leaves) do
-          local s = node.data.status or "?"
-          status_counts[s] = (status_counts[s] or 0) + 1
-        end
-        local statuses = vim.tbl_keys(status_counts)
-        table.sort(statuses)
-
-        -- Render into a mock component using the same pattern as render.lua.
+        -- Call the real render_folder_count.
         local comp = make_comp()
-        comp:add_text(" (", "DiffviewDim1")
-        for i, s in ipairs(statuses) do
-          if i > 1 then
-            comp:add_text(" ", "DiffviewDim1")
-          end
-          local hl = require("diffview.hl")
-          comp:add_text(tostring(status_counts[s]) .. hl.get_status_icon(s), hl.get_git_hl(s))
-        end
-        comp:add_text(")", "DiffviewDim1")
+        render_folder_count(comp, dir_node, config.get_config().file_panel.tree_options)
 
-        local flat = comp:flat_text()
-        -- Should contain both status groups.
-        assert.truthy(flat:find("1"), "expected count for A status")
-        assert.truthy(flat:find("2"), "expected count for D status")
+        -- Assert the grouped counts are attached to the expected status highlights.
+        local added_text = table.concat(comp:segments_by_hl("DiffviewStatusAdded"))
+        local deleted_text = table.concat(comp:segments_by_hl("DiffviewStatusDeleted"))
+
+        assert.truthy(added_text:find("1"), "expected A-status highlight to contain count 1")
+        assert.is_nil(added_text:find("2"), "did not expect A-status highlight to contain count 2")
+        assert.truthy(deleted_text:find("2"), "expected D-status highlight to contain count 2")
+        assert.is_nil(deleted_text:find("1"), "did not expect D-status highlight to contain count 1")
 
         -- The opening and closing parentheses should be DiffviewDim1.
         local dim_segs = comp:segments_by_hl("DiffviewDim1")

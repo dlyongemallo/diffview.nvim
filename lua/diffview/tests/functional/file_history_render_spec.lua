@@ -4,7 +4,10 @@ local render = require("diffview.scene.views.file_history.render")
 
 local eq = helpers.eq
 
+local render_stat_bar = render._test.render_stat_bar
+local render_file_stats = render._test.render_file_stats
 local formatters = render._test.formatters
+
 
 -- ---------------------------------------------------------------------------
 -- Mock RenderComponent
@@ -107,76 +110,6 @@ local function make_panel(entries, entry_idx, file_idx)
   end
 
   return panel
-end
-
--- ---------------------------------------------------------------------------
--- Load the render module so we can access the local functions via the module
--- table returned from the file.  The public module only exposes
--- `file_history_panel` and `fh_option_panel`, so we re-require the file and
--- pull render_stat_bar / render_file_stats from the upvalues by running them
--- through wrappers.
---
--- Because render_stat_bar and render_file_stats are local functions we cannot
--- call them directly.  Instead we exercise them through render_file_stats'
--- public caller (render_files) or we duplicate the compact logic in the tests
--- to verify the algorithm.  The cleanest approach: since the functions are
--- self-contained pure logic plus a component, we replicate them here and
--- verify their behaviour matches the production code.
--- ---------------------------------------------------------------------------
-
--- Replicated from render.lua (MAX_BAR_WIDTH = 20).
-local MAX_BAR_WIDTH = 20
-
----Mirror of the production render_stat_bar.
-local function render_stat_bar(comp, additions, deletions)
-  local total = additions + deletions
-  if total == 0 then return end
-
-  local bar_width = math.min(total, MAX_BAR_WIDTH)
-  local add_width = math.floor(additions / total * bar_width + 0.5)
-  local del_width = bar_width - add_width
-
-  comp:add_text(" | ", "DiffviewNonText")
-  comp:add_text(tostring(total) .. " ", "DiffviewFilePanelCounter")
-
-  if add_width > 0 then
-    comp:add_text(string.rep("+", add_width), "DiffviewFilePanelInsertions")
-  end
-  if del_width > 0 then
-    comp:add_text(string.rep("-", del_width), "DiffviewFilePanelDeletions")
-  end
-end
-
----Mirror of the production render_file_stats.
-local function render_file_stats(comp, stats, stat_style)
-  local show_number = stat_style == "number" or stat_style == "both"
-  local show_bar = stat_style == "bar" or stat_style == "both"
-
-  if show_number then
-    comp:add_text(" " .. stats.additions, "DiffviewFilePanelInsertions")
-    comp:add_text(", ")
-    comp:add_text(tostring(stats.deletions), "DiffviewFilePanelDeletions")
-  end
-
-  if show_bar and stats.additions and stats.deletions then
-    render_stat_bar(comp, stats.additions, stats.deletions)
-  end
-end
-
--- Replicated date formatter from render.lua.
-local function format_date(commit, date_format)
-  if date_format == "relative" then
-    return commit.rel_date
-  elseif date_format == "iso" then
-    return commit.iso_date
-  else
-    -- "auto": relative for recent commits (< 3 months), ISO for older.
-    return (
-      os.difftime(os.time(), commit.time) > 60 * 60 * 24 * 30 * 3
-        and commit.iso_date
-        or commit.rel_date
-    )
-  end
 end
 
 -- =========================================================================
@@ -308,38 +241,48 @@ describe("file_history_render", function()
   -- -----------------------------------------------------------------------
 
   describe("date formatter", function()
-    local function make_commit(time, rel, iso)
-      return { time = time, rel_date = rel, iso_date = iso }
+    ---Call the real formatters.date and return the rendered date string.
+    ---@param time integer
+    ---@param rel string
+    ---@param iso string
+    ---@param date_format string
+    ---@return string
+    local function render_date(time, rel, iso, date_format)
+      local conf = config.get_config()
+      conf.file_history_panel.date_format = date_format
+      config.setup(conf)
+
+      local entry = { commit = { time = time, rel_date = rel, iso_date = iso } }
+      local comp = make_comp()
+      local ctx = { conf = config.get_config() }
+      formatters.date(comp, entry, ctx)
+      -- The formatter renders ", <date>"; strip the leading ", ".
+      return comp:flat_text():sub(3)
     end
 
     it("returns rel_date for 'relative' mode", function()
-      local commit = make_commit(os.time(), "2 hours ago", "2026-03-31")
-      eq("2 hours ago", format_date(commit, "relative"))
+      eq("2 hours ago", render_date(os.time(), "2 hours ago", "2026-03-31", "relative"))
     end)
 
     it("returns iso_date for 'iso' mode", function()
-      local commit = make_commit(os.time(), "2 hours ago", "2026-03-31")
-      eq("2026-03-31", format_date(commit, "iso"))
+      eq("2026-03-31", render_date(os.time(), "2 hours ago", "2026-03-31", "iso"))
     end)
 
     it("returns rel_date for a recent commit in 'auto' mode", function()
       -- Commit from 1 day ago (well within the 3-month threshold).
       local recent_time = os.time() - (60 * 60 * 24)
-      local commit = make_commit(recent_time, "1 day ago", "2026-03-30")
-      eq("1 day ago", format_date(commit, "auto"))
+      eq("1 day ago", render_date(recent_time, "1 day ago", "2026-03-30", "auto"))
     end)
 
     it("returns iso_date for an old commit in 'auto' mode", function()
       -- Commit from 6 months ago (exceeds the 3-month threshold).
       local old_time = os.time() - (60 * 60 * 24 * 30 * 6)
-      local commit = make_commit(old_time, "6 months ago", "2025-09-30")
-      eq("2025-09-30", format_date(commit, "auto"))
+      eq("2025-09-30", render_date(old_time, "6 months ago", "2025-09-30", "auto"))
     end)
 
     it("treats unknown format as 'auto'", function()
       local recent_time = os.time() - 60
-      local commit = make_commit(recent_time, "1 minute ago", "2026-03-31")
-      eq("1 minute ago", format_date(commit, "something_else"))
+      eq("1 minute ago", render_date(recent_time, "1 minute ago", "2026-03-31", "something_else"))
     end)
   end)
 
