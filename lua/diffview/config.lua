@@ -152,7 +152,9 @@ M.defaults = {
     sort_file = nil, -- Custom file comparator: function(a_name, b_name, a_data, b_data) -> boolean
     tree_options = {
       flatten_dirs = true,
-      folder_statuses = "only_folded"
+      folder_statuses = "only_folded",
+      folder_count_style = "grouped", -- "grouped" (e.g. "2M 1D"), "simple" (e.g. "3"), or "none".
+      folder_trailing_slash = true, -- Append "/" to folder names in the file tree.
     },
     win_config = {
       position = "left",
@@ -166,6 +168,7 @@ M.defaults = {
   },
   file_history_panel = {
     stat_style = "number", -- "number" (e.g. "5, 3"), "bar" (e.g. "| 8 +++++---"), or "both".
+    subject_highlight = "ref_aware", -- "ref_aware" (colour by pushed/unpushed) or "plain".
     -- Ordered list of components to show for each commit entry.
     -- Available: "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date"
     commit_format = { "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date" },

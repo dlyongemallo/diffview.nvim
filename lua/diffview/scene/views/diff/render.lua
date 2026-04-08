@@ -4,6 +4,47 @@ local utils = require("diffview.utils")
 
 local pl = utils.path
 
+---Format a folder name, optionally appending a trailing slash.
+---@param name string
+---@param tree_options table
+---@return string
+local function format_folder_name(name, tree_options)
+  return name .. (tree_options.folder_trailing_slash and "/" or "")
+end
+
+---Render the file count annotation for a collapsed folder.
+---@param comp table  RenderComponent-like object supporting add_text().
+---@param node table  Tree node whose leaves() will be counted.
+---@param tree_options table  Config tree_options table.
+local function render_folder_count(comp, node, tree_options)
+  if tree_options.folder_count_style == "none" then return end
+
+  if tree_options.folder_count_style == "grouped" then
+    local leaves = node:leaves()
+    local status_counts = {}
+    for _, leaf in ipairs(leaves) do
+      local s = leaf.data.status or "?"
+      status_counts[s] = (status_counts[s] or 0) + 1
+    end
+
+    -- Sort status letters for consistent display order.
+    local statuses = vim.tbl_keys(status_counts)
+    table.sort(statuses)
+
+    comp:add_text(" (", "DiffviewDim1")
+    for i, s in ipairs(statuses) do
+      if i > 1 then
+        comp:add_text(" ", "DiffviewDim1")
+      end
+      comp:add_text(tostring(status_counts[s]) .. hl.get_status_icon(s), hl.get_git_hl(s))
+    end
+    comp:add_text(")", "DiffviewDim1")
+  else
+    local file_count = #node:leaves()
+    comp:add_text(" (" .. file_count .. ")", "DiffviewDim1")
+  end
+end
+
 ---@param conf DiffviewConfig
 ---@param panel FilePanel
 ---@param comp  RenderComponent
@@ -161,28 +202,11 @@ local function render_file_tree_recurse(conf, panel, depth, comp)
     "DiffviewFolderSign"
   )
 
-  dir:add_text(ctx.name .. "/", "DiffviewFolderName")
-  -- Show file count grouped by status when folder is collapsed.
+  local tree_options = conf.file_panel.tree_options
+  dir:add_text(format_folder_name(ctx.name, tree_options), "DiffviewFolderName")
+  -- Show file count when folder is collapsed.
   if ctx.collapsed and ctx._node then
-    local leaves = ctx._node:leaves()
-    local status_counts = {}
-    for _, node in ipairs(leaves) do
-      local s = node.data.status or "?"
-      status_counts[s] = (status_counts[s] or 0) + 1
-    end
-
-    -- Sort status letters for consistent display order.
-    local statuses = vim.tbl_keys(status_counts)
-    table.sort(statuses)
-
-    dir:add_text(" (", "DiffviewDim1")
-    for i, s in ipairs(statuses) do
-      if i > 1 then
-        dir:add_text(" ", "DiffviewDim1")
-      end
-      dir:add_text(tostring(status_counts[s]) .. hl.get_status_icon(s), hl.get_git_hl(s))
-    end
-    dir:add_text(")", "DiffviewDim1")
+    render_folder_count(dir, ctx._node, tree_options)
   end
   dir:ln()
 
@@ -214,7 +238,7 @@ local function render_files(conf, panel, listing_style, comp)
 end
 
 ---@param panel FilePanel
-return function(panel)
+local function render_panel(panel)
   if not panel.render_data then
     return
   end
@@ -314,3 +338,13 @@ return function(panel)
     end
   end
 end
+
+return setmetatable({
+  -- Exposed for testing only.
+  _test = {
+    format_folder_name = format_folder_name,
+    render_folder_count = render_folder_count,
+  },
+}, {
+  __call = function(_, panel) render_panel(panel) end,
+})

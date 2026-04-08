@@ -1,7 +1,10 @@
 local helpers = require("diffview.tests.helpers")
 local config = require("diffview.config")
+local render = require("diffview.scene.views.file_history.render")
 
 local eq = helpers.eq
+
+local formatters = render._test.formatters
 
 -- ---------------------------------------------------------------------------
 -- Mock RenderComponent
@@ -337,6 +340,68 @@ describe("file_history_render", function()
       local recent_time = os.time() - 60
       local commit = make_commit(recent_time, "1 minute ago", "2026-03-31")
       eq("1 minute ago", format_date(commit, "something_else"))
+    end)
+  end)
+
+  -- -----------------------------------------------------------------------
+  -- subject_highlight
+  -- -----------------------------------------------------------------------
+
+  describe("subject_highlight", function()
+    ---Call the real formatters.subject and return the highlight group it used.
+    ---@param entry table
+    ---@param is_selected boolean
+    ---@return string
+    local function render_subject_hl(entry, is_selected)
+      entry.commit = entry.commit or { subject = "test" }
+      local comp = make_comp()
+      local ctx = {
+        conf = config.get_config(),
+        panel = { cur_item = { is_selected and entry or {} } },
+      }
+      formatters.subject(comp, entry, ctx)
+      -- The subject is rendered as a single segment; return its hl group.
+      return comp.lines[1][1].hl
+    end
+
+    it("uses DiffviewFilePanelFileName for 'plain' mode", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "plain"
+      config.setup(conf)
+
+      local entry = { has_remote_ref = true }
+      eq("DiffviewFilePanelFileName", render_subject_hl(entry, false))
+    end)
+
+    it("uses DiffviewCommitRemoteRef for 'ref_aware' with remote ref", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "ref_aware"
+      config.setup(conf)
+
+      local entry = { has_remote_ref = true }
+      eq("DiffviewCommitRemoteRef", render_subject_hl(entry, false))
+    end)
+
+    it("uses DiffviewCommitLocalOnly for 'ref_aware' without remote ref", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "ref_aware"
+      config.setup(conf)
+
+      local entry = { has_remote_ref = false }
+      eq("DiffviewCommitLocalOnly", render_subject_hl(entry, false))
+    end)
+
+    it("uses DiffviewFilePanelSelected when entry is selected", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "ref_aware"
+      config.setup(conf)
+
+      local entry = { has_remote_ref = true }
+      eq("DiffviewFilePanelSelected", render_subject_hl(entry, true))
+    end)
+
+    it("defaults to 'ref_aware'", function()
+      eq("ref_aware", config.get_config().file_history_panel.subject_highlight)
     end)
   end)
 

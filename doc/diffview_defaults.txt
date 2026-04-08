@@ -89,6 +89,8 @@ DEFAULT CONFIG                                  *diffview.defaults*
       tree_options = {                    -- Only applies when listing_style is 'tree'
         flatten_dirs = true,              -- Flatten dirs that only contain one single dir
         folder_statuses = "only_folded",  -- One of 'never', 'only_folded' or 'always'.
+        folder_count_style = "grouped",   -- "grouped" (e.g. "2M 1D"), "simple" (e.g. "3"), or "none".
+        folder_trailing_slash = true,     -- Append "/" to folder names in the file tree.
       },
       win_config = {                      -- See |diffview-config-win_config|
         position = "left",
@@ -102,6 +104,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
     },
     file_history_panel = {
       stat_style = "number",              -- "number" (e.g. "5, 3"), "bar" (e.g. "| 8 +++++---"), or "both".
+      subject_highlight = "ref_aware",    -- "ref_aware" (colour by pushed/unpushed) or "plain".
       -- Ordered list of components to show for each commit entry.
       -- Available: "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date"
       commit_format = { "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date" },
