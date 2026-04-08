@@ -130,6 +130,15 @@ function DiffView:post_open()
     self:file_safeguard()
     if self.files:len() == 0 then
       self:update_files()
+    else
+      -- Files were pre-populated (e.g., by an integrating plugin via
+      -- CDiffView). Clear the loading state so the panel can render.
+      self.is_loading = false
+      self.panel.is_loading = false
+      self.panel:update_components()
+      self.panel:render()
+      self.panel:redraw()
+      self.emitter:emit("files_updated", self.files)
     end
     self.ready = true
   end)
