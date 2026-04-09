@@ -1,4 +1,5 @@
 local async = require("diffview.async")
+local config = require("diffview.config")
 local control = require("diffview.control")
 local File = require("diffview.vcs.file").File
 local GitRev = require("diffview.vcs.adapters.git.rev").GitRev
@@ -232,5 +233,81 @@ describe("diffview.vcs.file", function()
       assert.equals("acwrite", vim.bo[file.bufnr].buftype)
       assert.is_true(vim.bo[file.bufnr].modifiable)
     end))
+
+    describe("large_file_threshold", function()
+      local original_config
+
+      before_each(function()
+        original_config = vim.deepcopy(config.get_config())
+      end)
+
+      after_each(function()
+        if original_config then
+          config.setup(original_config)
+          original_config = nil
+        end
+      end)
+
+      it("sets diffview_disable_ts flag when buffer exceeds threshold", helpers.async_test(function()
+        config.setup({ large_file_threshold = 5 })
+
+        local lines = {}
+        for i = 1, 10 do
+          lines[i] = "line " .. i
+        end
+
+        file_counter = file_counter + 1
+        local adapter = {
+          ctx = {
+            toplevel = vim.uv.cwd(),
+            dir = vim.uv.cwd(),
+          },
+          is_binary = function() return false end,
+          show = async.wrap(function(_, _, _, callback)
+            callback(nil, lines)
+          end),
+        }
+
+        local file = File({
+          adapter = adapter,
+          path = "test_large_" .. file_counter .. ".txt",
+          kind = "working",
+          rev = GitRev(RevType.COMMIT, "abc1234"),
+        })
+        table.insert(created_files, file)
+        async.await(file:create_buffer())
+
+        assert.is_not_nil(file.bufnr)
+        assert.is_true(vim.b[file.bufnr].diffview_disable_ts)
+      end))
+
+      it("does not set diffview_disable_ts flag when buffer is under threshold", helpers.async_test(function()
+        config.setup({ large_file_threshold = 100 })
+
+        file_counter = file_counter + 1
+        local adapter = {
+          ctx = {
+            toplevel = vim.uv.cwd(),
+            dir = vim.uv.cwd(),
+          },
+          is_binary = function() return false end,
+          show = async.wrap(function(_, _, _, callback)
+            callback(nil, { "line1", "line2" })
+          end),
+        }
+
+        local file = File({
+          adapter = adapter,
+          path = "test_small_" .. file_counter .. ".txt",
+          kind = "working",
+          rev = GitRev(RevType.COMMIT, "abc1234"),
+        })
+        table.insert(created_files, file)
+        async.await(file:create_buffer())
+
+        assert.is_not_nil(file.bufnr)
+        assert.is_nil(vim.b[file.bufnr].diffview_disable_ts)
+      end))
+    end)
   end)
 end)

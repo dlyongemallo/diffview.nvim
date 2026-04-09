@@ -357,9 +357,24 @@ File.create_buffer = async.wrap(function(self, callback)
   -- a common convention (LazyVim, conform.nvim, etc.).
   vim.b[self.bufnr].autoformat = false
 
+  -- Disable treesitter highlighting on large non-LOCAL buffers. Treesitter
+  -- may still perform an initial parse during filetype detection, but
+  -- stopping it prevents the ongoing re-parses during cursor movement and
+  -- scrolling that cause the actual performance problems in diff views.
+  local threshold = config.get_config().large_file_threshold
+  local disable_ts = threshold > 0 and #lines > threshold
+
+  if disable_ts then
+    vim.b[self.bufnr].diffview_disable_ts = true
+  end
+
   api.nvim_buf_call(self.bufnr, function()
     vim.cmd("filetype detect")
   end)
+
+  if disable_ts then
+    pcall(vim.treesitter.stop, self.bufnr)
+  end
 
   -- Match the index buffer's fileformat to the working tree file so that
   -- saving the buffer does not inadvertently convert line endings.
