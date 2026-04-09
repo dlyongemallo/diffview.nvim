@@ -21,9 +21,9 @@ local is_windows = uv.os_uname().version:match("Windows")
 ---@return string?
 local function uv_err_code(err, err_name)
   -- When the third value looks like a bare code, prefer it.
-  if err_name and err_name:match("^%u+$") then return err_name end
+  if err_name and err_name:match("^[%u%d_]+$") then return err_name end
   -- Otherwise fall back to the leading code in the second value.
-  if err then return err:match("^(%u+)") end
+  if err then return err:match("^([%u%d_]+)") end
   return nil
 end
 

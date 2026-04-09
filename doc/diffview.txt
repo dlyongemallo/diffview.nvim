@@ -1752,6 +1752,57 @@ selections.count({view?})
         Returns: ~
             `integer`
 
+SET_REVS API                                    *diffview-set-revs-api*
+
+The `set_revs` API replaces the revision range of an open DiffView
+in-place without closing and reopening it.  This is useful when the
+base revision changes (e.g., after a server-side rebase of a merge
+request) and you want to update the diff without losing your place.
+
+The file list is refreshed to reflect the new range.  File selections
+(review marks) are preserved for paths that still appear in the new
+diff.
+
+Access via: >lua
+    local api = require("diffview.api")
+    api.set_revs("new_base..HEAD")
+<
+                                                *diffview-set-revs-api-set_revs*
+api.set_revs({new_rev_arg}, {opts?})
+        Replace the revision range of the current DiffView.
+
+        NOTE: The file list refresh is deferred until the target view's
+        tabpage is focused.  State (rev_arg, left, right, scope key)
+        is always updated immediately.
+
+        Parameters: ~
+            {new_rev_arg}  (string)     New revision argument, using the same
+                                        syntax as |:DiffviewOpen| (e.g.,
+                                        "abc123..def456", "main...HEAD").
+            {opts}         (table|nil)  Optional table with fields:
+                    {cached}       (boolean|nil)  Parse as staged diff.
+                    {imply_local}  (boolean|nil)  Replace HEAD-matching rev
+                                                  with LOCAL for editing.
+                    {merge_base}   (boolean|nil)  Use merge-base of the ref.
+                    {view}         (View|nil)     View to update (defaults to
+                                                  current).
+
+        Example (gitlab.nvim rebase workflow): >lua
+            local api = require("diffview.api")
+            local sel = api.selections
+
+            -- Save reviewed files before rebase.
+            local reviewed = sel.get_paths()
+
+            -- ... perform rebase, get new base SHA ...
+
+            -- Update the diff range in-place.
+            api.set_revs(new_base_sha .. ".." .. head_sha)
+
+            -- Restore reviewed-file marks.
+            sel.set(reviewed)
+<
+
 ==============================================================================
 
 MAPS                                            *diffview-maps*
