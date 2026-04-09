@@ -47,7 +47,10 @@ local function write_store(path, data)
     local json = vim.json.encode(data)
     local tmp = path .. ".tmp"
     vim.fn.writefile({ json }, tmp)
-    vim.uv.fs_rename(tmp, path)
+    local rename_ok, rename_err = vim.uv.fs_rename(tmp, path)
+    if not rename_ok then
+      error(rename_err or "fs_rename failed")
+    end
   end)
   if not ok then
     logger:warn("[SelectionStore] Failed to write store: " .. tostring(err))

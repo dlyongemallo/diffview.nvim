@@ -80,6 +80,34 @@ describe("diffview.selection_store", function()
       local result = SelectionStore.load("any:scope")
       eq({}, result)
     end)
+
+    -- Regression: fs_rename failure must be caught and logged rather than
+    -- silently leaving a .tmp file behind.
+    it("logs warning when rename fails", function()
+      local bad_dir = tmpdir .. "/readonly"
+      vim.fn.mkdir(bad_dir, "p")
+      -- Point the store at a path inside a directory we'll make read-only.
+      local target = bad_dir .. "/nested/store.json"
+      SelectionStore.get_path = function() return target end
+
+      -- Write once so the directory structure exists.
+      SelectionStore.save("scope:", { "a.lua" })
+
+      -- Now make the parent directory read-only so rename fails.
+      vim.fn.setfperm(bad_dir .. "/nested", "r-xr-xr-x")
+
+      local warns = {}
+      local orig_warn = DiffviewGlobal.logger.warn
+      DiffviewGlobal.logger.warn = function(_, msg) table.insert(warns, msg) end
+
+      SelectionStore.save("scope:", { "b.lua" })
+
+      DiffviewGlobal.logger.warn = orig_warn
+      vim.fn.setfperm(bad_dir .. "/nested", "rwxr-xr-x")
+
+      -- The .tmp write should fail and be caught.
+      assert.is_true(#warns > 0)
+    end)
   end)
 
   describe("on_selection_changed callback", function()
