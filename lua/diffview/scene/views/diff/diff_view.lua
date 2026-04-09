@@ -790,6 +790,11 @@ function DiffView:init_event_listeners()
   for event, callback in pairs(listeners) do
     self.emitter:on(event, callback)
   end
+
+  -- Forward to global emitter so the User autocmd bridge can pick it up.
+  self.emitter:on(EventName.FILES_STAGED, function(_, view)
+    DiffviewGlobal.emitter:emit("files_staged", view)
+  end)
 end
 
 ---Infer the current selected file. If the file panel is focused: return the
