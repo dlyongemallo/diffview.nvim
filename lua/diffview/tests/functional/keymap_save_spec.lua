@@ -237,6 +237,69 @@ describe("keymap save/restore on attach/detach", function()
     api.nvim_buf_delete(bufnr, { force = true })
   end)
 
+  describe("BufReadPost emission after keymap registration", function()
+    it("fires BufReadPost on first attach", function()
+      local bufnr = scratch_buf()
+      local fired = false
+
+      local au_id = api.nvim_create_autocmd("BufReadPost", {
+        buffer = bufnr,
+        callback = function() fired = true end,
+      })
+
+      local file = make_file(bufnr)
+      attach_with_test_keymap(file)
+
+      assert.is_true(fired)
+
+      file:detach_buffer()
+      api.nvim_del_autocmd(au_id)
+      api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("skips BufReadPost when diffview_disable_ts is set", function()
+      local bufnr = scratch_buf()
+      local fired = false
+
+      vim.b[bufnr].diffview_disable_ts = true
+
+      local au_id = api.nvim_create_autocmd("BufReadPost", {
+        buffer = bufnr,
+        callback = function() fired = true end,
+      })
+
+      local file = make_file(bufnr)
+      attach_with_test_keymap(file)
+
+      assert.is_false(fired)
+
+      file:detach_buffer()
+      api.nvim_del_autocmd(au_id)
+      api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("fires BufReadPost only once on repeated attach", function()
+      local bufnr = scratch_buf()
+      local count = 0
+
+      local au_id = api.nvim_create_autocmd("BufReadPost", {
+        buffer = bufnr,
+        callback = function() count = count + 1 end,
+      })
+
+      local file = make_file(bufnr)
+      attach_with_test_keymap(file)
+      attach_with_test_keymap(file)
+      attach_with_test_keymap(file)
+
+      assert.equals(1, count)
+
+      file:detach_buffer()
+      api.nvim_del_autocmd(au_id)
+      api.nvim_buf_delete(bufnr, { force = true })
+    end)
+  end)
+
   it("preserves saved keymap opts (noremap, nowait, expr)", function()
     local bufnr = scratch_buf()
 
