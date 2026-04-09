@@ -521,6 +521,23 @@ auto_close_on_empty                             *diffview-config-auto_close_on_e
         Automatically close the Diffview when the last file is staged or
         resolved.
 
+large_file_threshold                            *diffview-config-large_file_threshold*
+        Type: `integer`, Default: `0`
+
+        Line count threshold for disabling treesitter highlighting on
+        non-LOCAL revision buffers. When a buffer exceeds this many
+        lines, treesitter is stopped for that buffer.
+
+        This improves performance in |:DiffviewFileHistory| where both
+        diff sides are revision buffers that require cold-start
+        treesitter parses. For large files the combination of two
+        concurrent parses with diff mode can make cursor movement
+        unusably slow. Set to `0` to disable (treesitter always runs).
+
+        Example: >lua
+                large_file_threshold = 5000
+<
+
 diffopt                                         *diffview-config-diffopt*
         Type: `table`, Default: `{}`
 

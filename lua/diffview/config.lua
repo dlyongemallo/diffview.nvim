@@ -86,6 +86,9 @@ M.defaults = {
   hide_merge_artifacts = false, -- Hide merge artifact files (*.orig, *.BACKUP.*, etc.)
   auto_close_on_empty = false, -- Automatically close diffview when the last file is staged/resolved.
   wrap_entries = true, -- Wrap around when navigating past the first/last file entry.
+  -- Line count threshold for disabling treesitter highlighting on non-LOCAL
+  -- revision buffers. Set to 0 to disable this behaviour.
+  large_file_threshold = 0,
   -- Override diffopt settings while diffview is open. Restored on close.
   -- Keys: algorithm, context, indent_heuristic, iwhite, iwhiteall, iwhiteeol, iblank, icase.
   -- Example: { algorithm = "histogram", indent_heuristic = true }

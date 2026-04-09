@@ -15,6 +15,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
     watch_index = true,       -- Update views and index buffers when the git index changes.
     hide_merge_artifacts = false, -- Hide merge artifact files (*.orig, *.BACKUP.*, *.BASE.*, *.LOCAL.*, *.REMOTE.*)
     auto_close_on_empty = false, -- Close diffview when the last file is staged/resolved
+    large_file_threshold = 0, -- Line count above which treesitter is disabled on non-LOCAL diff buffers. 0 = disabled.
     diffopt = {},             -- Override diffopt settings while diffview is open. Restored on close.
     clean_up_buffers = false, -- Delete file buffers created by diffview on close.
     persist_selections = {
