@@ -22,17 +22,32 @@ local M = {}
 ---@type View[]
 M.views = {}
 
+---@param a Rev?
+---@param b Rev?
+---@return boolean
+local function same_rev(a, b)
+  if a == nil and b == nil then return true end
+  if a == nil or b == nil then return false end
+  return a.type == b.type
+    and a.commit == b.commit
+    and a.stage == b.stage
+end
+
 ---Find an existing DiffView matching the given parameters.
 ---@param adapter VCSAdapter
 ---@param rev_arg string?
 ---@param path_args string[]
+---@param left Rev?
+---@param right Rev?
 ---@return DiffView?
-function M.find_existing_view(adapter, rev_arg, path_args)
+function M.find_existing_view(adapter, rev_arg, path_args, left, right)
   for _, view in ipairs(M.views) do
     if DiffView.__get():ancestorof(view)
         and view.adapter.ctx.toplevel == adapter.ctx.toplevel
         and view.rev_arg == rev_arg
-        and vim.deep_equal(view.path_args or {}, path_args or {}) then
+        and vim.deep_equal(view.path_args or {}, path_args or {})
+        and same_rev(view.left, left)
+        and same_rev(view.right, right) then
       return view
     end
   end
@@ -63,18 +78,18 @@ function M.diffview_open(args)
 
   ---@cast adapter -?
 
-  -- Check for existing view with matching parameters.
-  local existing = M.find_existing_view(adapter, rev_arg, adapter.ctx.path_args)
-  if existing and existing.tabpage and api.nvim_tabpage_is_valid(existing.tabpage) then
-    api.nvim_set_current_tabpage(existing.tabpage)
-    logger:debug("Switched to existing DiffView")
-    return existing
-  end
-
   local opts = adapter:diffview_options(argo)
 
   if opts == nil then
     return
+  end
+
+  -- Check for existing view with matching parameters (including revisions).
+  local existing = M.find_existing_view(adapter, rev_arg, adapter.ctx.path_args, opts.left, opts.right)
+  if existing and existing.tabpage and api.nvim_tabpage_is_valid(existing.tabpage) then
+    api.nvim_set_current_tabpage(existing.tabpage)
+    logger:debug("Switched to existing DiffView")
+    return existing
   end
 
   local v = DiffView({
