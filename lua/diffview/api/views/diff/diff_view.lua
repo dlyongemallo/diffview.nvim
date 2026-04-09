@@ -1,6 +1,9 @@
 local async = require("diffview.async")
 local lazy = require("diffview.lazy")
 
+-- Ensure bootstrap has run before accessing DiffviewGlobal.
+require("diffview.bootstrap")
+
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local File = lazy.access("diffview.vcs.file", "File") ---@type vcs.File|LazyModule
 local FileEntry = lazy.access("diffview.scene.file_entry", "FileEntry") ---@type FileEntry|LazyModule
@@ -204,4 +207,7 @@ function CDiffView:create_file_entries(files)
 end
 
 M.CDiffView = CDiffView
+M.Rev = require("diffview.vcs.adapters.git.rev").GitRev
+M.RevType = require("diffview.vcs.rev").RevType
+
 return M

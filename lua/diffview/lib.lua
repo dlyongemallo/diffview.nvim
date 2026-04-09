@@ -187,7 +187,15 @@ end
 
 ---@param view View
 function M.add_view(view)
-  table.insert(M.views, view)
+  if not M.has_view(view) then
+    table.insert(M.views, view)
+  end
+end
+
+---@param view View
+---@return boolean
+function M.has_view(view)
+  return vim.tbl_contains(M.views, view)
 end
 
 ---@param view View

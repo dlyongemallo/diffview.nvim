@@ -128,6 +128,10 @@ function View:init(opt)
 end
 
 function View:open()
+  -- Auto-register so that integrating plugins (e.g., Neogit) don't need to
+  -- reach into diffview.lib to call add_view().
+  require("diffview.lib").add_view(self)
+
   vim.cmd("tab split")
   self.tabpage = api.nvim_get_current_tabpage()
   self:init_layout()
