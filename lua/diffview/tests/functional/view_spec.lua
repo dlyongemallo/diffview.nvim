@@ -1,8 +1,10 @@
 local api = vim.api
 
 describe("diffview.scene.view", function()
-  local View = require("diffview.scene.view").View
+  local view_mod = require("diffview.scene.view")
+  local View = view_mod.View
   local EventEmitter = require("diffview.events").EventEmitter
+  local config = require("diffview.config")
 
   local orig_emitter
 
@@ -70,6 +72,47 @@ describe("diffview.scene.view", function()
 
       assert.is_true(#api.nvim_list_tabpages() >= 1)
       assert.is_false(api.nvim_tabpage_is_valid(view.tabpage))
+    end)
+  end)
+
+  -- Regression: saved diffopt must be per-view so multiple views don't
+  -- clobber each other's saved state.
+  describe("per-view diffopt", function()
+    local orig_config
+
+    before_each(function()
+      orig_config = vim.deepcopy(config.get_config())
+      config.setup({ diffopt = { algorithm = "patience" } })
+    end)
+
+    after_each(function()
+      config.setup(orig_config)
+    end)
+
+    it("stores saved diffopt independently per view", function()
+      local view_a = View({ default_layout = {} })
+      local view_b = View({ default_layout = {} })
+
+      local baseline = vim.opt.diffopt:get()
+
+      -- Simulate view A entering its tab.
+      view_mod._apply_diffopt(view_a)
+      assert.is_not_nil(view_a._saved_diffopt)
+      assert.is_nil(view_b._saved_diffopt)
+
+      -- Simulate switching: A leaves, B enters.
+      view_mod._restore_diffopt(view_a)
+      view_mod._apply_diffopt(view_b)
+      assert.is_nil(view_a._saved_diffopt)
+      assert.is_not_nil(view_b._saved_diffopt)
+
+      -- Closing view A must not wipe view B's saved state.
+      view_mod._restore_diffopt(view_a) -- no-op: A has no saved state
+      assert.is_not_nil(view_b._saved_diffopt)
+
+      -- View B can still restore cleanly.
+      view_mod._restore_diffopt(view_b)
+      assert.are.same(baseline, vim.opt.diffopt:get())
     end)
   end)
 end)
