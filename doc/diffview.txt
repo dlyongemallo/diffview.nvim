@@ -1641,6 +1641,117 @@ For information on how to use User autocommands, see |User|.
                       This includes toggling, selecting, deselecting, clearing,
                       and pruning of selections.
 
+SELECTIONS API                                  *diffview-selections-api*
+
+The selections API provides a stable, public interface for programmatically
+querying and manipulating file selections. This is useful for integrating
+with external review tools such as gitlab.nvim.
+
+Access via: >lua
+    local selections = require("diffview.api").selections
+<
+
+All functions support an optional view override: simple query functions
+take it as a positional `view` parameter, while functions that also accept
+a `path`/`paths` argument take it as `opts.view`. When omitted, the
+current view (determined by tabpage) is used. When no DiffView is active,
+query functions return empty/falsy values and mutation functions are no-ops.
+
+                                                *diffview-selections-api-get*
+selections.get({view?})
+        Return a list of selected files with `path` and `kind` fields.
+
+        Returns: ~
+            `{ path: string, kind: string }[]`
+
+        Example: >lua
+            local sel = require("diffview.api").selections
+            for _, file in ipairs(sel.get()) do
+              print(file.path, file.kind)
+            end
+<
+                                                *diffview-selections-api-get_paths*
+selections.get_paths({view?})
+        Return just the paths of selected files.
+
+        Returns: ~
+            `string[]`
+
+                                                *diffview-selections-api-is_selected*
+selections.is_selected({path}, {opts?})
+        Check whether a file at {path} is selected.
+
+        Parameters: ~
+            {path}  (string)        File path relative to the VCS root
+                                          (the same format shown in the
+                                          file panel).
+            {opts}  (table|nil)     Optional table with fields:
+                    {kind}  (string|nil)  Restrict to a specific file kind
+                                          ("working", "staged", "conflicting").
+                    {view}  (View|nil)    View to query.
+
+        Returns: ~
+            `boolean`
+
+                                                *diffview-selections-api-select*
+selections.select({paths}, {opts?})
+        Select files by path. Already-selected files remain selected
+        (additive). Paths that do not match any entry are ignored.
+
+        Parameters: ~
+            {paths}  (string[])     Paths to select (relative to VCS root).
+            {opts}   (table|nil)    Optional table with `kind` and `view`
+                                    fields (see |diffview-selections-api-is_selected|).
+
+                                                *diffview-selections-api-deselect*
+selections.deselect({paths}, {opts?})
+        Deselect files by path. Paths that are not selected or do not
+        match any entry are ignored.
+
+        Parameters: ~
+            {paths}  (string[])     Paths to deselect (relative to VCS root).
+            {opts}   (table|nil)    Optional table with `kind` and `view`
+                                    fields (see |diffview-selections-api-is_selected|).
+
+                                                *diffview-selections-api-set*
+selections.set({paths}, {opts?})
+        Replace the entire selection set. Only the given paths will be
+        selected afterwards; all other files are deselected. When a `kind`
+        filter is provided, only files of that kind are affected; files of
+        other kinds keep their current selection state.
+
+        Parameters: ~
+            {paths}  (string[])     Paths that should be selected (relative
+                                    to VCS root).
+            {opts}   (table|nil)    Optional table with `kind` and `view`
+                                    fields (see |diffview-selections-api-is_selected|).
+
+        Example (save and restore across reopen): >lua
+            local sel = require("diffview.api").selections
+            -- Save current selections.
+            local saved = sel.get_paths()
+            -- ... close and reopen diffview ...
+            -- Restore selections.
+            sel.set(saved)
+<
+                                                *diffview-selections-api-clear*
+selections.clear({view?})
+        Clear all selections.
+
+                                                *diffview-selections-api-any*
+selections.any({view?})
+        Return `true` when at least one file is selected.
+
+        Returns: ~
+            `boolean`
+
+                                                *diffview-selections-api-count*
+selections.count({view?})
+        Return the total number of selected files.
+
+        Returns: ~
+            `integer`
+
 ==============================================================================
 
 MAPS                                            *diffview-maps*
