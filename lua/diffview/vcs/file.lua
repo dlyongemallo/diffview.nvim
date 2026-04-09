@@ -527,6 +527,19 @@ function File:attach_buffer(force, opt)
       end
 
       File.attached[self.bufnr] = state
+
+      -- Keymaps are registered asynchronously (after buffer creation and
+      -- content loading). Fire BufReadPost so plugins like which-key.nvim
+      -- re-scan buffer-local keymaps and make them discoverable immediately.
+      -- Skip for buffers where treesitter was intentionally disabled
+      -- (large_file_threshold): BufReadPost would trigger a full treesitter
+      -- re-parse, defeating the large-file optimisation.
+      if not vim.b[self.bufnr].diffview_disable_ts then
+        pcall(api.nvim_exec_autocmds, "BufReadPost", {
+          buffer = self.bufnr,
+          modeline = false,
+        })
+      end
     end
   end
 end
