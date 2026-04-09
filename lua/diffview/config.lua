@@ -159,6 +159,9 @@ M.defaults = {
       folder_count_style = "grouped", -- "grouped" (e.g. "2M 1D"), "simple" (e.g. "3"), or "none".
       folder_trailing_slash = true, -- Append "/" to folder names in the file tree.
     },
+    list_options = {
+      path_style = "basename", -- "basename" (name + dimmed path) or "full" (full path, uniform highlight).
+    },
     win_config = {
       position = "left",
       width = 35,
