@@ -111,6 +111,9 @@ function M.init()
   DiffviewGlobal.emitter:on("selection_changed", function(_)
     api.nvim_exec_autocmds("User", { pattern = "DiffviewSelectionChanged", modeline = false })
   end)
+  DiffviewGlobal.emitter:on("files_staged", function(_)
+    api.nvim_exec_autocmds("User", { pattern = "DiffviewFilesStaged", modeline = false })
+  end)
 
   -- Set up completion wrapper used by `vim.ui.input()`
   vim.cmd([[

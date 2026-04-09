@@ -1636,6 +1636,9 @@ For information on how to use User autocommands, see |User|.
                       such that |:setlocal| will apply settings to the
                       relevant buffer / window.
 
+`DiffviewFilesStaged`   Fires after files have been staged or unstaged from
+                      within a DiffView (e.g. via the stage/unstage actions).
+
 `DiffviewSelectionChanged`
                       Fires after file selections change in the file panel.
                       This includes toggling, selecting, deselecting, clearing,
