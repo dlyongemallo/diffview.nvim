@@ -104,7 +104,15 @@ local function render_file(conf, panel, comp, show_path, depth, sign_pad)
 
   local icon, icon_hl = hl.get_file_icon(file.basename, file.extension)
   comp:add_text(icon, icon_hl)
-  comp:add_text(file.basename, file.active and "DiffviewFilePanelSelected" or "DiffviewFilePanelFileName")
+
+  local name_hl = file.active and "DiffviewFilePanelSelected" or "DiffviewFilePanelFileName"
+  local path_style = show_path and conf.file_panel.list_options.path_style or nil
+
+  if path_style == "full" and #file.parent_path > 0 then
+    comp:add_text(file.parent_path .. "/", name_hl)
+  end
+
+  comp:add_text(file.basename, name_hl)
 
   if file.stats then
     if file.stats.additions then
@@ -124,7 +132,7 @@ local function render_file(conf, panel, comp, show_path, depth, sign_pad)
     comp:add_text(" !", "DiffviewFilePanelConflicts")
   end
 
-  if show_path then
+  if show_path and path_style ~= "full" then
     comp:add_text(" " .. file.parent_path, "DiffviewFilePanelPath")
   end
 

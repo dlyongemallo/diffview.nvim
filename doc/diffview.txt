@@ -812,6 +812,16 @@ file_panel                                      *diffview-config-file_panel*
                   Append "/" to folder names in the file tree.
                   Default: `true`
 
+            {list_options} (table)
+                Options for the list listing style:
+                • {path_style} ("basename"|"full")
+                  How to display file names in the list.
+                  `"basename"` shows the file name followed by the
+                  parent path in a dimmed highlight.
+                  `"full"` shows the full path with uniform
+                  highlighting.
+                  Default: `"basename"`
+
             {win_config} (table|function)
                 See |diffview-config-win_config|.
 
