@@ -261,6 +261,34 @@ describe("DiffView:set_revs", function()
       eq(true, view.panel.selected_files["working:b.lua"] == true)
     end)
 
+    it("persists selections under the new scope key", function()
+      local new_left = make_rev("ccc333")
+      local new_right = make_rev("ddd444")
+      local adapter = make_adapter({
+        ["ccc333..ddd444"] = { new_left, new_right },
+      })
+
+      local old_scope = selection_store.scope_key("/tmp/repo", "aaa111..bbb222")
+      local new_scope = selection_store.scope_key("/tmp/repo", "ccc333..ddd444")
+      local a = { path = "a.lua", kind = "working" }
+      local b = { path = "b.lua", kind = "working" }
+      local view = make_view(adapter, make_rev("aaa111"), make_rev("bbb222"), "aaa111..bbb222")
+      view._selection_scope_key = old_scope
+      -- Stub _save_selections as a callable (simulating the debounced handle).
+      view._save_selections = function() end
+
+      view.panel.files = make_mock_files({ a, b })
+      view.panel:select_file(a)
+      view.panel:select_file(b)
+
+      view:set_revs("ccc333..ddd444")
+
+      -- Selections should be persisted under the new scope key so they
+      -- survive a Neovim restart. The store writes keys in sorted order.
+      local saved = selection_store.load(new_scope)
+      eq({ "working:a.lua", "working:b.lua" }, saved)
+    end)
+
     it("persists old selections before switching scope", function()
       local new_left = make_rev("ccc333")
       local new_right = make_rev("ddd444")
@@ -270,21 +298,22 @@ describe("DiffView:set_revs", function()
 
       local old_scope = selection_store.scope_key("/tmp/repo", "aaa111..bbb222")
       local a = { path = "a.lua", kind = "working" }
+      local b = { path = "b.lua", kind = "staged" }
       local view = make_view(adapter, make_rev("aaa111"), make_rev("bbb222"), "aaa111..bbb222")
       view._selection_scope_key = old_scope
       -- Stub _save_selections as a callable (simulating the debounced handle).
       view._save_selections = function() end
 
-      view.panel.files = make_mock_files({ a })
+      view.panel.files = make_mock_files({ a, b })
       view.panel:select_file(a)
+      view.panel:select_file(b)
 
       -- The _save_selections_now method should have been called; verify by
       -- checking the store directly.  We bind DiffView's method via metatable.
       view:set_revs("ccc333..ddd444")
 
       local saved = selection_store.load(old_scope)
-      table.sort(saved)
-      eq({ "working:a.lua" }, saved)
+      eq({ "staged:b.lua", "working:a.lua" }, saved)
     end)
   end)
 end)
