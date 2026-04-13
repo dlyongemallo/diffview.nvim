@@ -237,6 +237,7 @@ function DiffView:_save_selections_now()
   if not self._selection_scope_key then return end
   local selection_store = require("diffview.selection_store")
   local keys = vim.tbl_keys(self.panel.selected_files)
+  table.sort(keys)
   selection_store.save(self._selection_scope_key, keys)
 end
 
@@ -285,6 +286,11 @@ function DiffView:set_revs(new_rev_arg, opts)
       for _, key in ipairs(saved) do
         self.panel.selected_files[key] = true
       end
+
+      -- Persist under the new scope key so selections survive a restart.
+      -- The update_files() machinery will trigger another save via
+      -- prune_selections if any stale entries need removing.
+      self:_save_selections_now()
     end
   end
 
