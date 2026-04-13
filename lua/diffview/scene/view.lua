@@ -16,21 +16,19 @@ local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 local api = vim.api
 local M = {}
 
----@type string[]? Saved diffopt value before diffview applied overrides.
-local saved_diffopt
-
 -- Boolean diffopt flags that can be toggled.
 local diffopt_bool_flags = {
   "indent-heuristic", "iwhite", "iwhiteall", "iwhiteeol", "iblank", "icase",
 }
 
----Apply configured diffopt overrides, saving the original value first.
-local function apply_diffopt()
+---Apply configured diffopt overrides, saving the original value on the view.
+---@param view View
+local function apply_diffopt(view)
   local conf = config.get_config().diffopt
   if not conf or vim.tbl_isempty(conf) then return end
 
-  if not saved_diffopt then
-    saved_diffopt = vim.opt.diffopt:get()
+  if not view._saved_diffopt then
+    view._saved_diffopt = vim.opt.diffopt:get()
   end
 
   if conf.algorithm then
@@ -61,11 +59,12 @@ local function apply_diffopt()
   end
 end
 
----Restore the original diffopt value.
-local function restore_diffopt()
-  if saved_diffopt then
-    vim.opt.diffopt = saved_diffopt
-    saved_diffopt = nil
+---Restore the original diffopt value from the view.
+---@param view View
+local function restore_diffopt(view)
+  if view._saved_diffopt then
+    vim.opt.diffopt = view._saved_diffopt
+    view._saved_diffopt = nil
   end
 end
 
@@ -81,6 +80,7 @@ local LayoutMode = oop.enum({
 ---@field default_layout Layout (class)
 ---@field ready boolean
 ---@field closing Signal
+---@field _saved_diffopt string[]? Per-view saved diffopt value before overrides.
 ---@field _global_callbacks table<any, function> # Callbacks registered on the global emitter, keyed by event.
 local View = oop.create_class("View")
 
@@ -120,10 +120,10 @@ function View:init(opt)
 
   -- Apply/restore diffopt overrides on tab enter/leave.
   self.emitter:on("tab_enter", function()
-    apply_diffopt()
+    apply_diffopt(self)
   end)
   self.emitter:on("tab_leave", function()
-    restore_diffopt()
+    restore_diffopt(self)
   end)
 end
 
@@ -136,7 +136,7 @@ function View:open()
   self.tabpage = api.nvim_get_current_tabpage()
   self:init_layout()
   self:post_open()
-  apply_diffopt()
+  apply_diffopt(self)
   DiffviewGlobal.emitter:emit("view_opened", self)
   DiffviewGlobal.emitter:emit("view_enter", self)
 end
@@ -146,7 +146,7 @@ function View:close()
 
   if self.tabpage and api.nvim_tabpage_is_valid(self.tabpage) then
     DiffviewGlobal.emitter:emit("view_leave", self)
-    restore_diffopt()
+    restore_diffopt(self)
 
     if #api.nvim_list_tabpages() == 1 then
       vim.cmd("tabnew")
@@ -245,5 +245,9 @@ end
 
 M.LayoutMode = LayoutMode
 M.View = View
+M._test = {
+  apply_diffopt = apply_diffopt,
+  restore_diffopt = restore_diffopt,
+}
 
 return M
