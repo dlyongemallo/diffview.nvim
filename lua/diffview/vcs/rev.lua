@@ -119,6 +119,19 @@ function Rev:abbrev(length)
   return nil
 end
 
+---Compare two optional Revs for equality.
+---@param a Rev?
+---@param b Rev?
+---@return boolean
+function M.same_rev(a, b)
+  if a == nil and b == nil then return true end
+  if a == nil or b == nil then return false end
+  return a.type == b.type
+    and a.commit == b.commit
+    and a.stage == b.stage
+    and a.track_head == b.track_head
+end
+
 M.RevType = RevType
 M.Rev = Rev
 
