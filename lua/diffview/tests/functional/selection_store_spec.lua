@@ -80,6 +80,32 @@ describe("diffview.selection_store", function()
       local result = SelectionStore.load("any:scope")
       eq({}, result)
     end)
+
+    -- Regression: fs_rename failure must be caught and logged rather than
+    -- silently leaving a .tmp file behind.
+    it("logs warning when rename fails", function()
+      local target = tmpdir .. "/store.json"
+      SelectionStore.get_path = function() return target end
+
+      local warns = {}
+      local orig_warn = DiffviewGlobal.logger.warn
+      local orig_rename = vim.uv.fs_rename
+      DiffviewGlobal.logger.warn = function(_, msg) table.insert(warns, msg) end
+      vim.uv.fs_rename = function()
+        return nil, "mock fs_rename failure"
+      end
+
+      SelectionStore.save("scope:", { "a.lua" })
+
+      DiffviewGlobal.logger.warn = orig_warn
+      vim.uv.fs_rename = orig_rename
+
+      -- The rename failure should be caught and logged with the rename error.
+      assert.is_true(#warns == 1)
+      assert.is_truthy(warns[1]:find("mock fs_rename failure", 1, true))
+      -- The .tmp file should be cleaned up.
+      eq(0, vim.fn.filereadable(target .. ".tmp"))
+    end)
   end)
 
   describe("on_selection_changed callback", function()

@@ -44,10 +44,19 @@ local function write_store(path, data)
   local ok, err = pcall(function()
     local dir = vim.fn.fnamemodify(path, ":h")
     vim.fn.mkdir(dir, "p")
+    if vim.fn.isdirectory(dir) == 0 then
+      error("mkdir failed: " .. dir)
+    end
     local json = vim.json.encode(data)
     local tmp = path .. ".tmp"
-    vim.fn.writefile({ json }, tmp)
-    vim.uv.fs_rename(tmp, path)
+    if vim.fn.writefile({ json }, tmp) ~= 0 then
+      error("writefile failed: " .. tmp)
+    end
+    local rename_ok, rename_err = vim.uv.fs_rename(tmp, path)
+    if not rename_ok then
+      pcall(vim.fn.delete, tmp)
+      error(rename_err or "fs_rename failed")
+    end
   end)
   if not ok then
     logger:warn("[SelectionStore] Failed to write store: " .. tostring(err))
