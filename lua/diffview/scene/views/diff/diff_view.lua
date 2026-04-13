@@ -124,6 +124,23 @@ function DiffView:post_open()
         end
       end)
     )
+
+    -- Listen for gitsigns repository-changing actions (hunk stage/unstage/reset)
+    -- to refresh the panel immediately instead of waiting for index polling.
+    -- Unlike GitSignsUpdate (which fires on every buffer enter and caused
+    -- spurious refreshes), GitSignsChanged only fires on actual repo changes.
+    self._gitsigns_augroup = api.nvim_create_augroup(
+      "diffview_gitsigns_" .. self.tabpage, { clear = true }
+    )
+    api.nvim_create_autocmd("User", {
+      group = self._gitsigns_augroup,
+      pattern = "GitSignsChanged",
+      callback = function()
+        if not self.closing:check() and self:is_cur_tabpage() then
+          self:update_files()
+        end
+      end,
+    })
   end
 
   vim.schedule(function()
@@ -315,6 +332,10 @@ function DiffView:close()
     if self.watcher then
       self.watcher:stop()
       self.watcher:close()
+    end
+
+    if self._gitsigns_augroup then
+      api.nvim_del_augroup_by_id(self._gitsigns_augroup)
     end
 
     for _, file in self.files:iter() do
