@@ -23,9 +23,28 @@ local M = {}
 ---@type View[]
 M.views = {}
 
+---Build a string key from the arguments that determine rev selection.
+---Two invocations with the same key will produce identical left/right Revs
+---(assuming unchanged repo state), so this key is sufficient for the
+---existing-view reuse check without shelling out to resolve revisions.
+---@param rev_arg string?
+---@param cached boolean?
+---@param imply_local boolean?
+---@param merge_base boolean?
+---@return string
+function M.make_reuse_key(rev_arg, cached, imply_local, merge_base)
+  local parts = { rev_arg or "" }
+  if cached then parts[#parts + 1] = "cached" end
+  if imply_local then parts[#parts + 1] = "imply-local" end
+  if merge_base then parts[#parts + 1] = "merge-base" end
+  return table.concat(parts, "\0")
+end
+
 local same_rev = lazy.access(rev_lib, "same_rev") ---@type fun(a: Rev?, b: Rev?): boolean
 
 ---Find an existing DiffView matching the given parameters.
+---When left/right are provided, also compares revisions; otherwise only
+---matches on toplevel, rev_arg, and path_args (original behaviour).
 ---@param adapter VCSAdapter
 ---@param rev_arg string?
 ---@param path_args string[]
@@ -38,8 +57,25 @@ function M.find_existing_view(adapter, rev_arg, path_args, left, right)
         and view.adapter.ctx.toplevel == adapter.ctx.toplevel
         and view.rev_arg == rev_arg
         and vim.deep_equal(view.path_args or {}, path_args or {})
-        and same_rev(view.left, left)
-        and same_rev(view.right, right) then
+        and (left == nil or same_rev(view.left, left))
+        and (right == nil or same_rev(view.right, right)) then
+      return view
+    end
+  end
+  return nil
+end
+
+---Find an existing DiffView by its reuse key (no rev comparison needed).
+---@param adapter VCSAdapter
+---@param reuse_key string
+---@param path_args string[]
+---@return DiffView?
+local function find_reusable_view(adapter, reuse_key, path_args)
+  for _, view in ipairs(M.views) do
+    if DiffView.__get():ancestorof(view)
+        and view.adapter.ctx.toplevel == adapter.ctx.toplevel
+        and view.reuse_key == reuse_key
+        and vim.deep_equal(view.path_args or {}, path_args or {}) then
       return view
     end
   end
@@ -70,23 +106,33 @@ function M.diffview_open(args)
 
   ---@cast adapter -?
 
-  local opts = adapter:diffview_options(argo)
+  -- Fast path: try to reuse an existing view by matching the raw arguments
+  -- that determine rev selection, avoiding the expensive diffview_options()
+  -- call (which shells out to the VCS to resolve revisions).
+  local reuse_key = M.make_reuse_key(
+    rev_arg,
+    argo:get_flag({ "cached", "staged" }),
+    argo:get_flag("imply-local"),
+    argo:get_flag("merge-base")
+  )
 
-  if opts == nil then
-    return
-  end
-
-  -- Check for existing view with matching parameters (including revisions).
-  local existing = M.find_existing_view(adapter, rev_arg, adapter.ctx.path_args, opts.left, opts.right)
+  local existing = find_reusable_view(adapter, reuse_key, adapter.ctx.path_args)
   if existing and existing.tabpage and api.nvim_tabpage_is_valid(existing.tabpage) then
     api.nvim_set_current_tabpage(existing.tabpage)
     logger:debug("Switched to existing DiffView")
     return existing
   end
 
+  local opts = adapter:diffview_options(argo)
+
+  if opts == nil then
+    return
+  end
+
   local v = DiffView({
     adapter = adapter,
     rev_arg = rev_arg,
+    reuse_key = reuse_key,
     path_args = adapter.ctx.path_args,
     left = opts.left,
     right = opts.right,
