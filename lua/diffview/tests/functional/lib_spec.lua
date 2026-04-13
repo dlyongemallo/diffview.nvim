@@ -1,105 +1,41 @@
 describe("diffview.lib", function()
   local lib = require("diffview.lib")
-  local oop = require("diffview.oop")
-  local RevType = require("diffview.vcs.rev").RevType
 
-  -- Minimal stub class to satisfy the ancestorof / instanceof checks without
-  -- pulling in the full StandardView/FilePanel dependency chain.
-  local DiffView = require("diffview.scene.views.diff.diff_view").DiffView
-
-  local StubDiffView = oop.create_class("StubDiffView", DiffView)
-
-  function StubDiffView:init(opt)
-    self.adapter = opt.adapter
-    self.rev_arg = opt.rev_arg
-    self.path_args = opt.path_args
-    self.left = opt.left
-    self.right = opt.right
-  end
-
-  local function make_rev(rev_type, commit, stage, track_head)
-    return { type = rev_type, commit = commit, stage = stage, track_head = track_head or false }
-  end
-
-  local function make_adapter(toplevel)
-    return { ctx = { toplevel = toplevel } }
-  end
-
-  describe("find_existing_view", function()
-    local saved_views
-
-    before_each(function()
-      saved_views = lib.views
-      lib.views = {}
+  describe("make_reuse_key", function()
+    it("produces the same key for identical arguments", function()
+      local a = lib.make_reuse_key("HEAD", true, false, false)
+      local b = lib.make_reuse_key("HEAD", true, false, false)
+      assert.are.equal(a, b)
     end)
 
-    after_each(function()
-      lib.views = saved_views
+    it("differs when cached flag differs", function()
+      local without = lib.make_reuse_key("HEAD", false, false, false)
+      local with = lib.make_reuse_key("HEAD", true, false, false)
+      assert.are_not.equal(without, with)
     end)
 
-    -- Regression: find_existing_view must distinguish views whose left/right
-    -- revisions differ (e.g., --cached vs default).
-    it("does not match when right rev type differs", function()
-      local adapter = make_adapter("/repo")
-      local local_rev = make_rev(RevType.LOCAL, nil, nil)
-      local stage_rev = make_rev(RevType.STAGE, nil, 0)
-      local commit_rev = make_rev(RevType.COMMIT, "abc123", nil)
-
-      local view = StubDiffView({
-        adapter = adapter,
-        rev_arg = nil,
-        path_args = {},
-        left = commit_rev,
-        right = local_rev,
-      })
-      table.insert(lib.views, view)
-
-      -- Same toplevel/rev_arg/path_args but different right rev (--cached).
-      local result = lib.find_existing_view(adapter, nil, {}, commit_rev, stage_rev)
-      assert.is_nil(result)
+    it("differs when rev_arg differs", function()
+      local a = lib.make_reuse_key("HEAD", false, false, false)
+      local b = lib.make_reuse_key("HEAD~1", false, false, false)
+      assert.are_not.equal(a, b)
     end)
 
-    it("matches when all parameters including revs are equal", function()
-      local adapter = make_adapter("/repo")
-      local left = make_rev(RevType.COMMIT, "abc123", nil)
-      local right = make_rev(RevType.LOCAL, nil, nil)
-
-      local view = StubDiffView({
-        adapter = adapter,
-        rev_arg = "HEAD",
-        path_args = { "src/" },
-        left = left,
-        right = right,
-      })
-      table.insert(lib.views, view)
-
-      local result = lib.find_existing_view(adapter, "HEAD", { "src/" }, left, right)
-      assert.are.equal(view, result)
+    it("treats nil rev_arg as empty string", function()
+      local a = lib.make_reuse_key(nil, false, false, false)
+      local b = lib.make_reuse_key("", false, false, false)
+      assert.are.equal(a, b)
     end)
 
-    it("returns nil for empty views list", function()
-      local adapter = make_adapter("/repo")
-      local rev = make_rev(RevType.LOCAL, nil, nil)
-      assert.is_nil(lib.find_existing_view(adapter, nil, {}, rev, rev))
+    it("differs when imply_local flag differs", function()
+      local without = lib.make_reuse_key(nil, false, false, false)
+      local with = lib.make_reuse_key(nil, false, true, false)
+      assert.are_not.equal(without, with)
     end)
 
-    it("does not match when track_head differs", function()
-      local adapter = make_adapter("/repo")
-      local left = make_rev(RevType.COMMIT, "abc123", nil, false)
-      local right = make_rev(RevType.LOCAL, nil, nil, false)
-
-      local view = StubDiffView({
-        adapter = adapter,
-        rev_arg = nil,
-        path_args = {},
-        left = left,
-        right = right,
-      })
-      table.insert(lib.views, view)
-
-      local left_tracking = make_rev(RevType.COMMIT, "abc123", nil, true)
-      local result = lib.find_existing_view(adapter, nil, {}, left_tracking, right)
-      assert.is_nil(result)
+    it("differs when merge_base flag differs", function()
+      local without = lib.make_reuse_key("HEAD", false, false, false)
+      local with = lib.make_reuse_key("HEAD", false, false, true)
+      assert.are_not.equal(without, with)
     end)
   end)
 end)

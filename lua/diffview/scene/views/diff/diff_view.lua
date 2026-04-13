@@ -40,6 +40,7 @@ local same_rev = lazy.access(rev_lib, "same_rev") ---@type fun(a: Rev?, b: Rev?)
 ---@operator call : DiffView
 ---@field adapter VCSAdapter
 ---@field rev_arg string
+---@field reuse_key? string
 ---@field path_args string[]
 ---@field left Rev
 ---@field right Rev
@@ -61,6 +62,7 @@ function DiffView:init(opt)
   self.adapter = opt.adapter
   self.path_args = opt.path_args
   self.rev_arg = opt.rev_arg
+  self.reuse_key = opt.reuse_key
   self.left = opt.left
   self.right = opt.right
   self.initialized = false
@@ -269,7 +271,11 @@ function DiffView:set_revs(new_rev_arg, opts)
   end
 
   -- Update the view identity.
+  local lib = require("diffview.lib")
   self.rev_arg = new_rev_arg
+  self.reuse_key = lib.make_reuse_key(
+    new_rev_arg, opts.cached, opts.imply_local, opts.merge_base
+  )
   self.left = new_left
   self.right = new_right
   self.panel.rev_pretty_name = new_rev_arg
