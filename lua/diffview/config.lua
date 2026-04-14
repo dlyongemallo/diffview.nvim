@@ -90,8 +90,9 @@ M.defaults = {
   -- revision buffers. Set to 0 to disable this behaviour.
   large_file_threshold = 0,
   -- Override diffopt settings while diffview is open. Restored on close.
-  -- Keys: algorithm, context, indent_heuristic, iwhite, iwhiteall, iwhiteeol, iblank, icase.
-  -- Example: { algorithm = "histogram", indent_heuristic = true }
+  -- Keys: algorithm, context, linematch, indent_heuristic, iwhite, iwhiteall,
+  -- iwhiteeol, iblank, icase.
+  -- Example: { algorithm = "histogram", linematch = 60 }
   diffopt = {},
   clean_up_buffers = false, -- Delete file buffers created by diffview on close (only buffers not open before diffview).
   persist_selections = {

@@ -542,12 +542,16 @@ diffopt                                         *diffview-config-diffopt*
         Type: `table`, Default: `{}`
 
         Override |'diffopt'| settings while Diffview is open. Settings are
-        restored on close. Available keys: `algorithm`, `context`,
+        restored on close. Available keys: `algorithm`, `context`, `linematch`,
         `indent_heuristic`, `iwhite`, `iwhiteall`, `iwhiteeol`, `iblank`,
         `icase`.
 
+        `linematch` pairs added/deleted lines within a hunk so intra-line
+        |hl-DiffText| highlighting becomes meaningful (VSCode-style). A value
+        of `60` is typical; `0` disables it.
+
         Example: >lua
-                diffopt = { algorithm = "histogram", indent_heuristic = true }
+                diffopt = { algorithm = "histogram", linematch = 60 }
 <
 
 clean_up_buffers                                *diffview-config-clean_up_buffers*
