@@ -118,4 +118,81 @@ describe("diffview.scene.view", function()
       assert.are.same(baseline, vim.opt.diffopt:get())
     end)
   end)
+
+  describe("diffopt linematch override", function()
+    local orig_config
+    local orig_diffopt
+
+    before_each(function()
+      orig_config = vim.deepcopy(config.get_config())
+      orig_diffopt = vim.deepcopy(vim.opt.diffopt:get())
+    end)
+
+    after_each(function()
+      config.setup(orig_config)
+      vim.opt.diffopt = vim.deepcopy(orig_diffopt)
+    end)
+
+    local function find_linematch(opts)
+      for _, v in ipairs(opts) do
+        local n = v:match("^linematch:(%d+)$")
+        if n then return tonumber(n) end
+      end
+      return nil
+    end
+
+    it("applies linematch:N when configured", function()
+      vim.opt.diffopt:remove(
+        vim.tbl_filter(function(v) return v:match("^linematch:") end, vim.opt.diffopt:get())
+      )
+      config.setup({ diffopt = { linematch = 60 } })
+
+      local view = View({ default_layout = {} })
+      view_mod._test.apply_diffopt(view)
+
+      assert.are.equal(60, find_linematch(vim.opt.diffopt:get()))
+
+      view_mod._test.restore_diffopt(view)
+      assert.is_nil(find_linematch(vim.opt.diffopt:get()))
+    end)
+
+    it("replaces an existing linematch:N entry", function()
+      vim.opt.diffopt:remove(
+        vim.tbl_filter(function(v) return v:match("^linematch:") end, vim.opt.diffopt:get())
+      )
+      vim.opt.diffopt:append({ "linematch:30" })
+      config.setup({ diffopt = { linematch = 60 } })
+
+      local view = View({ default_layout = {} })
+      view_mod._test.apply_diffopt(view)
+
+      -- Only the configured value should remain (no duplicate).
+      local matches = vim.tbl_filter(
+        function(v) return v:match("^linematch:") end,
+        vim.opt.diffopt:get()
+      )
+      assert.are.equal(1, #matches)
+      assert.are.equal(60, find_linematch(vim.opt.diffopt:get()))
+
+      -- Restoring brings back the pre-view value.
+      view_mod._test.restore_diffopt(view)
+      assert.are.equal(30, find_linematch(vim.opt.diffopt:get()))
+    end)
+
+    it("leaves linematch untouched when not configured", function()
+      vim.opt.diffopt:remove(
+        vim.tbl_filter(function(v) return v:match("^linematch:") end, vim.opt.diffopt:get())
+      )
+      vim.opt.diffopt:append({ "linematch:45" })
+      config.setup({ diffopt = { algorithm = "patience" } })
+
+      local view = View({ default_layout = {} })
+      view_mod._test.apply_diffopt(view)
+
+      assert.are.equal(45, find_linematch(vim.opt.diffopt:get()))
+
+      view_mod._test.restore_diffopt(view)
+      assert.are.equal(45, find_linematch(vim.opt.diffopt:get()))
+    end)
+  end)
 end)

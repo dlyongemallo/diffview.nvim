@@ -46,6 +46,13 @@ local function apply_diffopt(view)
     vim.opt.diffopt:append({ "context:" .. conf.context })
   end
 
+  if conf.linematch ~= nil then
+    vim.opt.diffopt:remove(
+      vim.tbl_filter(function(v) return v:match("^linematch:") end, vim.opt.diffopt:get())
+    )
+    vim.opt.diffopt:append({ "linematch:" .. conf.linematch })
+  end
+
   for _, flag in ipairs(diffopt_bool_flags) do
     -- Convert config key (underscore-separated) to diffopt flag (hyphenated).
     local key = flag:gsub("-", "_")
