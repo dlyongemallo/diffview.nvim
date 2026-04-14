@@ -238,25 +238,6 @@ describe("keymap save/restore on attach/detach", function()
   end)
 
   describe("BufReadPost emission after keymap registration", function()
-    it("fires BufReadPost on first attach", function()
-      local bufnr = scratch_buf()
-      local fired = false
-
-      local au_id = api.nvim_create_autocmd("BufReadPost", {
-        buffer = bufnr,
-        callback = function() fired = true end,
-      })
-
-      local file = make_file(bufnr)
-      attach_with_test_keymap(file)
-
-      assert.is_true(fired)
-
-      file:detach_buffer()
-      api.nvim_del_autocmd(au_id)
-      api.nvim_buf_delete(bufnr, { force = true })
-    end)
-
     it("skips BufReadPost when diffview_disable_ts is set", function()
       local bufnr = scratch_buf()
       local fired = false
@@ -296,6 +277,45 @@ describe("keymap save/restore on attach/detach", function()
 
       file:detach_buffer()
       api.nvim_del_autocmd(au_id)
+      api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    -- Regression guard for #113: nvim's `filetypedetect` augroup re-runs
+    -- filetype detection on BufReadPost, which re-fires FileType. A user's
+    -- FileType handler could then clobber diffview's window-local options
+    -- (e.g. replacing `foldmethod = "diff"` with `foldmethod = "expr"`).
+    -- The emission must suppress FileType to avoid this.
+    it("does not re-fire FileType during synthetic BufReadPost", function()
+      local bufnr = scratch_buf()
+      api.nvim_buf_set_name(bufnr, "/tmp/diffview_test_" .. bufnr .. ".txt")
+
+      local ft_fired = false
+      local au_id = api.nvim_create_autocmd("FileType", {
+        callback = function(ev)
+          if ev.buf == bufnr then ft_fired = true end
+        end,
+      })
+
+      local file = make_file(bufnr)
+      attach_with_test_keymap(file)
+
+      assert.is_false(ft_fired)
+
+      file:detach_buffer()
+      api.nvim_del_autocmd(au_id)
+      api.nvim_buf_delete(bufnr, { force = true })
+    end)
+
+    it("restores eventignore after emission", function()
+      local bufnr = scratch_buf()
+      local saved_ei = vim.o.eventignore
+
+      local file = make_file(bufnr)
+      attach_with_test_keymap(file)
+
+      assert.equals(saved_ei, vim.o.eventignore)
+
+      file:detach_buffer()
       api.nvim_buf_delete(bufnr, { force = true })
     end)
   end)

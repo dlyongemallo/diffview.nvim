@@ -536,16 +536,22 @@ function File:attach_buffer(force, opt)
       -- Skip for buffers where treesitter was intentionally disabled
       -- (large_file_threshold): BufReadPost would trigger a full treesitter
       -- re-parse, defeating the large-file optimisation.
-      if not vim.b[self.bufnr].diffview_buf_read_emitted
+      -- Suppress FileType during the synthetic emission: nvim's
+      -- `filetypedetect` augroup re-runs filetype detection on BufReadPost,
+      -- which re-fires FileType. A user FileType handler can then clobber
+      -- diffview's window-local options (e.g. replacing `foldmethod = "diff"`
+      -- with `foldmethod = "expr"`). See #113.
+      local should_emit_buf_read = not vim.b[self.bufnr].diffview_buf_read_emitted
         and not vim.b[self.bufnr].diffview_disable_ts
-      then
+      if should_emit_buf_read then
         vim.b[self.bufnr].diffview_buf_read_emitted = true
-        api.nvim_buf_call(self.bufnr, function()
-          pcall(api.nvim_exec_autocmds, "BufReadPost", {
-            buffer = self.bufnr,
-            modeline = false,
-          })
+        local saved_ei = vim.o.eventignore
+        ---@diagnostic disable-next-line: param-type-mismatch
+        vim.opt.eventignore:append("FileType")
+        pcall(api.nvim_buf_call, self.bufnr, function()
+          api.nvim_exec_autocmds("BufReadPost", { buffer = self.bufnr, modeline = false })
         end)
+        vim.o.eventignore = saved_ei
       end
     end
   end
