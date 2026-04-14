@@ -474,6 +474,7 @@ return setmetatable({
   _test = {
     format_folder_name = format_folder_name,
     has_wide_sign = has_wide_sign,
+    render_file = render_file,
     render_folder_count = render_folder_count,
     selection_signs_ns = selection_signs_ns,
   },

@@ -8,6 +8,7 @@ local panel_render = require("diffview.scene.views.diff.render")
 local eq = helpers.eq
 
 local format_folder_name = panel_render._test.format_folder_name
+local render_file = panel_render._test.render_file
 local render_folder_count = panel_render._test.render_folder_count
 
 -- ---------------------------------------------------------------------------
@@ -1172,6 +1173,184 @@ describe("panel_render", function()
         eq("DiffviewFilePanelMarked", dir_sign[4].sign_hl_group)
 
         panel:destroy()
+      end)
+    end)
+  end)
+
+  -- -----------------------------------------------------------------------
+  -- file_panel.list_options.path_style
+  -- -----------------------------------------------------------------------
+
+  describe("file_panel.list_options.path_style", function()
+    ---Create a minimal panel stub exposing the methods render_file depends on.
+    local function make_panel_stub()
+      return {
+        is_selected = function(_, _) return false end,
+        has_any_selections = function(_) return false end,
+      }
+    end
+
+    ---Create a mock render component whose context is the given file entry.
+    local function make_file_comp(entry)
+      local comp = make_comp()
+      comp.context = entry
+      return comp
+    end
+
+    before_each(function()
+      -- Avoid requiring nvim-web-devicons during rendering.
+      config.get_config().use_icons = false
+    end)
+
+    it("defaults to 'basename'", function()
+      eq("basename", config.get_config().file_panel.list_options.path_style)
+    end)
+
+    describe("'basename' (default)", function()
+      it("appends a dimmed parent path after the basename for files in subdirectories", function()
+        local conf = config.get_config()
+        conf.file_panel.list_options.path_style = "basename"
+        config.setup(conf)
+
+        local entry = make_entry("src/components/button.lua")
+        local comp = make_file_comp(entry)
+        render_file(config.get_config(), make_panel_stub(), comp, true, nil, nil)
+
+        -- The basename uses DiffviewFilePanelFileName.
+        local name_segs = comp:segments_by_hl("DiffviewFilePanelFileName")
+        assert.truthy(
+          vim.tbl_contains(name_segs, "button.lua"),
+          "expected a basename segment with DiffviewFilePanelFileName highlight"
+        )
+        -- The parent path should not be prepended to the basename segments.
+        assert.falsy(
+          vim.tbl_contains(name_segs, "src/components/"),
+          "parent path should not be prepended in 'basename' mode"
+        )
+
+        -- The parent path is appended with the dimmed DiffviewFilePanelPath highlight.
+        local path_segs = comp:segments_by_hl("DiffviewFilePanelPath")
+        assert.truthy(
+          vim.tbl_contains(path_segs, " src/components"),
+          "expected a trailing dimmed parent-path segment"
+        )
+      end)
+
+      it("does not prepend a stray '/' for files at the repository root", function()
+        local conf = config.get_config()
+        conf.file_panel.list_options.path_style = "basename"
+        config.setup(conf)
+
+        local entry = make_entry("README.md")
+        local comp = make_file_comp(entry)
+        render_file(config.get_config(), make_panel_stub(), comp, true, nil, nil)
+
+        local name_segs = comp:segments_by_hl("DiffviewFilePanelFileName")
+        assert.truthy(vim.tbl_contains(name_segs, "README.md"))
+        for _, seg in ipairs(name_segs) do
+          assert.falsy(
+            seg:find("/", 1, true),
+            "did not expect any '/' in name segments for a root-level file, got: " .. seg
+          )
+        end
+      end)
+    end)
+
+    describe("'full'", function()
+      it("prepends the parent path to the basename with uniform name highlight", function()
+        local conf = config.get_config()
+        conf.file_panel.list_options.path_style = "full"
+        config.setup(conf)
+
+        local entry = make_entry("src/components/button.lua")
+        local comp = make_file_comp(entry)
+        render_file(config.get_config(), make_panel_stub(), comp, true, nil, nil)
+
+        -- Both the parent prefix and the basename use DiffviewFilePanelFileName.
+        local name_segs = comp:segments_by_hl("DiffviewFilePanelFileName")
+        assert.truthy(
+          vim.tbl_contains(name_segs, "src/components/"),
+          "expected the parent path prefix with the name highlight"
+        )
+        assert.truthy(
+          vim.tbl_contains(name_segs, "button.lua"),
+          "expected the basename with the name highlight"
+        )
+
+        -- No dimmed trailing path segment should be emitted.
+        local path_segs = comp:segments_by_hl("DiffviewFilePanelPath")
+        eq(0, #path_segs)
+      end)
+
+      it("omits the '/' prefix for files at the repository root", function()
+        local conf = config.get_config()
+        conf.file_panel.list_options.path_style = "full"
+        config.setup(conf)
+
+        local entry = make_entry("README.md")
+        local comp = make_file_comp(entry)
+        render_file(config.get_config(), make_panel_stub(), comp, true, nil, nil)
+
+        local name_segs = comp:segments_by_hl("DiffviewFilePanelFileName")
+        assert.truthy(vim.tbl_contains(name_segs, "README.md"))
+        for _, seg in ipairs(name_segs) do
+          assert.falsy(
+            seg:find("/", 1, true),
+            "did not expect any '/' in name segments for a root-level file, got: " .. seg
+          )
+        end
+
+        -- Full mode never emits a trailing DiffviewFilePanelPath segment.
+        local path_segs = comp:segments_by_hl("DiffviewFilePanelPath")
+        eq(0, #path_segs)
+      end)
+
+      it("uses DiffviewFilePanelSelected for the whole path when the file is active", function()
+        local conf = config.get_config()
+        conf.file_panel.list_options.path_style = "full"
+        config.setup(conf)
+
+        local entry = make_entry("src/main.lua")
+        entry.active = true
+        local comp = make_file_comp(entry)
+        render_file(config.get_config(), make_panel_stub(), comp, true, nil, nil)
+
+        local selected_segs = comp:segments_by_hl("DiffviewFilePanelSelected")
+        assert.truthy(
+          vim.tbl_contains(selected_segs, "src/"),
+          "expected the parent path prefix with the selected highlight"
+        )
+        assert.truthy(
+          vim.tbl_contains(selected_segs, "main.lua"),
+          "expected the basename with the selected highlight"
+        )
+
+        -- The inactive name highlight must not be used for an active file.
+        local name_segs = comp:segments_by_hl("DiffviewFilePanelFileName")
+        eq(0, #name_segs)
+      end)
+    end)
+
+    describe("tree listing mode (show_path = false)", function()
+      it("ignores path_style = 'full' and never prepends the parent path", function()
+        local conf = config.get_config()
+        conf.file_panel.list_options.path_style = "full"
+        config.setup(conf)
+
+        local entry = make_entry("src/components/button.lua")
+        local comp = make_file_comp(entry)
+        render_file(config.get_config(), make_panel_stub(), comp, false, 0, nil)
+
+        local name_segs = comp:segments_by_hl("DiffviewFilePanelFileName")
+        assert.truthy(vim.tbl_contains(name_segs, "button.lua"))
+        assert.falsy(
+          vim.tbl_contains(name_segs, "src/components/"),
+          "parent path should not be prepended in tree mode"
+        )
+
+        -- Tree mode suppresses both the prefix and the trailing dimmed path.
+        local path_segs = comp:segments_by_hl("DiffviewFilePanelPath")
+        eq(0, #path_segs)
       end)
     end)
   end)
