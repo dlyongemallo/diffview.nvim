@@ -10,7 +10,6 @@ local FileDict = lazy.access("diffview.vcs.file_dict", "FileDict") ---@type File
 local FileEntry = lazy.access("diffview.scene.file_entry", "FileEntry") ---@type FileEntry|LazyModule
 local FilePanel = lazy.access("diffview.scene.views.diff.file_panel", "FilePanel") ---@type FilePanel|LazyModule
 local PerfTimer = lazy.access("diffview.perf", "PerfTimer") ---@type PerfTimer|LazyModule
-local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
 local StandardView = lazy.access("diffview.scene.views.standard.standard_view", "StandardView") ---@type StandardView|LazyModule
 local config = lazy.require("diffview.config") ---@module "diffview.config"
 local debounce = lazy.require("diffview.debounce") ---@module "diffview.debounce"
@@ -536,9 +535,11 @@ DiffView.update_files = debounce.debounce_trailing(
     end
     perf:lap("refreshed revs")
 
-    -- If left is tracking HEAD and right is LOCAL: Update HEAD rev.
+    -- If left is tracking HEAD: Update HEAD rev.  This applies regardless
+    -- of the right side's type, since a cached/staged view (right = STAGE)
+    -- also needs its left refreshed when HEAD moves.
     local new_head
-    if self.left.track_head and self.right.type == RevType.LOCAL then
+    if self.left.track_head then
       new_head = self.adapter:head_rev()
       if new_head and self.left.commit ~= new_head.commit then
         self.left = new_head
