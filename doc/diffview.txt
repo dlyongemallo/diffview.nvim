@@ -673,11 +673,14 @@ view.x.layout                                   *diffview-config-view.x.layout*
 
                                                 *diffview-layouts*
             {diff1_plain}
-                Available for: merge_tool
+                Available for: diff_view, file_history_view, merge_tool
 
-                This is a plain, singular window. This is available in case
-                you prefer to edit conflict markers manually without the
-                visual noise from diffs.
+                This is a plain, singular window with no diff rendering —
+                just the new-side file shown as-is. In the merge tool it
+                lets you edit conflict markers manually without the visual
+                noise from diffs. In regular diff views it's effectively
+                "show me the file" with no change annotations; for a
+                visual diff in a single window, see `diff1_inline`.
 
                 ┌──────────────┐
                 │              │
