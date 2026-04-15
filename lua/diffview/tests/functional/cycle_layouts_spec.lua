@@ -176,6 +176,7 @@ describe("diffview.actions.set_layout name resolution", function()
   it("known layout names produce no error", function()
     local known_names = {
       "diff1_plain",
+      "diff1_inline",
       "diff2_horizontal",
       "diff2_vertical",
       "diff3_horizontal",
@@ -454,15 +455,15 @@ describe("diffview.actions.cycle_layout with custom config", function()
     local orig = vim.deepcopy(config.get_config())
     config.setup({
       view = {
-        default = { layout = "diff2_vertical" },
-        cycle_layouts = { default = { "diff2_horizontal" } },
+        default = { layout = "diff1_inline" },
+        cycle_layouts = { default = { "diff2_horizontal", "diff2_vertical" } },
       },
     })
 
     local resolved = config.get_config().view.cycle_layouts.default
     assert.is_true(
-      vim.tbl_contains(resolved, "diff2_vertical"),
-      "diff2_vertical should be auto-inserted into the default cycle"
+      vim.tbl_contains(resolved, "diff1_inline"),
+      "diff1_inline should be auto-inserted into the default cycle"
     )
 
     config.setup(orig)

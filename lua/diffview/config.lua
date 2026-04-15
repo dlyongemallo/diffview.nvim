@@ -6,6 +6,7 @@ local actions = require("diffview.actions")
 local lazy = require("diffview.lazy")
 
 local Diff1 = lazy.access("diffview.scene.layouts.diff_1", "Diff1") ---@type Diff1|LazyModule
+local Diff1Inline = lazy.access("diffview.scene.layouts.diff_1_inline", "Diff1Inline") ---@type Diff1Inline|LazyModule
 local Diff2 = lazy.access("diffview.scene.layouts.diff_2", "Diff2") ---@type Diff2|LazyModule
 local Diff2Hor = lazy.access("diffview.scene.layouts.diff_2_hor", "Diff2Hor") ---@type Diff2Hor|LazyModule
 local Diff2Ver = lazy.access("diffview.scene.layouts.diff_2_ver", "Diff2Ver") ---@type Diff2Ver|LazyModule
@@ -150,6 +151,14 @@ M.defaults = {
       default = { "diff2_horizontal", "diff2_vertical" },
       merge_tool = { "diff3_horizontal", "diff3_vertical", "diff3_mixed", "diff4_mixed", "diff1_plain" },
     },
+    -- Options specific to the `diff1_inline` layout.
+    inline = {
+      -- Rendering style. "unified": proper unified diff — old lines shown
+      -- above modifications as virt_lines, added chars highlighted in place.
+      -- "overleaf": deleted chars on modified lines rendered inline as
+      -- strikethrough virtual text (Overleaf-editor style); no block echo.
+      style = "unified",
+    },
   },
   file_panel = {
     listing_style = "tree",
@@ -239,6 +248,14 @@ M.defaults = {
     diff1 = {
       -- Mappings in single window diff layouts
       { "n", "g?", actions.help({ "view", "diff1" }), { desc = "Open the help panel" } },
+    },
+    diff1_inline = {
+      -- Mappings in the `diff1_inline` unified diff layout. Native `]c`/`[c`
+      -- don't work here because the window has `diff=false`, so we provide
+      -- equivalents that walk the renderer's cached hunks.
+      { "n", "]c",  actions.next_inline_hunk,                            { desc = "Jump to the next inline-diff hunk" } },
+      { "n", "[c",  actions.prev_inline_hunk,                            { desc = "Jump to the previous inline-diff hunk" } },
+      { "n", "g?",  actions.help({ "view", "diff1", "diff1_inline" }),   { desc = "Open the help panel" } },
     },
     diff2 = {
       -- Mappings in 2-way diff layouts
@@ -426,6 +443,7 @@ function M.get_log_options(single_file, t, vcs)
 end
 
 ---@alias LayoutName "diff1_plain"
+---       | "diff1_inline"
 ---       | "diff2_horizontal"
 ---       | "diff2_vertical"
 ---       | "diff3_horizontal"
@@ -435,6 +453,7 @@ end
 
 local layout_map = {
   diff1_plain = Diff1,
+  diff1_inline = Diff1Inline,
   diff2_horizontal = Diff2Hor,
   diff2_vertical = Diff2Ver,
   diff3_horizontal = Diff3Hor,
@@ -454,7 +473,10 @@ end
 ---@param layout Layout
 ---@return table?
 function M.get_layout_keymaps(layout)
-  if layout:instanceof(Diff1.__get()) then
+  -- Check Diff1Inline before Diff1 since it's a subclass.
+  if layout:instanceof(Diff1Inline.__get()) then
+    return M._config.keymaps.diff1_inline
+  elseif layout:instanceof(Diff1.__get()) then
     return M._config.keymaps.diff1
   elseif layout:instanceof(Diff2.__get()) then
     return M._config.keymaps.diff2
@@ -664,7 +686,7 @@ function M.setup(user_config)
   do
     -- Validate layouts
     local view = M._config.view
-    local standard_layouts = { "diff1_plain", "diff2_horizontal", "diff2_vertical", -1 }
+    local standard_layouts = { "diff1_plain", "diff1_inline", "diff2_horizontal", "diff2_vertical", -1 }
     local merge_layouts = {
       "diff1_plain",
       "diff3_horizontal",
@@ -719,6 +741,25 @@ function M.setup(user_config)
       if layout and layout ~= -1 and not vim.tbl_contains(list, layout) then
         table.insert(list, layout)
       end
+    end
+
+    -- Validate `view.inline`. A nil style (e.g. user passed `view.inline = {}`)
+    -- silently falls back to the default; only an explicit invalid value errors.
+    -- Reject non-table values (mirrors the `view.cycle_layouts` guard above).
+    if view.inline ~= nil and type(view.inline) ~= "table" then
+      utils.warn("Invalid value for 'view.inline'. Must be a table.")
+      view.inline = utils.tbl_deep_clone(M.defaults.view.inline)
+    end
+    view.inline = view.inline or {}
+    local valid_inline_styles = { "unified", "overleaf" }
+    if view.inline.style == nil then
+      view.inline.style = M.defaults.view.inline.style
+    elseif not vim.tbl_contains(valid_inline_styles, view.inline.style) then
+      utils.err(("Invalid inline style '%s' for 'view.inline.style'! Must be one of (%s)."):format(
+        view.inline.style,
+        fmt_enum(valid_inline_styles)
+      ))
+      view.inline.style = M.defaults.view.inline.style
     end
   end
 

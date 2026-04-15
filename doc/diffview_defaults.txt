@@ -53,6 +53,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
       -- Configure the layout and behavior of different types of views.
       -- Available layouts:
       --  'diff1_plain'
+      --    |'diff1_inline'
       --    |'diff2_horizontal'
       --    |'diff2_vertical'
       --    |'diff3_horizontal'
@@ -86,6 +87,13 @@ DEFAULT CONFIG                                  *diffview.defaults*
       cycle_layouts = {
         default = { "diff2_horizontal", "diff2_vertical" },
         merge_tool = { "diff3_horizontal", "diff3_vertical", "diff3_mixed", "diff4_mixed", "diff1_plain" },
+      },
+      -- Options that apply to the `diff1_inline` layout.
+      inline = {
+        -- Rendering style. "unified" shows a proper unified diff with old
+        -- lines as virt_lines above; "overleaf" renders deleted chars on
+        -- modified lines as inline strikethrough virt_text.
+        style = "unified",
       },
     },
     file_panel = {
@@ -185,6 +193,14 @@ DEFAULT CONFIG                                  *diffview.defaults*
       diff1 = {
         -- Mappings in single window diff layouts
         { "n", "g?", actions.help({ "view", "diff1" }), { desc = "Open the help panel" } },
+      },
+      diff1_inline = {
+        -- Mappings in the `diff1_inline` unified diff layout. Native `]c`/`[c`
+        -- don't work here because the window has `diff=false`, so we provide
+        -- equivalents that walk the renderer's cached hunks.
+        { "n", "]c",  actions.next_inline_hunk,                            { desc = "Jump to the next inline-diff hunk" } },
+        { "n", "[c",  actions.prev_inline_hunk,                            { desc = "Jump to the previous inline-diff hunk" } },
+        { "n", "g?",  actions.help({ "view", "diff1", "diff1_inline" }),   { desc = "Open the help panel" } },
       },
       diff2 = {
         -- Mappings in 2-way diff layouts

@@ -14,6 +14,7 @@ local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 local vcs_utils = lazy.require("diffview.vcs.utils") ---@module "diffview.vcs.utils"
 
 local Diff1 = lazy.access("diffview.scene.layouts.diff_1", "Diff1") ---@type Diff1|LazyModule
+local Diff1Inline = lazy.access("diffview.scene.layouts.diff_1_inline", "Diff1Inline") ---@type Diff1Inline|LazyModule
 local Diff2Hor = lazy.access("diffview.scene.layouts.diff_2_hor", "Diff2Hor") ---@type Diff2Hor|LazyModule
 local Diff2Ver = lazy.access("diffview.scene.layouts.diff_2_ver", "Diff2Ver") ---@type Diff2Ver|LazyModule
 local Diff3 = lazy.access("diffview.scene.layouts.diff_3", "Diff3") ---@type Diff3|LazyModule
@@ -37,6 +38,18 @@ local M = setmetatable({}, {
 })
 
 M.compat = {}
+
+---Return the view's main window and its file's bufnr if both are valid,
+---otherwise nil. Use this at the top of any action that reads or modifies the
+---currently-displayed file buffer.
+---@param view StandardView?
+---@return Window? main
+---@return integer? bufnr
+local function get_valid_main(view)
+  local main = view and view.cur_layout and view.cur_layout:get_main_win()
+  if not (main and main:is_valid() and main.file and main.file:is_valid()) then return end
+  return main, main.file.bufnr
+end
 
 ---@return FileEntry?
 ---@return integer[]? cursor
@@ -224,13 +237,12 @@ function M.jumpto_conflict(num, use_delta)
 
   if view and view:instanceof(StandardView.__get()) then
     ---@cast view StandardView
-    local main = view.cur_layout:get_main_win()
-    local curfile = main.file
+    local main, bufnr = get_valid_main(view)
 
-    if main:is_valid() and curfile:is_valid() then
+    if main then
       local next_idx
       local conflicts, cur, cur_idx = vcs_utils.parse_conflicts(
-        api.nvim_buf_get_lines(curfile.bufnr, 0, -1, false),
+        api.nvim_buf_get_lines(bufnr, 0, -1, false),
         main.id
       )
 
@@ -282,6 +294,61 @@ end
 ---@return diffview.ConflictCount?
 function M.prev_conflict()
   return M.jumpto_conflict(-1, true)
+end
+
+---Move the cursor to an inline-diff hunk in the current `diff1_inline` window,
+---as picked by `picker(bufnr, cursor_row)`.
+---@param picker fun(bufnr: integer, cursor_row: integer): integer?
+local function jump_inline_hunk_by(picker)
+  local view = lib.get_current_view()
+  if not (view and view:instanceof(StandardView.__get())) then return end
+  ---@cast view StandardView
+
+  local main, bufnr = get_valid_main(view)
+  if not main then return end
+
+  local cur = api.nvim_win_get_cursor(main.id)[1] - 1
+  local row = picker(bufnr, cur)
+  if row then
+    api.nvim_win_set_cursor(main.id, { row + 1, 0 })
+  end
+end
+
+---Jump to the next inline-diff hunk in the current `diff1_inline` window.
+function M.next_inline_hunk()
+  jump_inline_hunk_by(require("diffview.scene.inline_diff").next_hunk_row)
+end
+
+---Jump to the previous inline-diff hunk in the current `diff1_inline` window.
+function M.prev_inline_hunk()
+  jump_inline_hunk_by(require("diffview.scene.inline_diff").prev_hunk_row)
+end
+
+---Jump the cursor to the first change in the view's main window after a file
+---is opened. Centralizes the per-layout dispatch (conflict / inline / native
+---`]c`) so it stays consistent across `DiffView` and `FileHistoryView`.
+---@param view StandardView
+function M.jump_to_first_change(view)
+  local main, bufnr = get_valid_main(view)
+  if not main then return end
+
+  api.nvim_win_call(main.id, function()
+    utils.set_cursor(0, 1, 0)
+
+    if view.cur_entry and view.cur_entry.kind == "conflicting" then
+      M.next_conflict()
+    elseif view.cur_layout.name == "diff1_inline" then
+      -- Inline view has `diff=false`, so native `]c` does nothing. Use the
+      -- renderer's cached hunks to land on the first change.
+      local rows = require("diffview.scene.inline_diff").hunk_anchor_rows(bufnr)
+      if rows[1] then api.nvim_win_set_cursor(main.id, { rows[1] + 1, 0 }) end
+    else
+      pcall(vim.cmd, "norm! ]c")
+    end
+    vim.cmd("norm! zz")
+  end)
+
+  view.cur_layout:sync_scroll()
 end
 
 ---Execute `cmd` for each target window in the current view. If no targets
@@ -392,11 +459,10 @@ end
 ---@param view DiffView
 ---@param target "ours"|"theirs"|"base"|"all"|"none"
 local function resolve_all_conflicts(view, target)
-  local main = view.cur_layout:get_main_win()
-  local curfile = main.file
+  local main, bufnr = get_valid_main(view)
 
-  if main:is_valid() and curfile:is_valid() then
-    local lines = api.nvim_buf_get_lines(curfile.bufnr, 0, -1, false)
+  if main then
+    local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local conflicts = vcs_utils.parse_conflicts(lines, main.id)
 
     if next(conflicts) then
@@ -421,7 +487,7 @@ local function resolve_all_conflicts(view, target)
         end
 
         content = content or {}
-        api.nvim_buf_set_lines(curfile.bufnr, first - 1, last, false, content)
+        api.nvim_buf_set_lines(bufnr, first - 1, last, false, content)
         offset = offset + (#content - (last - first) - 1)
       end
 
@@ -465,12 +531,11 @@ function M.conflict_choose(target)
 
     if view and view:instanceof(StandardView.__get()) then
       ---@cast view StandardView
-      local main = view.cur_layout:get_main_win()
-      local curfile = main.file
+      local main, bufnr = get_valid_main(view)
 
-      if main:is_valid() and curfile:is_valid() then
+      if main then
         local _, cur = vcs_utils.parse_conflicts(
-          api.nvim_buf_get_lines(curfile.bufnr, 0, -1, false),
+          api.nvim_buf_get_lines(bufnr, 0, -1, false),
           main.id
         )
 
@@ -488,7 +553,7 @@ function M.conflict_choose(target)
             )
           end
 
-          api.nvim_buf_set_lines(curfile.bufnr, cur.first - 1, cur.last, false, content or {})
+          api.nvim_buf_set_lines(bufnr, cur.first - 1, cur.last, false, content or {})
 
           utils.set_cursor(main.id, unpack({
             (content and #content or 0) + cur.first - 1,
@@ -538,6 +603,7 @@ end
 ---@type table<string, Layout>
 local layout_name_map = {
   diff1_plain = Diff1,
+  diff1_inline = Diff1Inline,
   diff2_horizontal = Diff2Hor,
   diff2_vertical = Diff2Ver,
   diff3_horizontal = Diff3Hor,
@@ -630,7 +696,7 @@ function M.cycle_layout()
 end
 
 ---Set a specific layout for the current view.
----@param layout_name string One of: diff1_plain, diff2_horizontal, diff2_vertical, diff3_horizontal, diff3_vertical, diff3_mixed, diff4_mixed
+---@param layout_name string One of: diff1_plain, diff1_inline, diff2_horizontal, diff2_vertical, diff3_horizontal, diff3_vertical, diff3_mixed, diff4_mixed
 function M.set_layout(layout_name)
   return function()
     local layout_class = layout_name_map[layout_name]

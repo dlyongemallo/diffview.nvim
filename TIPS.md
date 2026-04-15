@@ -64,6 +64,41 @@ Common questions, useful patterns, and known compatibility issues.
 
 ## Diff Display
 
+- **Inline (unified) diff:**
+  - Use the `diff1_inline` layout to display diffs in a single window, with
+    deletions rendered as virtual lines above the corresponding position
+    and intra-line changes highlighted with `DiffText`.
+  - To make it the default view: `view.default.layout = "diff1_inline"`.
+    The layout is automatically appended to `view.cycle_layouts.default`
+    if missing, so `g<C-x>` cycles back to it without extra config.
+  - To cycle through it alongside side-by-side layouts, list them all
+    explicitly:
+    ```lua
+    require("diffview").setup({
+      view = {
+        cycle_layouts = {
+          default = { "diff2_horizontal", "diff1_inline" },
+        },
+      },
+    })
+    ```
+  - Navigate hunks with `]c`/`[c` (mapped to `next_inline_hunk` and
+    `prev_inline_hunk`).
+  - Inline is not available in the merge tool (it needs a 2-way diff).
+- **Overleaf-style inline diff (strikethrough for deletions):**
+  - Set `view.inline.style = "overleaf"` to render deleted characters as
+    inline virtual text with strikethrough, next to the added characters
+    they were replaced by. Whole-line deletions are also shown with a
+    strikethrough instead of a plain delete background.
+    ```lua
+    require("diffview").setup({
+      view = {
+        default = { layout = "diff1_inline" },
+        inline = { style = "overleaf" },
+      },
+    })
+    ```
+  - Customise the look with `:hi DiffviewDiffDeleteInline gui=...`.
 - **Better diff display (changes shown as add+delete instead of modification):**
   - Set Neovim's `diffopt` to use a better algorithm:
     - `vim.opt.diffopt:append { "algorithm:histogram" }`
