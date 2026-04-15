@@ -410,6 +410,18 @@ function Panel:buf_loaded()
   return self.bufid and api.nvim_buf_is_loaded(self.bufid)
 end
 
+---Stop any tree-sitter parser that external plugins may have attached to
+---a panel buffer. Panel content is rendered manually (extmarks from
+---`diffview:///panels/...` namespaces) and must not be parsed as code.
+---Without this guard, plugins like `render-markdown.nvim` start a
+---markdown parser on arbitrary filetypes, producing spurious italic
+---spans on `_word_` patterns in file paths and commit subjects.
+---@param bufid integer
+local function stop_external_treesitter(bufid)
+  if not api.nvim_buf_is_valid(bufid) then return end
+  pcall(vim.treesitter.stop, bufid)
+end
+
 function Panel:init_buffer()
   local bn = api.nvim_create_buf(false, false)
 
@@ -440,6 +452,18 @@ function Panel:init_buffer()
       modeline = false,
     })
   end)
+
+  stop_external_treesitter(bn)
+
+  -- Re-stop when a plugin re-attaches as the buffer enters a window.
+  -- `vim.schedule` defers to after all other `BufWinEnter` handlers.
+  api.nvim_create_autocmd("BufWinEnter", {
+    group = Panel.au.group,
+    buffer = bn,
+    callback = function()
+      vim.schedule(function() stop_external_treesitter(bn) end)
+    end,
+  })
 
   self:update_components()
   self:render()

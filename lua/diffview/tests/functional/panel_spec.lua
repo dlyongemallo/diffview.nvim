@@ -259,6 +259,53 @@ describe("diffview.ui.panel", function()
     end)
   end)
 
+  describe("stop external treesitter parsers", function()
+    -- Panel content is rendered manually via extmarks, so a tree-sitter
+    -- parser attached by an external plugin (e.g. render-markdown.nvim)
+    -- can mis-interpret file paths like `foo_bar_baz` as markdown italics.
+
+    local function make_panel()
+      return Panel({
+        bufname = "TestStopTreesitter",
+        config = Panel.default_config_split,
+      })
+    end
+
+    it("stops treesitter on the panel buffer during init_buffer", function()
+      local saved = vim.treesitter.stop
+      local calls = {}
+      vim.treesitter.stop = function(buf) table.insert(calls, buf) end
+
+      local panel = make_panel()
+      panel.update_components = function() end
+      panel.render = function() end
+      panel:init_buffer()
+
+      eq(true, vim.tbl_contains(calls, panel.bufid))
+
+      vim.treesitter.stop = saved
+      panel:destroy()
+    end)
+
+    it("registers a BufWinEnter autocmd on the panel buffer", function()
+      local panel = make_panel()
+      panel.update_components = function() end
+      panel.render = function() end
+      panel:init_buffer()
+
+      -- The re-stop runs on window entry so plugins that re-attach their
+      -- parser get stopped again.  A structural check avoids relying on
+      -- scheduled-callback timing.
+      local autocmds = vim.api.nvim_get_autocmds({
+        buffer = panel.bufid,
+        event = "BufWinEnter",
+      })
+      eq(true, #autocmds > 0)
+
+      panel:destroy()
+    end)
+  end)
+
   describe("subclass contracts", function()
     -- The actual panels used by the two view types must inherit the same
     -- interface.
