@@ -605,8 +605,11 @@ function M.cycle_layout()
 
   for _, entry in ipairs(files) do
     local cur_layout = entry.layout
-    local next_layout = layouts[utils.vec_indexof(layouts, cur_layout.class) % #layouts + 1]
-    entry:convert_layout(next_layout)
+    local idx = utils.vec_indexof(layouts, cur_layout.class)
+    -- If the current layout isn't in the cycle list, start at the first
+    -- entry rather than the last (Lua's `-1 % N + 1 == N` quirk).
+    local next_idx = (idx == -1 and 0 or idx) % #layouts + 1
+    entry:convert_layout(layouts[next_idx])
   end
 
   if cur_file then

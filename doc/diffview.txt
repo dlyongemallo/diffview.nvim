@@ -777,6 +777,16 @@ view.cycle_layouts                              *diffview-config-view.cycle_layo
         action. Separate lists can be configured for the default view and
         the merge tool.
 
+        Each view's configured starting layout (`default`, `file_history`,
+        `merge_tool`) is automatically appended to its corresponding cycle
+        list during setup if not already present, unless the starting
+        layout is the sentinel `-1` (see |diffview-config-view.x.layout|).
+        In other words, pressing the cycle key will eventually return you
+        to your starting layout whenever that layout is a concrete layout
+        name; when it is `-1`, the concrete layout is only resolved when a
+        view opens and so cannot be appended to the cycle list at setup
+        time.
+
         Fields: ~
             {default} (string[])
                 Layouts to cycle through in the default view.

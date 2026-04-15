@@ -53,6 +53,97 @@ describe("diffview.config cycle_layouts defaults", function()
 
     if not ok then error(err) end
   end)
+
+  it("falls back to defaults when cycle_layouts is not a table", function()
+    local original = vim.deepcopy(config.get_config())
+    local warnings = {}
+    local old_warn = utils.warn
+    utils.warn = function(msg) warnings[#warnings + 1] = msg end
+
+    local ok, err = pcall(function()
+      config.setup({ view = { cycle_layouts = "not a table" } })
+      local conf = config.get_config()
+      -- Both default cycles should match the hard defaults (auto-append is
+      -- a no-op because the configured layouts are already present).
+      eq(config.defaults.view.cycle_layouts.default, conf.view.cycle_layouts.default)
+      eq(config.defaults.view.cycle_layouts.merge_tool, conf.view.cycle_layouts.merge_tool)
+    end)
+
+    utils.warn = old_warn
+    config.setup(original)
+
+    if not ok then error(err) end
+    assert.is_true(#warnings > 0, "expected a warning about invalid cycle_layouts")
+  end)
+
+  it("falls back to defaults when a cycle_layouts entry is not a table", function()
+    local original = vim.deepcopy(config.get_config())
+    local warnings = {}
+    local old_warn = utils.warn
+    utils.warn = function(msg) warnings[#warnings + 1] = msg end
+
+    local ok, err = pcall(function()
+      config.setup({ view = { cycle_layouts = { default = "diff2_horizontal" } } })
+      local conf = config.get_config()
+      -- Invalid entry was replaced with the default list.
+      eq(config.defaults.view.cycle_layouts.default, conf.view.cycle_layouts.default)
+    end)
+
+    utils.warn = old_warn
+    config.setup(original)
+
+    if not ok then error(err) end
+    assert.is_true(#warnings > 0, "expected a warning about invalid cycle_layouts.default")
+  end)
+
+  it("falls back to defaults when a cycle_layouts entry is a non-list table", function()
+    local original = vim.deepcopy(config.get_config())
+    local warnings = {}
+    local old_warn = utils.warn
+    utils.warn = function(msg) warnings[#warnings + 1] = msg end
+
+    local ok, err = pcall(function()
+      -- A map (not a list) is rejected because `cycle_layout()` iterates
+      -- with `ipairs()` and would silently drop string-keyed entries.
+      config.setup({
+        view = { cycle_layouts = { merge_tool = { foo = "diff3_horizontal" } } },
+      })
+      local conf = config.get_config()
+      eq(config.defaults.view.cycle_layouts.merge_tool, conf.view.cycle_layouts.merge_tool)
+    end)
+
+    utils.warn = old_warn
+    config.setup(original)
+
+    if not ok then error(err) end
+    assert.is_true(#warnings > 0, "expected a warning about invalid cycle_layouts.merge_tool")
+  end)
+
+  it("auto-appends shared cycle entries in a deterministic order", function()
+    local original = vim.deepcopy(config.get_config())
+    local old_warn = utils.warn
+    utils.warn = function() end
+
+    local ok, err = pcall(function()
+      -- `default` and `file_history` both feed into `cycle_layouts.default`.
+      -- With distinct starting layouts and an empty cycle, the insertion
+      -- order must follow the declared kind order, not hash iteration.
+      config.setup({
+        view = {
+          default = { layout = "diff2_horizontal" },
+          file_history = { layout = "diff2_vertical" },
+          cycle_layouts = { default = {} },
+        },
+      })
+      local resolved = config.get_config().view.cycle_layouts.default
+      eq({ "diff2_horizontal", "diff2_vertical" }, resolved)
+    end)
+
+    utils.warn = old_warn
+    config.setup(original)
+
+    if not ok then error(err) end
+  end)
 end)
 
 describe("diffview.actions.set_layout name resolution", function()
@@ -359,7 +450,62 @@ describe("diffview.actions.cycle_layout with custom config", function()
     eq(Diff2Hor, converted_layouts[1])
   end)
 
-  it("falls back to defaults when custom list has only unknown names", function()
+  it("auto-inserts view.default.layout into cycle_layouts.default", function()
+    local orig = vim.deepcopy(config.get_config())
+    config.setup({
+      view = {
+        default = { layout = "diff2_vertical" },
+        cycle_layouts = { default = { "diff2_horizontal" } },
+      },
+    })
+
+    local resolved = config.get_config().view.cycle_layouts.default
+    assert.is_true(
+      vim.tbl_contains(resolved, "diff2_vertical"),
+      "diff2_vertical should be auto-inserted into the default cycle"
+    )
+
+    config.setup(orig)
+  end)
+
+  it("auto-insert is a no-op when default layout is already in the cycle", function()
+    local orig = vim.deepcopy(config.get_config())
+    config.setup({
+      view = {
+        default = { layout = "diff2_horizontal" },
+        cycle_layouts = { default = { "diff2_horizontal", "diff2_vertical" } },
+      },
+    })
+
+    local resolved = config.get_config().view.cycle_layouts.default
+    eq({ "diff2_horizontal", "diff2_vertical" }, resolved)
+
+    config.setup(orig)
+  end)
+
+  it("cycling from a layout that isn't in the cycle goes to the first entry", function()
+    -- Defensive guard: Lua's `-1 % N + 1 == N` would pick the LAST layout on
+    -- not-found without explicit handling.
+    local orig = vim.deepcopy(config.get_config())
+    config.setup({
+      view = { cycle_layouts = { default = { "diff2_horizontal", "diff2_vertical" } } },
+    })
+
+    local file = mock_file_entry(Diff3Hor) -- not in the default cycle
+    local view = mock_diff_view({ file }, file)
+
+    stub(lib, "get_current_view", function() return view end)
+    stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+
+    actions.cycle_layout()
+
+    eq(1, #converted_layouts)
+    eq(Diff2Hor, converted_layouts[1])
+
+    config.setup(orig)
+  end)
+
+  it("auto-includes the default layout so cycling stays valid with bogus names", function()
     local old_warn = utils.warn
     utils.warn = function() end
     config.setup({
@@ -371,8 +517,9 @@ describe("diffview.actions.cycle_layout with custom config", function()
     })
     utils.warn = old_warn
 
-    -- Resolved list will be empty, so fallback defaults apply.
-    -- Default: Diff2Hor -> Diff2Ver.
+    -- Bogus names get filtered out; `view.default.layout` (diff2_horizontal,
+    -- the config default) is auto-inserted by setup so the cycle has at
+    -- least one valid entry. Cycling is a no-op from the sole layout.
     local file = mock_file_entry(Diff2Hor)
     local view = mock_diff_view({ file }, file)
 
@@ -382,6 +529,6 @@ describe("diffview.actions.cycle_layout with custom config", function()
     actions.cycle_layout()
 
     eq(1, #converted_layouts)
-    eq(Diff2Ver, converted_layouts[1])
+    eq(Diff2Hor, converted_layouts[1])
   end)
 end)
