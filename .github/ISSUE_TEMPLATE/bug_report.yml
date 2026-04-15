@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before reporting: search [existing issues](https://github.com/sindrets/diffview.nvim/issues) and make sure that diffview.nvim is updated to the latest version.
+        Before reporting: search [existing issues](https://github.com/dlyongemallo/diffview.nvim/issues) and make sure that diffview.nvim is updated to the latest version.
   - type: textarea
     attributes:
       label: "Description"
@@ -103,7 +103,7 @@ body:
 
         local plugins = {
           { "nvim-web-devicons", url = "https://github.com/nvim-tree/nvim-web-devicons.git" },
-          { "diffview.nvim", url = "https://github.com/sindrets/diffview.nvim.git" },
+          { "diffview.nvim", url = "https://github.com/dlyongemallo/diffview.nvim.git" },
           -- ##################################################################
           -- ### ADD PLUGINS THAT ARE _NECESSARY_ FOR REPRODUCING THE ISSUE ###
           -- ##################################################################
