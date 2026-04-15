@@ -689,6 +689,37 @@ function M.setup(user_config)
         view[kind].layout = M.defaults.view[kind].layout
       end
     end
+
+    -- Ensure each view's configured layout is in its corresponding cycle
+    -- list, so `cycle_layout` (g<C-x>) can always rotate back to the
+    -- starting layout. The sentinel `-1` ("infer from diffopt") is skipped
+    -- since the concrete layout is not known at setup time.
+    if view.cycle_layouts ~= nil and type(view.cycle_layouts) ~= "table" then
+      utils.warn("Invalid value for 'view.cycle_layouts'. Must be a table.")
+      view.cycle_layouts = utils.tbl_deep_clone(M.defaults.view.cycle_layouts)
+    end
+    -- Iterate in a fixed order so shared cycle lists (e.g. `default` is
+    -- used by both `default` and `file_history`) get deterministic entries.
+    local cycle_for_kind = {
+      { kind = "default", cycle_key = "default" },
+      { kind = "file_history", cycle_key = "default" },
+      { kind = "merge_tool", cycle_key = "merge_tool" },
+    }
+    for _, item in ipairs(cycle_for_kind) do
+      local layout = view[item.kind] and view[item.kind].layout
+      local list = view.cycle_layouts[item.cycle_key]
+      if list ~= nil and not (type(list) == "table" and utils.islist(list)) then
+        utils.warn(
+          ("Invalid value for 'view.cycle_layouts.%s'. Must be a list."):format(item.cycle_key)
+        )
+        list = utils.tbl_deep_clone(M.defaults.view.cycle_layouts[item.cycle_key])
+      end
+      list = list or {}
+      view.cycle_layouts[item.cycle_key] = list
+      if layout and layout ~= -1 and not vim.tbl_contains(list, layout) then
+        table.insert(list, layout)
+      end
+    end
   end
 
   for _, name in ipairs({ "single_file", "multi_file" }) do
