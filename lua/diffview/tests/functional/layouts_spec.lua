@@ -194,6 +194,169 @@ describe("diffview.layout symbols", function()
     end)
   )
 
+  describe("Diff1Inline:diffget", function()
+    local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+    local inline_diff = require("diffview.scene.inline_diff")
+    local api = vim.api
+
+    -- Build a stub Diff1Inline instance with a live buffer whose old-side
+    -- lines are cached and whose inline diff has been rendered, so the
+    -- renderer's hunk cache mirrors the vim.diff output.
+    ---@param old string[]
+    ---@param new string[]
+    ---@return table inst, integer bufnr
+    local function prepare(old, new)
+      local bufnr = api.nvim_create_buf(false, true)
+      api.nvim_buf_set_lines(bufnr, 0, -1, false, new)
+      inline_diff.render(bufnr, old, new)
+
+      local win_mock = {
+        file = { bufnr = bufnr, is_valid = function() return true end },
+        is_valid = function() return true end,
+      }
+      local inst = setmetatable({
+        b = win_mock,
+        a_file = {},
+        _cached_old_lines = old,
+      }, { __index = Diff1Inline })
+      return inst, bufnr
+    end
+
+    it("reverts a change hunk at the cursor line back to the old content", function()
+      local inst, bufnr = prepare({ "alpha", "beta", "gamma" }, { "alpha", "BETA", "gamma" })
+
+      eq(1, inst:diffget(2, 2))
+      eq({ "alpha", "beta", "gamma" }, api.nvim_buf_get_lines(bufnr, 0, -1, false))
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+
+    it("drops added lines when the hunk under cursor is a pure addition", function()
+      local inst, bufnr = prepare({ "alpha", "gamma" }, { "alpha", "beta", "gamma" })
+
+      eq(1, inst:diffget(2, 2))
+      eq({ "alpha", "gamma" }, api.nvim_buf_get_lines(bufnr, 0, -1, false))
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+
+    it("re-inserts deleted lines when the cursor sits on the anchor line", function()
+      local inst, bufnr = prepare({ "alpha", "beta", "gamma" }, { "alpha", "gamma" })
+
+      -- Pure deletion is anchored on the line preceding the gap, i.e. line 1
+      -- ("alpha") since `new_start == 1` for the hole between the two lines.
+      eq(1, inst:diffget(1, 1))
+      eq({ "alpha", "beta", "gamma" }, api.nvim_buf_get_lines(bufnr, 0, -1, false))
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+
+    it("handles a BOF pure deletion by inserting at the top of the buffer", function()
+      local inst, bufnr = prepare({ "alpha", "beta", "gamma" }, { "beta", "gamma" })
+
+      -- Deletion at BOF has `new_start == 0`; the anchor is line 1.
+      eq(1, inst:diffget(1, 1))
+      eq({ "alpha", "beta", "gamma" }, api.nvim_buf_get_lines(bufnr, 0, -1, false))
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+
+    it("returns 0 when the cursor is not on a hunk", function()
+      local inst, bufnr = prepare({ "alpha", "beta", "gamma" }, { "alpha", "BETA", "gamma" })
+
+      eq(0, inst:diffget(1, 1))
+      -- Buffer is unchanged.
+      eq({ "alpha", "BETA", "gamma" }, api.nvim_buf_get_lines(bufnr, 0, -1, false))
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+
+    it("applies every hunk inside a multi-line visual range in one pass", function()
+      local inst, bufnr = prepare(
+        { "one", "two", "three", "four", "five" },
+        { "ONE", "two", "THREE", "four", "FIVE" }
+      )
+
+      -- Range covers the first two change hunks (lines 1 and 3) but not
+      -- the third (line 5), which should remain modified.
+      eq(2, inst:diffget(1, 3))
+      eq({ "one", "two", "three", "four", "FIVE" }, api.nvim_buf_get_lines(bufnr, 0, -1, false))
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+
+    it("applies hunks bottom-up so earlier splices don't shift later offsets", function()
+      local inst, bufnr = prepare({ "a", "b", "c" }, { "a", "X", "Y", "b", "Z", "c" })
+
+      -- Two pure-addition hunks: { "X", "Y" } at line 2 and { "Z" } at
+      -- line 5. A visual range covering both must drop all three added
+      -- lines, which only works if the later hunk is applied first.
+      eq(2, inst:diffget(2, 5))
+      eq({ "a", "b", "c" }, api.nvim_buf_get_lines(bufnr, 0, -1, false))
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+
+    it("returns 0 when the cached old-side lines are missing", function()
+      local inst, bufnr = prepare({ "alpha" }, { "beta" })
+      inst._cached_old_lines = nil
+
+      eq(0, inst:diffget(1, 1))
+      eq({ "beta" }, api.nvim_buf_get_lines(bufnr, 0, -1, false))
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+
+    it(
+      "coalesces TextChanged repaints across a multi-hunk diffget into one",
+      helpers.async_test(function()
+        -- Install the real `TextChanged` autocmd via `_render_inline`, then
+        -- spy on `inline_diff.render` to count how many repaints the batch
+        -- triggers. Without suppression, each `nvim_buf_set_lines` call
+        -- inside `diffget` fires `TextChanged` -> `_repaint` -> `render`,
+        -- producing one render per hunk. With suppression, the batch is
+        -- followed by a single trailing `_repaint` instead.
+        local bufnr = api.nvim_create_buf(false, true)
+        api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+          "ONE",
+          "two",
+          "THREE",
+          "four",
+          "five",
+        })
+        local winid = api.nvim_get_current_win()
+
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = { bufnr = bufnr, is_valid = function() return true end },
+          is_valid = function() return true end,
+          id = winid,
+        }
+        inst._cached_old_lines = { "one", "two", "three", "four", "five" }
+
+        async.await(inst:_render_inline())
+
+        local original_render = inline_diff.render
+        local render_count = 0
+        inline_diff.render = function(...)
+          render_count = render_count + 1
+          return original_render(...)
+        end
+
+        local ok, err = pcall(function()
+          -- Range covers both change hunks (lines 1 and 3); two splices.
+          eq(2, inst:diffget(1, 3))
+          eq(1, render_count)
+        end)
+
+        inline_diff.render = original_render
+        inst:teardown_render()
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+        if not ok then error(err) end
+      end)
+    )
+  end)
+
   it("Diff2 declares symbols { 'a', 'b' }", function() eq({ "a", "b" }, Diff2.symbols) end)
 
   it(
