@@ -690,6 +690,13 @@ function M.next_hunk_row(bufnr, cursor_row)
   end
 end
 
+-- Return the cached hunks for `bufnr`, or `nil` if no inline diff is
+-- currently attached. Each hunk is `{ old_start, old_count, new_start,
+-- new_count }` in 1-indexed form, as returned by `vim.diff`.
+---@param bufnr integer
+---@return integer[][]?
+function M.get_hunks(bufnr) return M._hunks_by_buf[bufnr] end
+
 -- Find the row of the last hunk strictly before `cursor_row` (0-indexed).
 ---@param bufnr integer
 ---@param cursor_row integer

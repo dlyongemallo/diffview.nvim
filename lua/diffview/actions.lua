@@ -589,6 +589,42 @@ function M.diffget(target)
   end
 end
 
+---Obtain (`diffget`) the old-side content of every hunk the cursor or the
+---current visual range covers, in a `diff1_inline` layout. The inline layout
+---disables native diff mode and renders the old side as extmarks, so vim's
+---built-in `:diffget` has no second window to read from; this action drives
+---the layout's splice-based implementation, which reuses the renderer's
+---cached hunks and old-side content. No-op outside a `diff1_inline` layout.
+function M.diffget_inline()
+  local view = lib.get_current_view()
+  if not (view and view:instanceof(StandardView.__get())) then return end
+  ---@cast view StandardView
+
+  local layout = view.cur_layout
+  if not (layout and layout:instanceof(Diff1Inline.__get())) then return end
+  ---@cast layout Diff1Inline
+
+  local main = layout:get_main_win()
+  if not (main and main:is_valid()) then return end
+
+  local is_visual = api.nvim_get_mode().mode:match("^[vV" .. utils.t("<C-v>") .. "]") ~= nil
+  local first, last
+
+  if is_visual then
+    first, last = unpack(utils.vec_sort({
+      vim.fn.line("."),
+      vim.fn.line("v"),
+    }))
+  else
+    first = api.nvim_win_get_cursor(main.id)[1]
+    last = first
+  end
+
+  layout:diffget(first, last)
+
+  if is_visual then api.nvim_feedkeys(utils.t("<esc>"), "n", false) end
+end
+
 ---@param target "ours"|"theirs"|"base"|"local"
 function M.diffput(target)
   return function()

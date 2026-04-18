@@ -53,6 +53,7 @@ local INSERT_REPAINT_DEBOUNCE_MS = 150
 ---@field _cached_old_lines string[]? Old-side content captured on first render; reused by repaints so each keystroke-level refresh doesn't re-fetch from disk.
 ---@field _repaint_bufnr integer? Buffer id the repaint autocmds are attached to (nil when no autocmds are installed).
 ---@field _repaint_debounced CancellableFn? Trailing-edge debounced `_repaint` used for the insert-mode `TextChangedI` hook.
+---@field _suppress_repaint boolean? Set by batched buffer edits (e.g. a multi-hunk `diffget`) to turn `_repaint` into a no-op so a single trailing call covers the whole batch.
 local Diff1Inline = oop.create_class("Diff1Inline", Diff1)
 
 ---@class Diff1Inline.init.Opt : Diff1.init.Opt
@@ -152,6 +153,10 @@ end
 ---`inline_diff.render` again.
 ---@param self Diff1Inline
 function Diff1Inline:_repaint()
+  -- Batched buffer edits toggle this flag so each intermediate `TextChanged`
+  -- doesn't trigger a full `vim.diff` + extmark pass; the batch owner fires
+  -- a single repaint once all edits are applied.
+  if self._suppress_repaint then return end
   if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then return end
   local bufnr = self.b.file.bufnr
   if not api.nvim_buf_is_valid(bufnr) then return end
@@ -236,6 +241,86 @@ Diff1Inline._render_inline = async.void(function(self)
   inline_diff.render(bufnr, old_lines, new_lines, render_opts())
   register_repaint_autocmds(self, bufnr)
 end)
+
+---Replace the new-side content of every hunk overlapping `[first, last]`
+---(1-indexed, inclusive) with the corresponding old-side content from the
+---cached diff. For a single-line range this matches vim's built-in `do`
+---on a 2-way diff; for a multi-line visual range it applies every
+---overlapping hunk in one pass.
+---
+---A hunk counts as overlapping when its new-side line range intersects
+---`[first, last]`, or (for a pure deletion, where `new_count == 0`) when
+---its anchor line is inside the range. Matches are applied bottom-up so
+---earlier splices don't shift the anchor positions of later hunks.
+---
+---Returns the number of hunks applied. `TextChanged` repaints are
+---suppressed during the splice and a single `_repaint` is fired at the
+---end, so the extmarks are refreshed once regardless of hunk count.
+---@param self Diff1Inline
+---@param first integer
+---@param last integer
+---@return integer
+function Diff1Inline:diffget(first, last)
+  if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then return 0 end
+  local bufnr = self.b.file.bufnr
+  if not api.nvim_buf_is_valid(bufnr) then return 0 end
+
+  local old_lines = self._cached_old_lines
+  if old_lines == nil then return 0 end
+
+  local hunks = inline_diff.get_hunks(bufnr)
+  if not hunks then return 0 end
+
+  local matches = {}
+  for _, h in ipairs(hunks) do
+    local new_start, new_count = h[3], h[4]
+    local overlaps
+    if new_count > 0 then
+      overlaps = not (new_start + new_count - 1 < first or new_start > last)
+    else
+      -- Pure deletion: the virt_lines are anchored at line `new_start`
+      -- (or line 1 when the deletion is at BOF).
+      local anchor = new_start == 0 and 1 or new_start
+      overlaps = first <= anchor and anchor <= last
+    end
+    if overlaps then matches[#matches + 1] = h end
+  end
+
+  if #matches == 0 then return 0 end
+
+  -- Suppress the per-edit `TextChanged` repaint so a multi-hunk batch
+  -- doesn't trigger N full re-diffs; a single trailing repaint below
+  -- refreshes the extmarks once.
+  self._suppress_repaint = true
+  local ok, err = pcall(function()
+    for i = #matches, 1, -1 do
+      local h = matches[i]
+      local old_start, old_count, new_start, new_count = h[1], h[2], h[3], h[4]
+      local repl = {}
+      for k = old_start, old_start + old_count - 1 do
+        repl[#repl + 1] = old_lines[k] or ""
+      end
+      local s, e
+      if new_count > 0 then
+        -- Add or change hunk: replace the new-side block in place.
+        s = new_start - 1
+        e = new_start - 1 + new_count
+      else
+        -- Pure deletion: insert after `new_start`, or at BOF when
+        -- `new_start == 0`.
+        s = new_start
+        e = new_start
+      end
+      api.nvim_buf_set_lines(bufnr, s, e, false, repl)
+    end
+  end)
+  self._suppress_repaint = nil
+  if not ok then error(err) end
+
+  self:_repaint()
+
+  return #matches
+end
 
 ---@override
 ---Diff1Inline owns `a_file` even though it isn't attached to a window, so

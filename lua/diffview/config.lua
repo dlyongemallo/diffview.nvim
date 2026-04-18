@@ -254,10 +254,11 @@ M.defaults = {
     },
     diff1_inline = {
       -- Mappings in the `diff1_inline` unified diff layout. Native `]c`/`[c`
-      -- don't work here because the window has `diff=false`, so we provide
-      -- equivalents that walk the renderer's cached hunks.
+      -- and `do` don't work here because the window has `diff=false`, so we
+      -- provide equivalents that walk the renderer's cached hunks.
       { "n", "]c",  actions.next_inline_hunk,                            { desc = "Jump to the next inline-diff hunk" } },
       { "n", "[c",  actions.prev_inline_hunk,                            { desc = "Jump to the previous inline-diff hunk" } },
+      { { "n", "x" }, "do", actions.diffget_inline,                      { desc = "Obtain the diff hunk from the old-side version" } },
       { "n", "g?",  actions.help({ "view", "diff1", "diff1_inline" }),   { desc = "Open the help panel" } },
     },
     diff2 = {
