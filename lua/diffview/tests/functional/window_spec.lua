@@ -1,4 +1,5 @@
 local async = require("diffview.async")
+local config = require("diffview.config")
 local control = require("diffview.control")
 local File = require("diffview.vcs.file").File
 local GitRev = require("diffview.vcs.adapters.git.rev").GitRev
@@ -168,6 +169,91 @@ describe("diffview.scene.window", function()
       Window.winopt_store[bufnr] = nil
       vim.api.nvim_buf_delete(bufnr, { force = true })
     end)
+  end)
+
+  describe("open_file view.foldlevel", function()
+    -- Regression (#121): `view.foldlevel` must be copied onto the window's
+    -- `foldlevel` option when the diff buffer is shown, even if the file's
+    -- preset `winopts` table does not already have a `foldlevel` key.
+
+    local original_config
+    local test_winid
+
+    before_each(function()
+      original_config = vim.deepcopy(config.get_config())
+      -- Run each test in a dedicated split so `apply_file_winopts` cannot
+      -- leak window-local option changes (foldlevel, diff, scrollbind, ...)
+      -- into the surrounding test-runner window.
+      vim.cmd("new")
+      test_winid = vim.api.nvim_get_current_win()
+    end)
+
+    after_each(function()
+      config.setup(original_config)
+      if test_winid and vim.api.nvim_win_is_valid(test_winid) then
+        vim.api.nvim_win_close(test_winid, true)
+      end
+      test_winid = nil
+    end)
+
+    ---Minimal parent stub for `Window.open_file`: supplies the `name` field
+    ---that the `diff_buf_win_enter` emitter reads, plus an `instanceof` that
+    ---always returns false so `config.get_layout_keymaps` falls through to
+    ---nil (no layout-specific keymaps are registered).
+    local function stub_parent()
+      return {
+        name = "test",
+        instanceof = function() return false end,
+      }
+    end
+
+    it("propagates the configured value to the window", helpers.async_test(function()
+      config.setup({ view = { foldlevel = 77 } })
+
+      local adapter = mock_adapter()
+      local bufnr = vim.api.nvim_create_buf(false, true)
+      local win, file = make_window(adapter)
+      file.bufnr = bufnr
+      win.parent = stub_parent()
+
+      async.await(win:open_file())
+
+      assert.equals(77, vim.wo[win.id].foldlevel)
+
+      -- Close the dedicated window before deleting the buffer it displays,
+      -- so buffer deletion does not force an unrelated window onto `bufnr`.
+      if vim.api.nvim_win_is_valid(test_winid) then
+        vim.api.nvim_win_close(test_winid, true)
+      end
+      test_winid = nil
+      Window.winopt_store[bufnr] = nil
+      vim.api.nvim_buf_delete(bufnr, { force = true })
+    end))
+
+    it("applies the configured value even when `file.winopts` omits `foldlevel`",
+      helpers.async_test(function()
+        config.setup({ view = { foldlevel = 77 } })
+
+        local adapter = mock_adapter()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local win, file = make_window(adapter)
+        file.bufnr = bufnr
+        -- Custom winopts table that lacks a `foldlevel` key: the fix must
+        -- still populate it from config so the user override is not dropped.
+        file.winopts = { diff = true, scrollbind = true, cursorbind = true }
+        win.parent = stub_parent()
+
+        async.await(win:open_file())
+
+        assert.equals(77, vim.wo[win.id].foldlevel)
+
+        if vim.api.nvim_win_is_valid(test_winid) then
+          vim.api.nvim_win_close(test_winid, true)
+        end
+        test_winid = nil
+        Window.winopt_store[bufnr] = nil
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end))
   end)
 
   it("load_file suppresses error when create_buffer is cancelled mid-async", helpers.async_test(function()

@@ -770,6 +770,15 @@ view.x.disable_diagnostics
         diagnostics are automatically enabled again when leaving or closing
         the view's tab page.
 
+view.foldlevel                                  *diffview-config-view.foldlevel*
+        Type: `integer`, Default: `0`
+
+        Initial 'foldlevel' applied to diff buffers. With the default `0`,
+        unchanged regions are collapsed and only diff hunks are visible
+        (same behaviour as upstream sindrets/diffview.nvim). Set to a high
+        value (e.g. `99`) to keep all folds open, which can help when another
+        plugin's ftplugin creates unrelated folds in diff buffers.
+
 view.cycle_layouts                              *diffview-config-view.cycle_layouts*
         Type: `table`, Default: (see defaults)
 

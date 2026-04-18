@@ -78,6 +78,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
         disable_diagnostics = false,  -- Temporarily disable diagnostics for diff buffers while in the view.
         winbar_info = false,          -- See |diffview-config-view.x.winbar_info|
       },
+      foldlevel = 0,                  -- See |diffview-config-view.foldlevel|
       -- Layouts to cycle through with `cycle_layout` action. Each view's
       -- configured layout (e.g. view.default.layout) is automatically
       -- appended to its cycle if missing, so cycling always returns to it.

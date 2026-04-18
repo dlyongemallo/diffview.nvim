@@ -173,6 +173,47 @@ describe("diff1_plain layout", function()
 end)
 
 -- ---------------------------------------------------------------------------
+-- view.foldlevel
+-- ---------------------------------------------------------------------------
+
+describe("view.foldlevel", function()
+  local original
+
+  before_each(function()
+    original = vim.deepcopy(config.get_config())
+  end)
+
+  after_each(function()
+    config.setup(original)
+  end)
+
+  it("defaults to 0", function()
+    local conf = setup_with({})
+    assert.equals(0, conf.view.foldlevel)
+  end)
+
+  it("accepts a user override", function()
+    local conf = setup_with({ view = { foldlevel = 99 } })
+    assert.equals(99, conf.view.foldlevel)
+  end)
+
+  it("rejects non-integer values and falls back to the default", function()
+    local conf = setup_with({ view = { foldlevel = "high" } })
+    assert.equals(0, conf.view.foldlevel)
+  end)
+
+  it("rejects negative values and falls back to the default", function()
+    local conf = setup_with({ view = { foldlevel = -1 } })
+    assert.equals(0, conf.view.foldlevel)
+  end)
+
+  it("rejects fractional values and falls back to the default", function()
+    local conf = setup_with({ view = { foldlevel = 1.5 } })
+    assert.equals(0, conf.view.foldlevel)
+  end)
+end)
+
+-- ---------------------------------------------------------------------------
 -- commit_format (commit ecdb020)
 -- ---------------------------------------------------------------------------
 

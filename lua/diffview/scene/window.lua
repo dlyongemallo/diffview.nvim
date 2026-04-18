@@ -187,6 +187,14 @@ Window.open_file = async.void(function(self)
     return
   end
 
+  -- Apply the configured foldlevel before `_save_winopts` so the saved
+  -- value covers the key we're about to override. Always set it, even
+  -- when the incoming winopts omit the key, so a custom `winopts` table
+  -- cannot silently drop the user's configured value.
+  if self.file.winopts then
+    self.file.winopts.foldlevel = conf.view.foldlevel
+  end
+
   if self.file.rev.type == RevType.LOCAL then
     self:_save_winopts()
   end
