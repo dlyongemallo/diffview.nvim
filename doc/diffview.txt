@@ -638,6 +638,7 @@ persist_selections                              *diffview-config-persist_selecti
 view.x.layout                                   *diffview-config-view.x.layout*
         Type: >
             "diff1_plain"
+                | "diff1_inline"
                 | "diff2_horizontal"
                 | "diff2_vertical"
                 | "diff3_horizontal"
@@ -686,6 +687,22 @@ view.x.layout                                   *diffview-config-view.x.layout*
                 │              │
                 │              │
                 │      B       │
+                │              │
+                │              │
+                └──────────────┘
+
+            {diff1_inline}
+                Available for: diff_view, file_history_view
+
+                A single-window unified ("inline") diff. The new-side content
+                is shown in one buffer; deletions are rendered as virtual
+                lines and intra-line changes are highlighted with
+                |hl-DiffText|. Not applicable to merge conflicts.
+
+                ┌──────────────┐
+                │              │
+                │              │
+                │     B +/-    │
                 │              │
                 │              │
                 └──────────────┘
@@ -807,6 +824,35 @@ view.cycle_layouts                              *diffview-config-view.cycle_layo
                     { "diff3_horizontal", "diff3_vertical",
                       "diff3_mixed", "diff4_mixed", "diff1_plain" }
 <
+
+view.inline                                     *diffview-config-view.inline*
+        Type: `table`, Default: (see defaults)
+
+        Options that apply to the `diff1_inline` layout.
+
+        Fields: ~
+            {style} ("unified"|"overleaf")
+                Rendering style. Default: `"unified"`.
+
+                • `"unified"`: proper unified diff (git/GitHub style) —
+                  old lines for each hunk (pure deletion or modification)
+                  shown above as virtual lines; modified new lines get a
+                  |hl-DiffChange| line background with added chars
+                  highlighted via |hl-DiffText|.
+                • `"overleaf"`: Overleaf-editor style. Deleted chars on
+                  modified lines are rendered inline as strikethrough
+                  virtual text where they used to be; added chars get
+                  |hl-DiffText|. No block-level echo or line background
+                  on paired modifications — the char-level rendering is
+                  the whole presentation. Pure/overflow deletions still
+                  appear as virt_lines (with strikethrough).
+
+                Highlight groups used: ~
+                    • |hl-DiffAdd|, |hl-DiffChange|, |hl-DiffText|,
+                      |hl-DiffDelete| via their `Diffview*` variants.
+                    • `DiffviewDiffDeleteInline` for overleaf-mode
+                      deletions (default: `DiffDelete` colours +
+                      `strikethrough`; override with |:hi| to customise).
 
 file_panel                                      *diffview-config-file_panel*
         Type: `table`, Default: (see defaults)
@@ -1443,6 +1489,14 @@ next_conflict                                   *diffview-actions-next_conflict*
             If the current file contains any conflicts, the action returns a
             |diffview.ConflictCount| table.
 
+next_inline_hunk                                *diffview-actions-next_inline_hunk*
+        Contexts: `diff_view`, `file_history_view`
+
+        Moves the cursor to the next change in the `diff1_inline` layout.
+        Default-mapped to `]c` on `diff1_inline` buffers. Native `]c` relies
+        on diff mode, which the inline view disables, so this walks the
+        renderer's cached hunks instead.
+
 next_entry                                      *diffview-actions-next_entry*
         Contexts: `view`, `panel`
 
@@ -1482,6 +1536,13 @@ prev_conflict                                   *diffview-actions-prev_conflict*
         Return: ~
             If the current file contains any conflicts, the action returns a
             |diffview.ConflictCount| table.
+
+prev_inline_hunk                                *diffview-actions-prev_inline_hunk*
+        Contexts: `diff_view`, `file_history_view`
+
+        Moves the cursor to the previous change in the `diff1_inline` layout.
+        Default-mapped to `[c` on `diff1_inline` buffers. See
+        |diffview-actions-next_inline_hunk|.
 
 prev_entry                                      *diffview-actions-prev_entry*
         Contexts: `view`, `panel`

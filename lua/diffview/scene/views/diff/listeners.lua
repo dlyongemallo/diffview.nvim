@@ -49,21 +49,7 @@ return function(view)
         end
       end
     end,
-    file_open_new = function(_, entry)
-      api.nvim_win_call(view.cur_layout:get_main_win().id, function()
-        utils.set_cursor(0, 1, 0)
-
-        if view.cur_entry and view.cur_entry.kind == "conflicting" then
-          actions.next_conflict()
-        else
-          -- Jump to first diff hunk for regular files.
-          pcall(vim.cmd, "norm! ]c")
-        end
-        vim.cmd("norm! zz")
-      end)
-
-      view.cur_layout:sync_scroll()
-    end,
+    file_open_new = function(_, entry) actions.jump_to_first_change(view) end,
     ---@diagnostic disable-next-line: unused-local
     files_updated = function(_, files)
       view.initialized = true

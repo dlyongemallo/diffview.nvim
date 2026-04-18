@@ -4,6 +4,7 @@ local lazy = require("diffview.lazy")
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local JobStatus = lazy.access("diffview.vcs.utils", "JobStatus") ---@type JobStatus|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
+local actions = lazy.require("diffview.actions") ---@module "diffview.actions"
 local config = lazy.require("diffview.config") ---@module "diffview.config"
 local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
@@ -37,14 +38,7 @@ return function(view)
         end
       end
     end,
-    file_open_new = function(_, entry)
-      api.nvim_win_call(view.cur_layout:get_main_win().id, function()
-        utils.set_cursor(0, 1, 0)
-        pcall(vim.cmd, "norm! ]c")
-        vim.cmd("norm! zz")
-      end)
-      view.cur_layout:sync_scroll()
-    end,
+    file_open_new = function(_, entry) actions.jump_to_first_change(view) end,
     open_in_diffview = function()
       local file = view:infer_cur_file()
 

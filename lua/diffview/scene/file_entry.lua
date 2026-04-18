@@ -91,7 +91,7 @@ end
 
 ---@param force? boolean
 function FileEntry:destroy(force)
-  for _, f in ipairs(self.layout:files()) do
+  for _, f in ipairs(self.layout:owned_files()) do
     f:destroy(force)
   end
 
@@ -100,7 +100,7 @@ end
 
 ---@param new_head Rev
 function FileEntry:update_heads(new_head)
-  for _, file in ipairs(self.layout:files()) do
+  for _, file in ipairs(self.layout:owned_files()) do
     if file.rev.track_head then
       file:dispose_buffer()
       file.rev = new_head
@@ -112,7 +112,7 @@ end
 function FileEntry:set_active(flag)
   self.active = flag
 
-  for _, f in ipairs(self.layout:files()) do
+  for _, f in ipairs(self.layout:owned_files()) do
     f.active = flag
   end
 end
@@ -121,9 +121,17 @@ end
 function FileEntry:convert_layout(target_layout)
   if not self.revs then return end
 
+  -- Let the old layout drop any buffer-level render state before it's
+  -- replaced; the new layout reuses the same files/buffers, so leftover
+  -- visuals (e.g. inline-diff extmarks) would otherwise persist.
+  if self.layout.teardown_render then self.layout:teardown_render() end
+
   local get_data
 
-  for _, file in ipairs(self.layout:files()) do
+  -- Scan `owned_files()` rather than `files()` so non-window files
+  -- (e.g. `Diff1Inline.a_file`) still contribute a `get_data` producer
+  -- when converting away from a layout that owns them.
+  for _, file in ipairs(self.layout:owned_files()) do
     if file.get_data then
       get_data = file.get_data
       break
@@ -143,10 +151,10 @@ function FileEntry:convert_layout(target_layout)
   end
 
   self.layout = target_layout({
-    a = utils.tbl_access(self.layout, "a.file") or create_file(self.revs.a, "a"),
-    b = utils.tbl_access(self.layout, "b.file") or create_file(self.revs.b, "b"),
-    c = utils.tbl_access(self.layout, "c.file") or create_file(self.revs.c, "c"),
-    d = utils.tbl_access(self.layout, "d.file") or create_file(self.revs.d, "d"),
+    a = self.layout:get_file_for("a") or create_file(self.revs.a, "a"),
+    b = self.layout:get_file_for("b") or create_file(self.revs.b, "b"),
+    c = self.layout:get_file_for("c") or create_file(self.revs.c, "c"),
+    d = self.layout:get_file_for("d") or create_file(self.revs.d, "d"),
   })
   self:update_merge_context()
 end
@@ -170,10 +178,12 @@ function FileEntry:validate_stage_buffers(stat)
 
             if new_hash and new_hash ~= f.blob_hash then
               if is_modified then
-                utils.warn((
-                  "A file was changed in the index since you started editing it!"
-                  .. " Be careful not to lose any staged changes when writing to this buffer: %s"
-                ):format(api.nvim_buf_get_name(f.bufnr)))
+                utils.warn(
+                  (
+                    "A file was changed in the index since you started editing it!"
+                    .. " Be careful not to lose any staged changes when writing to this buffer: %s"
+                  ):format(api.nvim_buf_get_name(f.bufnr))
+                )
               else
                 f:dispose_buffer()
               end
@@ -194,7 +204,11 @@ end
 ---@param ctx? vcs.MergeContext
 function FileEntry:update_merge_context(ctx)
   ctx = ctx or self.merge_ctx
-  if ctx then self.merge_ctx = ctx else return end
+  if ctx then
+    self.merge_ctx = ctx
+  else
+    return
+  end
 
   local layout = self.layout --[[@as Diff4 ]]
 
@@ -205,9 +219,7 @@ function FileEntry:update_merge_context(ctx)
     )
   end
 
-  if layout.b then
-    layout.b.file.winbar = " LOCAL (Working tree)"
-  end
+  if layout.b then layout.b.file.winbar = " LOCAL (Working tree)" end
 
   if layout.c and ctx.theirs.hash then
     layout.c.file.winbar = (" THEIRS (Incoming changes) %s %s"):format(
@@ -235,9 +247,7 @@ function FileEntry.update_index_stat(adapter, stat)
   stat = stat or pl:stat(pl:join(adapter.ctx.toplevel, "index"))
 
   if stat then
-    if not fstat_cache[adapter.ctx.toplevel] then
-      fstat_cache[adapter.ctx.toplevel] = {}
-    end
+    if not fstat_cache[adapter.ctx.toplevel] then fstat_cache[adapter.ctx.toplevel] = {} end
 
     fstat_cache[adapter.ctx.toplevel].index = {
       mtime = stat.mtime.sec,
@@ -261,10 +271,7 @@ function FileEntry.with_layout(layout_class, opt)
       commit = opt.commit,
       get_data = opt.get_data,
       rev = rev,
-      nulled = utils.sate(
-        opt.nulled,
-        try_should_null(layout_class, rev, opt.status, symbol)
-      ),
+      nulled = utils.sate(opt.nulled, try_should_null(layout_class, rev, opt.status, symbol)),
     }) --[[@as vcs.File ]]
   end
 
@@ -295,7 +302,7 @@ function FileEntry.new_null_entry(adapter)
     nulled = true,
     layout = Diff1({
       b = File.NULL_FILE,
-    })
+    }),
   })
 end
 

@@ -124,3 +124,61 @@ describe("mark_placement", function()
     assert.equals("sign_column", conf.file_panel.mark_placement)
   end)
 end)
+
+describe("view.inline.style", function()
+  local original
+  local utils = require("diffview.utils")
+  local orig_err
+  local orig_warn
+
+  before_each(function()
+    original = vim.deepcopy(config.get_config())
+    orig_err = utils.err
+    orig_warn = utils.warn
+    utils.err = function() end
+    utils.warn = function() end
+  end)
+
+  after_each(function()
+    config.setup(original)
+    utils.err = orig_err
+    utils.warn = orig_warn
+  end)
+
+  it("defaults to 'unified'", function()
+    local conf = setup_with({})
+    assert.equals("unified", conf.view.inline.style)
+  end)
+
+  it("accepts 'overleaf'", function()
+    local conf = setup_with({ view = { inline = { style = "overleaf" } } })
+    assert.equals("overleaf", conf.view.inline.style)
+  end)
+
+  it("rejects unknown values and falls back to 'unified'", function()
+    local conf = setup_with({ view = { inline = { style = "bogus" } } })
+    assert.equals("unified", conf.view.inline.style)
+  end)
+
+  it("treats omitted style (e.g. view.inline = {}) as 'use default'", function()
+    local err_called = false
+    utils.err = function() err_called = true end
+
+    local conf = setup_with({ view = { inline = {} } })
+
+    assert.equals("unified", conf.view.inline.style)
+    assert.is_false(err_called, "omitting style should not produce a validation error")
+  end)
+
+  it("warns and falls back when view.inline is a non-table value", function()
+    local warned = false
+    utils.warn = function() warned = true end
+
+    -- A truthy non-table (e.g. user typo'd `view.inline = "overleaf"`) would
+    -- crash on `view.inline.style` without the type guard.
+    local conf = setup_with({ view = { inline = "overleaf" } })
+
+    assert.is_true(warned, "expected a warning about non-table view.inline")
+    assert.equals("unified", conf.view.inline.style)
+  end)
+end)

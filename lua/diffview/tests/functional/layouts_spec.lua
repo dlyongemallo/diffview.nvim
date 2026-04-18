@@ -43,21 +43,64 @@ describe("diffview.layout null detection", function()
 end)
 
 describe("diffview.layout symbols", function()
-  it("Diff1 declares symbols { 'b' }", function()
-    eq({ "b" }, Diff1.symbols)
+  it("Diff1 declares symbols { 'b' }", function() eq({ "b" }, Diff1.symbols) end)
+
+  it("Diff1Inline inherits Diff1 and keeps symbols { 'b' }", function()
+    -- Class-level relationship check avoids relying on the constructor's
+    -- handling of empty/missing init args.
+    local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+    eq({ "b" }, Diff1Inline.symbols)
+    eq(Diff1, Diff1Inline.super_class)
   end)
 
-  it("Diff2 declares symbols { 'a', 'b' }", function()
-    eq({ "a", "b" }, Diff2.symbols)
+  it("Diff1Inline exposes a_file via owned_files and get_file_for('a')", function()
+    local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+
+    -- Drive the methods directly on a bare instance so we don't exercise the
+    -- full constructor (see other Diff1Inline tests for rationale).
+    local inst = setmetatable({}, { __index = Diff1Inline })
+    inst.windows = { { file = { id = "b_file" } } }
+    inst.a_file = { id = "a_file" }
+    inst.b = inst.windows[1]
+
+    eq(inst.a_file, inst:get_file_for("a"))
+    eq(inst.b.file, inst:get_file_for("b"))
+    eq({ inst.b.file, inst.a_file }, inst:owned_files())
+
+    inst.a_file = nil
+    eq({ inst.b.file }, inst:owned_files())
+    assert.is_nil(inst:get_file_for("a"))
   end)
 
-  it("Diff3 declares symbols { 'a', 'b', 'c' }", function()
-    eq({ "a", "b", "c" }, Diff3.symbols)
+  it("Diff1Inline:teardown_render clears inline-diff extmarks from the b buffer", function()
+    local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+    local inline_diff = require("diffview.scene.inline_diff")
+    local api = vim.api
+
+    local bufnr = api.nvim_create_buf(false, true)
+    api.nvim_buf_set_lines(bufnr, 0, -1, false, { "added", "context" })
+    inline_diff.render(bufnr, { "context" }, { "added", "context" })
+    assert.is_true(#api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {}) > 0)
+
+    local inst = setmetatable({}, { __index = Diff1Inline })
+    inst.b = { file = { bufnr = bufnr } }
+    inst:teardown_render()
+
+    eq(0, #api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {}))
+    pcall(api.nvim_buf_delete, bufnr, { force = true })
   end)
 
-  it("Diff4 declares symbols { 'a', 'b', 'c', 'd' }", function()
-    eq({ "a", "b", "c", "d" }, Diff4.symbols)
-  end)
+  it("Diff2 declares symbols { 'a', 'b' }", function() eq({ "a", "b" }, Diff2.symbols) end)
+
+  it(
+    "Diff3 declares symbols { 'a', 'b', 'c' }",
+    function() eq({ "a", "b", "c" }, Diff3.symbols) end
+  )
+
+  it(
+    "Diff4 declares symbols { 'a', 'b', 'c', 'd' }",
+    function() eq({ "a", "b", "c", "d" }, Diff4.symbols) end
+  )
 end)
 
 describe("diffview.layout.set_file_for", function()
@@ -130,59 +173,71 @@ describe("diffview.layout.create_wins", function()
     return layout
   end
 
-  it("issues vim.cmd calls in spec order", helpers.async_test(function()
-    local layout = mock_layout({ "b", "a", "c" })
-    async.await(layout:create_wins(1, {
-      { "b", "belowright sp" },
-      { "a", "aboveleft vsp" },
-      { "c", "aboveleft vsp" },
-    }, { "a", "b", "c" }))
+  it(
+    "issues vim.cmd calls in spec order",
+    helpers.async_test(function()
+      local layout = mock_layout({ "b", "a", "c" })
+      async.await(layout:create_wins(1, {
+        { "b", "belowright sp" },
+        { "a", "aboveleft vsp" },
+        { "c", "aboveleft vsp" },
+      }, { "a", "b", "c" }))
 
-    eq({ "belowright sp", "aboveleft vsp", "aboveleft vsp" }, cmds_recorded)
-  end))
+      eq({ "belowright sp", "aboveleft vsp", "aboveleft vsp" }, cmds_recorded)
+    end)
+  )
 
-  it("builds self.windows in win_order, not creation order", helpers.async_test(function()
-    local layout = mock_layout({ "a", "b", "c" })
-    async.await(layout:create_wins(1, {
-      { "b", "belowright sp" },
-      { "a", "aboveleft vsp" },
-      { "c", "aboveleft vsp" },
-    }, { "a", "b", "c" }))
+  it(
+    "builds self.windows in win_order, not creation order",
+    helpers.async_test(function()
+      local layout = mock_layout({ "a", "b", "c" })
+      async.await(layout:create_wins(1, {
+        { "b", "belowright sp" },
+        { "a", "aboveleft vsp" },
+        { "c", "aboveleft vsp" },
+      }, { "a", "b", "c" }))
 
-    -- Windows should be ordered a, b, c regardless of creation order.
-    eq(layout.a, layout.windows[1])
-    eq(layout.b, layout.windows[2])
-    eq(layout.c, layout.windows[3])
-  end))
+      -- Windows should be ordered a, b, c regardless of creation order.
+      eq(layout.a, layout.windows[1])
+      eq(layout.b, layout.windows[2])
+      eq(layout.c, layout.windows[3])
+    end)
+  )
 
-  it("Diff4Mixed uses different creation order than window order", helpers.async_test(function()
-    -- Diff4Mixed creates b, a, d, c but windows should be a, b, c, d.
-    local layout = mock_layout({ "a", "b", "c", "d" })
-    async.await(layout:create_wins(1, {
-      { "b", "belowright sp" },
-      { "a", "aboveleft vsp" },
-      { "d", "aboveleft vsp" },
-      { "c", "aboveleft vsp" },
-    }, { "a", "b", "c", "d" }))
+  it(
+    "Diff4Mixed uses different creation order than window order",
+    helpers.async_test(function()
+      -- Diff4Mixed creates b, a, d, c but windows should be a, b, c, d.
+      local layout = mock_layout({ "a", "b", "c", "d" })
+      async.await(layout:create_wins(1, {
+        { "b", "belowright sp" },
+        { "a", "aboveleft vsp" },
+        { "d", "aboveleft vsp" },
+        { "c", "aboveleft vsp" },
+      }, { "a", "b", "c", "d" }))
 
-    eq(layout.a, layout.windows[1])
-    eq(layout.b, layout.windows[2])
-    eq(layout.c, layout.windows[3])
-    eq(layout.d, layout.windows[4])
-    eq({ "belowright sp", "aboveleft vsp", "aboveleft vsp", "aboveleft vsp" }, cmds_recorded)
-  end))
+      eq(layout.a, layout.windows[1])
+      eq(layout.b, layout.windows[2])
+      eq(layout.c, layout.windows[3])
+      eq(layout.d, layout.windows[4])
+      eq({ "belowright sp", "aboveleft vsp", "aboveleft vsp", "aboveleft vsp" }, cmds_recorded)
+    end)
+  )
 
-  it("assigns window IDs from nvim_get_current_win to each symbol", helpers.async_test(function()
-    local layout = mock_layout({ "a", "b" })
-    async.await(layout:create_wins(1, {
-      { "a", "aboveleft vsp" },
-      { "b", "aboveleft vsp" },
-    }, { "a", "b" }))
+  it(
+    "assigns window IDs from nvim_get_current_win to each symbol",
+    helpers.async_test(function()
+      local layout = mock_layout({ "a", "b" })
+      async.await(layout:create_wins(1, {
+        { "a", "aboveleft vsp" },
+        { "b", "aboveleft vsp" },
+      }, { "a", "b" }))
 
-    -- IDs should be 101 and 102 (starting from next_win_id = 100 + 1).
-    eq(101, layout.a.id)
-    eq(102, layout.b.id)
-  end))
+      -- IDs should be 101 and 102 (starting from next_win_id = 100 + 1).
+      eq(101, layout.a.id)
+      eq(102, layout.b.id)
+    end)
+  )
 end)
 
 describe("diffview.layout.create_wins integration", function()
@@ -200,66 +255,68 @@ describe("diffview.layout.create_wins integration", function()
       layout[s] = { set_id = function(self, id) self.id = id end, close = function() end, id = nil }
     end
     -- Override create_post to skip file loading (no files to open).
-    layout.create_post = async.void(function(self)
-      vim.opt.equalalways = self.state.save_equalalways
-    end)
+    layout.create_post = async.void(
+      function(self) vim.opt.equalalways = self.state.save_equalalways end
+    )
     return layout
   end
 
-  it("creates real window splits and produces valid window IDs", helpers.async_test(function()
-    local pivot = vim.api.nvim_get_current_win()
-    assert.True(vim.api.nvim_win_is_valid(pivot))
+  it(
+    "creates real window splits and produces valid window IDs",
+    helpers.async_test(function()
+      local pivot = vim.api.nvim_get_current_win()
+      assert.True(vim.api.nvim_win_is_valid(pivot))
 
-    local layout = real_layout({ "a", "b" })
-    async.await(layout:create_wins(pivot, {
-      { "a", "aboveleft vsp" },
-      { "b", "aboveleft vsp" },
-    }, { "a", "b" }))
+      local layout = real_layout({ "a", "b" })
+      async.await(layout:create_wins(pivot, {
+        { "a", "aboveleft vsp" },
+        { "b", "aboveleft vsp" },
+      }, { "a", "b" }))
 
-    -- The pivot should have been closed.
-    assert.False(vim.api.nvim_win_is_valid(pivot))
+      -- The pivot should have been closed.
+      assert.False(vim.api.nvim_win_is_valid(pivot))
 
-    -- Both windows should be valid and distinct.
-    assert.True(vim.api.nvim_win_is_valid(layout.a.id))
-    assert.True(vim.api.nvim_win_is_valid(layout.b.id))
-    assert.are_not.equal(layout.a.id, layout.b.id)
+      -- Both windows should be valid and distinct.
+      assert.True(vim.api.nvim_win_is_valid(layout.a.id))
+      assert.True(vim.api.nvim_win_is_valid(layout.b.id))
+      assert.are_not.equal(layout.a.id, layout.b.id)
 
-    eq(layout.a, layout.windows[1])
-    eq(layout.b, layout.windows[2])
-    eq(2, #layout.windows)
+      eq(layout.a, layout.windows[1])
+      eq(layout.b, layout.windows[2])
+      eq(2, #layout.windows)
 
-    -- Clean up: close extra windows, keeping at least one.
-    local wins = vim.api.nvim_tabpage_list_wins(0)
-    for i = 2, #wins do
-      if vim.api.nvim_win_is_valid(wins[i]) then
-        vim.api.nvim_win_close(wins[i], true)
+      -- Clean up: close extra windows, keeping at least one.
+      local wins = vim.api.nvim_tabpage_list_wins(0)
+      for i = 2, #wins do
+        if vim.api.nvim_win_is_valid(wins[i]) then vim.api.nvim_win_close(wins[i], true) end
       end
-    end
-  end))
+    end)
+  )
 
-  it("Diff3Mixed-style split: creation order differs from window order", helpers.async_test(function()
-    local pivot = vim.api.nvim_get_current_win()
-    local layout = real_layout({ "a", "b", "c" })
+  it(
+    "Diff3Mixed-style split: creation order differs from window order",
+    helpers.async_test(function()
+      local pivot = vim.api.nvim_get_current_win()
+      local layout = real_layout({ "a", "b", "c" })
 
-    async.await(layout:create_wins(pivot, {
-      { "b", "belowright sp" },
-      { "a", "aboveleft vsp" },
-      { "c", "aboveleft vsp" },
-    }, { "a", "b", "c" }))
+      async.await(layout:create_wins(pivot, {
+        { "b", "belowright sp" },
+        { "a", "aboveleft vsp" },
+        { "c", "aboveleft vsp" },
+      }, { "a", "b", "c" }))
 
-    for _, sym in ipairs({ "a", "b", "c" }) do
-      assert.True(vim.api.nvim_win_is_valid(layout[sym].id), sym .. " should be valid")
-    end
-
-    eq(layout.a, layout.windows[1])
-    eq(layout.b, layout.windows[2])
-    eq(layout.c, layout.windows[3])
-
-    local wins = vim.api.nvim_tabpage_list_wins(0)
-    for i = 2, #wins do
-      if vim.api.nvim_win_is_valid(wins[i]) then
-        vim.api.nvim_win_close(wins[i], true)
+      for _, sym in ipairs({ "a", "b", "c" }) do
+        assert.True(vim.api.nvim_win_is_valid(layout[sym].id), sym .. " should be valid")
       end
-    end
-  end))
+
+      eq(layout.a, layout.windows[1])
+      eq(layout.b, layout.windows[2])
+      eq(layout.c, layout.windows[3])
+
+      local wins = vim.api.nvim_tabpage_list_wins(0)
+      for i = 2, #wins do
+        if vim.api.nvim_win_is_valid(wins[i]) then vim.api.nvim_win_close(wins[i], true) end
+      end
+    end)
+  )
 end)

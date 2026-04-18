@@ -101,9 +101,7 @@ function M.get_hl(name, no_trans)
   else
     local id = api.nvim_get_hl_id_by_name(name)
 
-    if id then
-      hl = api.nvim_get_hl(0, { id = id, link = false })
-    end
+    if id then hl = api.nvim_get_hl(0, { id = id, link = false }) end
   end
 
   if hl then
@@ -179,9 +177,7 @@ function M.get_style(groups, no_trans)
         if hl[attr] then table.insert(res, attr) end
       end
 
-      if #res > 0 then
-        return table.concat(res, ",")
-      end
+      if #res > 0 then return table.concat(res, ",") end
     end
   end
 end
@@ -219,15 +215,11 @@ function M.hi(groups, opt)
     if opt.explicit then
       def_spec = M.hi_spec_to_def_map(opt)
     else
-      def_spec = M.hi_spec_to_def_map(
-        vim.tbl_extend("force", M.get_hl(group, true) or {}, opt)
-      )
+      def_spec = M.hi_spec_to_def_map(vim.tbl_extend("force", M.get_hl(group, true) or {}, opt))
     end
 
     for k, v in pairs(def_spec) do
-      if v == "NONE" then
-        def_spec[k] = nil
-      end
+      if v == "NONE" then def_spec[k] = nil end
     end
 
     api.nvim_set_hl(0, group, def_spec)
@@ -269,9 +261,7 @@ function M.hi_clear(groups)
     return
   end
 
-  if type(groups) ~= "table" then
-    groups = { groups }
-  end
+  if type(groups) ~= "table" then groups = { groups } end
 
   for _, g in ipairs(groups) do
     api.nvim_set_hl(0, g, {})
@@ -339,16 +329,12 @@ local git_status_hl_map = {
   ["!"] = "DiffviewStatusIgnored",
 }
 
-function M.get_git_hl(status)
-  return git_status_hl_map[status]
-end
+function M.get_git_hl(status) return git_status_hl_map[status] end
 
 ---Get the configured status icon for a git status letter.
 ---@param status string Git status letter (e.g., "M", "A", "D").
 ---@return string
-function M.get_status_icon(status)
-  return config.get_config().status_icons[status] or status
-end
+function M.get_status_icon(status) return config.get_config().status_icons[status] or status end
 
 function M.get_colors()
   return {
@@ -429,15 +415,28 @@ function M.update_diff_hl()
   if config.get_config().enhanced_diff_hl then
     M.hi_link("DiffviewDiffDelete", "DiffviewDiffDeleteDim")
   end
+
+  -- Used by the `diff1_inline` layout in "overleaf" style to render deletions
+  -- as strikethrough virtual text. Inherits fg/bg from `DiffviewDiffDelete`
+  -- (resolving through its link chain) so that users who customize diffview's
+  -- deletion colours pick up the change here too, and so `enhanced_diff_hl`
+  -- mode — which relinks `DiffviewDiffDelete` to `DiffviewDiffDeleteDim` —
+  -- is honoured. Runs AFTER the relink above so the final state is read.
+  local del_fg = M.get_fg("DiffviewDiffDelete", true) or "NONE"
+  local del_bg = M.get_bg("DiffviewDiffDelete", true) or "NONE"
+  M.hi("DiffviewDiffDeleteInline", {
+    fg = del_fg,
+    bg = del_bg,
+    style = "strikethrough",
+    default = true,
+  })
 end
 
 function M.setup()
   -- Ensure diff highlights are defined by loading the diff syntax if needed.
   -- Some colorschemes don't set diffAdded/diffRemoved/diffChanged until the
   -- diff filetype is encountered.
-  if vim.fn.hlexists("diffAdded") == 0 then
-    vim.cmd("runtime! syntax/diff.vim")
-  end
+  if vim.fn.hlexists("diffAdded") == 0 then vim.cmd("runtime! syntax/diff.vim") end
 
   for name, v in pairs(M.get_hl_groups()) do
     v = vim.tbl_extend("force", v, { default = true })
