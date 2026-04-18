@@ -35,6 +35,44 @@ describe("diffview.debounce", function()
       assert.is_false(in_fast_event)
       fn.close()
     end))
+
+    it("cancel drops a pending trailing call", test_utils.async_test(function()
+      local count = 0
+      local fn = debounce.debounce_trailing(10, false, function()
+        count = count + 1
+      end)
+
+      fn()
+      fn.cancel()
+
+      await(async.timeout(50))
+      await(async.scheduler())
+
+      assert.equals(0, count)
+      fn.close()
+    end))
+
+    it("can be re-scheduled after cancel", test_utils.async_test(function()
+      local count = 0
+      local fn = debounce.debounce_trailing(10, false, function()
+        count = count + 1
+      end)
+
+      fn()
+      fn.cancel()
+
+      await(async.timeout(30))
+      await(async.scheduler())
+      assert.equals(0, count)
+
+      fn()
+
+      await(async.timeout(50))
+      await(async.scheduler())
+      assert.equals(1, count)
+
+      fn.close()
+    end))
   end)
 
   describe("throttle_trailing", function()
