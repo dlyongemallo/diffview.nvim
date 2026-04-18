@@ -305,19 +305,16 @@ known issues and workarounds:
     ```
 
 - **[vim-markdown](https://github.com/preservim/vim-markdown) (preservim/vim-markdown):**
-  - vim-markdown creates folds for markdown sections. Older versions of
-    diffview set `foldlevel=0` which collapsed these sections, hiding diff
-    content. This has been fixed by setting `foldlevel=99` by default.
-  - If you still experience issues, you can manually set foldlevel in hooks:
+  - vim-markdown's `after/ftplugin/markdown.vim` sets `foldmethod=expr` with a
+    markdown section foldexpr. In diff buffers this would collapse markdown
+    sections and hide diff content. Diffview suppresses the synthetic `FileType`
+    event that would otherwise let that ftplugin run on diffview buffers, so
+    `foldmethod=diff` is preserved and vim-markdown's folds are not applied.
+  - If you still see section folds in diff buffers (e.g. because another
+    plugin re-fires `FileType` on the buffer), raise the initial fold level:
     ```lua
     require("diffview").setup({
-      hooks = {
-        diff_buf_win_enter = function(bufnr, winid, ctx)
-          if ctx.layout_name == "diff2_horizontal" then
-            vim.wo[winid].foldlevel = 99
-          end
-        end,
-      },
+      view = { foldlevel = 99 },
     })
     ```
 

@@ -88,10 +88,8 @@ function File:init(opt)
     foldmethod = "diff",
     scrollopt = { "ver", "hor", "jump" },
     foldcolumn = "1",
-    -- Use high foldlevel to keep folds open by default. This prevents issues
-    -- with plugins like vim-markdown that create section folds which would
-    -- otherwise collapse and hide diff content.
-    foldlevel = 99,
+    -- Resolved from `view.foldlevel` at window open (see `Window:open_file`).
+    foldlevel = 0,
     foldenable = true,
     -- Use prepend method so diffview's highlights take precedence but don't
     -- clobber user's additional winhl customizations (#515).

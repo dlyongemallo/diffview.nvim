@@ -145,6 +145,9 @@ M.defaults = {
       winbar_info = false,
       focus_diff = false,
     },
+    -- Initial 'foldlevel' for diff buffers. Default 0 collapses unchanged
+    -- regions; set to a high value (e.g. 99) to keep all folds open.
+    foldlevel = 0,
     -- Layouts to cycle through with `cycle_layout` action.
     cycle_layouts = {
       default = { "diff2_horizontal", "diff2_vertical" },
@@ -688,6 +691,14 @@ function M.setup(user_config)
         ))
         view[kind].layout = M.defaults.view[kind].layout
       end
+    end
+
+    local n = tonumber(view.foldlevel)
+    if not n or n < 0 or n % 1 ~= 0 then
+      utils.warn("Invalid value for 'view.foldlevel'. Must be a non-negative integer.")
+      view.foldlevel = M.defaults.view.foldlevel
+    else
+      view.foldlevel = n
     end
 
     -- Ensure each view's configured layout is in its corresponding cycle
