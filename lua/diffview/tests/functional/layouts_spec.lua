@@ -90,6 +90,110 @@ describe("diffview.layout symbols", function()
     pcall(api.nvim_buf_delete, bufnr, { force = true })
   end)
 
+  it("Diff1Inline:teardown_render closes the repaint debounce", function()
+    local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+
+    local closed = false
+    local debounced = setmetatable({}, {
+      __call = function() end,
+      __index = {
+        close = function() closed = true end,
+        cancel = function() end,
+      },
+    })
+
+    local inst = setmetatable({}, { __index = Diff1Inline })
+    inst._repaint_debounced = debounced
+    inst._repaint_bufnr = nil
+    inst:teardown_render()
+
+    assert.is_true(closed)
+    assert.is_nil(inst._repaint_debounced)
+  end)
+
+  it(
+    "Diff1Inline InsertLeave cancels a pending debounced repaint",
+    helpers.async_test(function()
+      local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+      local api = vim.api
+
+      -- Shadow `_repaint` on the instance so we count calls without mutating
+      -- the class method shared with concurrent tests.
+      local repaint_count = 0
+
+      local bufnr = api.nvim_create_buf(false, true)
+      api.nvim_buf_set_lines(bufnr, 0, -1, false, { "new content" })
+      local winid = api.nvim_get_current_win()
+
+      local inst = setmetatable({}, { __index = Diff1Inline })
+      inst.b = {
+        file = { bufnr = bufnr, is_valid = function() return true end },
+        is_valid = function() return true end,
+        id = winid,
+      }
+      inst._cached_old_lines = { "old content" }
+      inst._repaint = function() repaint_count = repaint_count + 1 end
+
+      async.await(inst:_render_inline())
+
+      -- `TextChangedI` schedules a debounced repaint; `InsertLeave` should
+      -- cancel it and fire the immediate repaint exactly once.
+      api.nvim_exec_autocmds("TextChangedI", { buffer = bufnr })
+      api.nvim_exec_autocmds("InsertLeave", { buffer = bufnr })
+
+      eq(1, repaint_count)
+
+      -- Wait past the debounce window (150ms). If the debounce hadn't been
+      -- cancelled, the trailing call would bump the counter to 2.
+      async.await(async.timeout(200))
+      async.await(async.scheduler())
+
+      eq(1, repaint_count)
+
+      inst:teardown_render()
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+  )
+
+  it(
+    "Diff1Inline TextChangedI coalesces rapid edits into one repaint",
+    helpers.async_test(function()
+      local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+      local api = vim.api
+
+      local repaint_count = 0
+
+      local bufnr = api.nvim_create_buf(false, true)
+      api.nvim_buf_set_lines(bufnr, 0, -1, false, { "new content" })
+      local winid = api.nvim_get_current_win()
+
+      local inst = setmetatable({}, { __index = Diff1Inline })
+      inst.b = {
+        file = { bufnr = bufnr, is_valid = function() return true end },
+        is_valid = function() return true end,
+        id = winid,
+      }
+      inst._cached_old_lines = { "old content" }
+      inst._repaint = function() repaint_count = repaint_count + 1 end
+
+      async.await(inst:_render_inline())
+
+      for _ = 1, 5 do
+        api.nvim_exec_autocmds("TextChangedI", { buffer = bufnr })
+      end
+
+      -- Wait past the debounce window so the trailing fire has a chance to
+      -- run (or not, if coalescing is broken).
+      async.await(async.timeout(200))
+      async.await(async.scheduler())
+
+      eq(1, repaint_count)
+
+      inst:teardown_render()
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+  )
+
   it("Diff2 declares symbols { 'a', 'b' }", function() eq({ "a", "b" }, Diff2.symbols) end)
 
   it(

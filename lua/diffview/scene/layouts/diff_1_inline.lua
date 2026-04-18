@@ -1,4 +1,5 @@
 local async = require("diffview.async")
+local debounce = require("diffview.debounce")
 local lazy = require("diffview.lazy")
 local Diff1 = require("diffview.scene.layouts.diff_1").Diff1
 local Layout = require("diffview.scene.layout").Layout
@@ -42,10 +43,16 @@ end
 ---autocmds scoped to `{ group = ..., buffer = bufnr }`.
 local repaint_augroup = api.nvim_create_augroup("diffview_inline_repaint", { clear = false })
 
+---Debounce delay (ms) for `TextChangedI`-driven repaints. Long enough to
+---coalesce bursts of keystrokes into a single diff pass, short enough that
+---the deletion markers feel responsive while the user is still typing.
+local INSERT_REPAINT_DEBOUNCE_MS = 150
+
 ---@class Diff1Inline : Diff1
 ---@field a_file vcs.File? Old-side file used only to compute the diff (never rendered in a window).
 ---@field _cached_old_lines string[]? Old-side content captured on first render; reused by repaints so each keystroke-level refresh doesn't re-fetch from disk.
 ---@field _repaint_bufnr integer? Buffer id the repaint autocmds are attached to (nil when no autocmds are installed).
+---@field _repaint_debounced CancellableFn? Trailing-edge debounced `_repaint` used for the insert-mode `TextChangedI` hook.
 local Diff1Inline = oop.create_class("Diff1Inline", Diff1)
 
 ---@class Diff1Inline.init.Opt : Diff1.init.Opt
@@ -159,26 +166,44 @@ function Diff1Inline:_repaint()
   inline_diff.render(bufnr, old_lines, new_lines, render_opts())
 end
 
----Install buffer-scoped autocmds that repaint on edits. Fires on exit
----from insert mode and on any normal-mode text change (d/p/x/c/u/<C-r>
----…), but NOT on every insert-mode keystroke (`TextChangedI` is
----intentionally excluded — per-keystroke diffs would be too heavy).
----Idempotent: if autocmds are already installed for this buffer, this
----is a no-op.
+---Install buffer-scoped autocmds that repaint on edits. Fires on any
+---normal-mode text change (d/p/x/c/u/<C-r> …), on exit from insert mode,
+---and on insert-mode changes via a trailing-edge debounced handler so
+---bursts of keystrokes coalesce into a single diff pass instead of
+---re-running the full diff on every character. The immediate
+---`InsertLeave`/`TextChanged` handler drops any pending debounced call
+---before repainting, so a `TextChangedI` followed promptly by
+---`InsertLeave` doesn't queue a redundant second repaint. Idempotent:
+---if autocmds are already installed for this buffer, this is a no-op.
 ---@param self Diff1Inline
 ---@param bufnr integer
 local function register_repaint_autocmds(self, bufnr)
   if self._repaint_bufnr == bufnr then return end
   -- Different buffer than last time (or first install): clear any prior
-  -- registration before attaching to the new one.
+  -- registration before attaching to the new one, and close any pending
+  -- debounce timer so it doesn't fire against the old buffer.
   if self._repaint_bufnr and api.nvim_buf_is_valid(self._repaint_bufnr) then
     pcall(api.nvim_clear_autocmds, { group = repaint_augroup, buffer = self._repaint_bufnr })
   end
+  if self._repaint_debounced then self._repaint_debounced:close() end
   self._repaint_bufnr = bufnr
+  self._repaint_debounced = debounce.debounce_trailing(
+    INSERT_REPAINT_DEBOUNCE_MS,
+    false,
+    function() self:_repaint() end
+  )
   api.nvim_create_autocmd({ "InsertLeave", "TextChanged" }, {
     group = repaint_augroup,
     buffer = bufnr,
-    callback = function() self:_repaint() end,
+    callback = function()
+      if self._repaint_debounced then self._repaint_debounced:cancel() end
+      self:_repaint()
+    end,
+  })
+  api.nvim_create_autocmd("TextChangedI", {
+    group = repaint_augroup,
+    buffer = bufnr,
+    callback = function() self._repaint_debounced() end,
   })
 end
 
@@ -239,6 +264,10 @@ end
 function Diff1Inline:teardown_render()
   if self._repaint_bufnr and api.nvim_buf_is_valid(self._repaint_bufnr) then
     pcall(api.nvim_clear_autocmds, { group = repaint_augroup, buffer = self._repaint_bufnr })
+  end
+  if self._repaint_debounced then
+    self._repaint_debounced:close()
+    self._repaint_debounced = nil
   end
   self._repaint_bufnr = nil
   self._cached_old_lines = nil

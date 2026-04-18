@@ -12,6 +12,9 @@ local M = {}
 ---@class ManagedFn : Closeable
 ---@operator call : unknown ...
 
+---@class CancellableFn : ManagedFn
+---@field cancel fun() # Drop any pending execution without releasing the handle.
+
 ---@param ... uv_handle_t
 function M.try_close(...)
   local args = { ... }
@@ -25,18 +28,27 @@ function M.try_close(...)
   end
 end
 
+---@param timer uv_timer_t
+---@param fn function
+---@param extra? table<string, function> # Additional methods exposed on the returned handle.
 ---@return ManagedFn
-local function wrap(timer, fn)
+local function wrap(timer, fn, extra)
+  local methods = {
+    close = function()
+      timer:stop()
+      M.try_close(timer)
+    end,
+  }
+  if extra then
+    for k, v in pairs(extra) do
+      methods[k] = v
+    end
+  end
   return setmetatable({}, {
     __call = function(_, ...)
       fn(...)
     end,
-    __index = {
-      close = function()
-        timer:stop()
-        M.try_close(timer)
-      end,
-    },
+    __index = methods,
   })
 end
 
@@ -65,7 +77,7 @@ end
 ---@param ms integer Timeout in ms
 ---@param rush_first boolean If the managed fn is called and it's not recovering from a debounce: call the fn immediately.
 ---@param fn function Function to debounce
----@return ManagedFn # Debounced function.
+---@return CancellableFn # Debounced function.
 function M.debounce_trailing(ms, rush_first, fn)
   local timer = assert(uv.new_timer())
   local lock = false
@@ -91,9 +103,15 @@ function M.debounce_trailing(ms, rush_first, fn)
         end)
       end
     end)
-  end)
+  end, {
+    cancel = function()
+      timer:stop()
+      lock = false
+      args = nil
+    end,
+  })
 
-  return debounced_fn
+  return debounced_fn --[[@as CancellableFn ]]
 end
 
 ---Throttles a function on the leading edge.
