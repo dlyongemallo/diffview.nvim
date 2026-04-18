@@ -156,6 +156,13 @@ end
 -- `) return ... end` as inserted, instead of recognizing `)` as the
 -- end of the common prefix and treating the rest as pure addition.
 -- Same remedy as the outer line-level diff in `render()`.
+--
+-- `'diffopt'`'s `ignore_*` whitespace/blank-line flags are deliberately
+-- not forwarded here. Those flags only decide which lines are paired as
+-- modifications by the outer hunk diff; once a pair is formed, the
+-- intraline highlight reflects the actual character differences so the
+-- reader can see exactly what changed. This matches how |hl-DiffText|
+-- works in the built-in side-by-side diff.
 ---@param a_units string[]
 ---@param b_units string[]
 ---@return integer[][]
@@ -718,6 +725,10 @@ end
 ---@field algorithm? string
 ---@field linematch? integer
 ---@field indent_heuristic? boolean
+---@field ignore_whitespace? boolean
+---@field ignore_whitespace_change? boolean
+---@field ignore_whitespace_change_at_eol? boolean
+---@field ignore_blank_lines? boolean
 ---@field style? "unified"|"overleaf" Default: `"unified"`.
 
 ---@class InlineDiffStyle
@@ -771,13 +782,22 @@ function M.render(bufnr, old_lines, new_lines, opts)
   local new = #new_lines > 0 and table.concat(new_lines, "\n") .. "\n" or ""
 
   local diff_opts = { result_type = "indices" }
-  -- Only forward `algorithm`, `linematch`, and `indent_heuristic` when
+  -- Only forward each `vim.diff` option (`algorithm`, `linematch`,
+  -- `indent_heuristic`, and the `ignore_*` whitespace/blank-line flags) when
   -- explicitly set so vim.diff's own defaults apply otherwise. This mirrors
   -- how `'diffopt'` toggles flags/options by presence/absence rather than
   -- forcing fallback values here.
   if opts.algorithm ~= nil then diff_opts.algorithm = opts.algorithm end
   if opts.linematch ~= nil then diff_opts.linematch = opts.linematch end
   if opts.indent_heuristic ~= nil then diff_opts.indent_heuristic = opts.indent_heuristic end
+  if opts.ignore_whitespace ~= nil then diff_opts.ignore_whitespace = opts.ignore_whitespace end
+  if opts.ignore_whitespace_change ~= nil then
+    diff_opts.ignore_whitespace_change = opts.ignore_whitespace_change
+  end
+  if opts.ignore_whitespace_change_at_eol ~= nil then
+    diff_opts.ignore_whitespace_change_at_eol = opts.ignore_whitespace_change_at_eol
+  end
+  if opts.ignore_blank_lines ~= nil then diff_opts.ignore_blank_lines = opts.ignore_blank_lines end
 
   local hunks = vim.diff(old, new, diff_opts)
 

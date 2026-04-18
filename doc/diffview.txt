@@ -548,7 +548,11 @@ diffopt                                         *diffview-config-diffopt*
 
         `linematch` pairs added/deleted lines within a hunk so intra-line
         |hl-DiffText| highlighting becomes meaningful (VSCode-style). A value
-        of `60` is typical; `0` disables it.
+        of `60` is typical; `0` disables it. Note: `linematch` is honoured by
+        the side-by-side layouts (diff2, diff3, diff4) but not by the
+        `diff1_inline` layout, which pairs lines positionally inside each
+        hunk and so cannot make use of linematch's similarity-based
+        reordering.
 
         Example: >lua
                 diffopt = { algorithm = "histogram", linematch = 60 }
@@ -829,6 +833,16 @@ view.inline                                     *diffview-config-view.inline*
         Type: `table`, Default: (see defaults)
 
         Options that apply to the `diff1_inline` layout.
+
+        Note: this layout pairs lines positionally inside each diff hunk and
+        therefore does not consult |'diffopt'|'s `linematch` setting. The
+        whitespace flags (`iwhite`, `iwhiteall`, `iwhiteeol`, `iblank`),
+        `algorithm`, and `indent-heuristic` are honoured for hunk
+        computation. Intraline |hl-DiffText| on paired lines (and the
+        inline strikethrough deletions in the `"overleaf"` style) always
+        reflect the actual character differences, independent of those
+        ignore flags. `icase` is not honoured because |vim.diff()| does not
+        accept a case-insensitive option.
 
         Fields: ~
             {style} ("unified"|"overleaf")
