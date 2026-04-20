@@ -1354,4 +1354,124 @@ describe("panel_render", function()
       end)
     end)
   end)
+
+  -- -----------------------------------------------------------------------
+  -- Folder icon gating on `use_icons`
+  -- -----------------------------------------------------------------------
+
+  describe("folder icons are gated on use_icons", function()
+    local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
+
+    -- Use distinctive ASCII icons so the assertion does not depend on Nerd
+    -- Font glyphs being present in the test environment.
+    local FOLDER_OPEN = "<<OPEN>>"
+    local FOLDER_CLOSED = "<<CLOSED>>"
+
+    local saved_devicons
+
+    before_each(function()
+      -- Stub nvim-web-devicons so hl.get_file_icon does not flip
+      -- `use_icons` back to false mid-render when neither icon plugin is
+      -- installed in the test environment.
+      saved_devicons = package.loaded["nvim-web-devicons"]
+      package.loaded["nvim-web-devicons"] = {
+        get_icon = function() return "", nil end,
+      }
+    end)
+
+    after_each(function()
+      package.loaded["nvim-web-devicons"] = saved_devicons
+      -- Drop the cached module reference inside hl.lua so the next test
+      -- re-resolves devicons via our stub (or its absence).
+      package.loaded["diffview.hl"] = nil
+      require("diffview.hl")
+    end)
+
+    local function make_tree_panel(entries, use_icons)
+      local conf = config.get_config()
+      conf.use_icons = use_icons
+      conf.icons.folder_open = FOLDER_OPEN
+      conf.icons.folder_closed = FOLDER_CLOSED
+      config.setup(conf)
+
+      local adapter = {
+        ctx = { toplevel = "/tmp", dir = "/tmp/.git" },
+        get_branch_name = function() return nil end,
+      }
+      local fd = FileDict()
+      for i, e in ipairs(entries) do
+        fd.working[i] = e
+      end
+      fd:update_file_trees()
+
+      local panel = FilePanel(adapter, fd, {})
+      panel.listing_style = "tree"
+      panel.is_loading = false
+      panel:init_buffer()
+      return panel
+    end
+
+    it("renders the folder_open icon on directory lines when use_icons = true", function()
+      local panel = make_tree_panel({ make_entry("src/a.lua") }, true)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      local lines = vim.api.nvim_buf_get_lines(panel.bufid, 0, -1, false)
+      local joined = table.concat(lines, "\n")
+      assert.truthy(
+        joined:find(FOLDER_OPEN, 1, true),
+        "expected folder_open icon in tree output when use_icons = true"
+      )
+
+      panel:destroy()
+    end)
+
+    it("omits the folder icon on directory lines when use_icons = false", function()
+      local panel = make_tree_panel({ make_entry("src/a.lua") }, false)
+      panel:update_components()
+      panel:render()
+      panel:redraw()
+
+      local lines = vim.api.nvim_buf_get_lines(panel.bufid, 0, -1, false)
+      local joined = table.concat(lines, "\n")
+      assert.falsy(
+        joined:find(FOLDER_OPEN, 1, true),
+        "folder_open icon should not appear when use_icons = false"
+      )
+      assert.falsy(
+        joined:find(FOLDER_CLOSED, 1, true),
+        "folder_closed icon should not appear when use_icons = false"
+      )
+
+      panel:destroy()
+    end)
+
+    it("renders the folder_closed icon on collapsed directories when use_icons = true", function()
+      local panel = make_tree_panel({ make_entry("src/a.lua") }, true)
+      panel:update_components()
+
+      -- Collapse the only top-level directory node before rendering.
+      for _, section in ipairs({ "conflicting", "working", "staged" }) do
+        local files_comp = panel.components[section].files.comp
+        for _, child in ipairs(files_comp.components) do
+          if child.name == "directory" then
+            child.context.collapsed = true
+          end
+        end
+      end
+
+      panel:render()
+      panel:redraw()
+
+      local lines = vim.api.nvim_buf_get_lines(panel.bufid, 0, -1, false)
+      local joined = table.concat(lines, "\n")
+      assert.truthy(
+        joined:find(FOLDER_CLOSED, 1, true),
+        "expected folder_closed icon for collapsed directory when use_icons = true"
+      )
+
+      panel:destroy()
+    end)
+  end)
 end)
