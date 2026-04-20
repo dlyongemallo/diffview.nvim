@@ -370,6 +370,97 @@ describe("diffview.layout symbols", function()
   )
 end)
 
+describe("diffview.scene.layouts.diff_1_inline diffopt forwarding", function()
+  local Diff1Inline_mod = require("diffview.scene.layouts.diff_1_inline")
+  local effective_diffopt = Diff1Inline_mod._test.effective_diffopt
+  local inline_diff = require("diffview.scene.inline_diff")
+  local api = vim.api
+
+  local orig_diffopt
+
+  before_each(function() orig_diffopt = vim.deepcopy(vim.opt.diffopt:get()) end)
+
+  after_each(function() vim.opt.diffopt = vim.deepcopy(orig_diffopt) end)
+
+  ---Reset `'diffopt'` to a fixed baseline so each test starts from the same
+  ---state regardless of what the Neovim default (or a prior test) left behind.
+  ---@param entries string[]
+  local function set_diffopt(entries) vim.opt.diffopt = entries end
+
+  it("maps iwhite to ignore_whitespace_change", function()
+    set_diffopt({ "iwhite" })
+    eq(true, effective_diffopt().ignore_whitespace_change)
+  end)
+
+  it("maps iwhiteall to ignore_whitespace", function()
+    set_diffopt({ "iwhiteall" })
+    eq(true, effective_diffopt().ignore_whitespace)
+  end)
+
+  it("maps iwhiteeol to ignore_whitespace_change_at_eol", function()
+    set_diffopt({ "iwhiteeol" })
+    eq(true, effective_diffopt().ignore_whitespace_change_at_eol)
+  end)
+
+  it("maps iblank to ignore_blank_lines", function()
+    set_diffopt({ "iblank" })
+    eq(true, effective_diffopt().ignore_blank_lines)
+  end)
+
+  it("does not forward icase (vim.diff has no case-insensitive option)", function()
+    set_diffopt({ "icase" })
+    local opts = effective_diffopt()
+    assert.is_nil(opts.ignore_case)
+  end)
+
+  it("maps algorithm:<name> to algorithm", function()
+    set_diffopt({ "algorithm:patience" })
+    eq("patience", effective_diffopt().algorithm)
+  end)
+
+  it("sets indent_heuristic to false when absent from 'diffopt'", function()
+    set_diffopt({ "internal" })
+    eq(false, effective_diffopt().indent_heuristic)
+  end)
+
+  it("sets indent_heuristic to true when 'indent-heuristic' is in 'diffopt'", function()
+    set_diffopt({ "indent-heuristic" })
+    eq(true, effective_diffopt().indent_heuristic)
+  end)
+
+  it("never forwards linematch even when set in 'diffopt'", function()
+    set_diffopt({ "linematch:60", "iblank" })
+    local opts = effective_diffopt()
+    assert.is_nil(opts.linematch)
+    -- Sanity-check that other entries still parse (confirms the loop ran).
+    eq(true, opts.ignore_blank_lines)
+  end)
+
+  it("leaves ignore flags nil when 'diffopt' has no corresponding entry", function()
+    set_diffopt({ "internal" })
+    local opts = effective_diffopt()
+    assert.is_nil(opts.ignore_whitespace)
+    assert.is_nil(opts.ignore_whitespace_change)
+    assert.is_nil(opts.ignore_whitespace_change_at_eol)
+    assert.is_nil(opts.ignore_blank_lines)
+  end)
+
+  it("changes inline diff output when iwhiteall is enabled", function()
+    local bufnr = api.nvim_create_buf(false, true)
+    api.nvim_buf_set_lines(bufnr, 0, -1, false, { "foo  bar" })
+
+    set_diffopt({ "internal" })
+    inline_diff.render(bufnr, { "foo bar" }, { "foo  bar" }, effective_diffopt())
+    assert.is_true(#(inline_diff.get_hunks(bufnr) or {}) > 0)
+
+    set_diffopt({ "internal", "iwhiteall" })
+    inline_diff.render(bufnr, { "foo bar" }, { "foo  bar" }, effective_diffopt())
+    eq(0, #(inline_diff.get_hunks(bufnr) or {}))
+
+    pcall(api.nvim_buf_delete, bufnr, { force = true })
+  end)
+end)
+
 describe("diffview.layout.set_file_for", function()
   it("sets the file on the window and tags it with the symbol", function()
     local stored_file

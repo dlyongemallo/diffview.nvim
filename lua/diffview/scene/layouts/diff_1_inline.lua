@@ -22,6 +22,15 @@ local M = {}
 ---`indent_heuristic` is always set to an explicit boolean so its absence from
 ---`'diffopt'` forces `vim.diff` to disable the heuristic instead of falling
 ---back to whatever default the vim.diff implementation currently uses.
+---
+---`linematch` is intentionally not forwarded. In `result_type = "indices"`
+---mode it splits a single modify-hunk into smaller hunks that pair lines by
+---similarity rather than by position — e.g. an old `-- foo = X, -- comment`
+---line gets paired with a new `-- bar = Y, -- comment` line further down
+---because both share the `-- ` prefix and a `, -- ` separator, even though
+---the natural (positional) pair is the new uncommented `foo = X` line. The
+---inline renderer pairs lines positionally inside each hunk, so a non-zero
+---linematch causes deletions to render anchored against the wrong new line.
 ---@return InlineDiffOpts
 local function effective_diffopt()
   local out = { indent_heuristic = false }
@@ -29,10 +38,16 @@ local function effective_diffopt()
     local key, val = v:match("^([%w_-]+):(.+)$")
     if key == "algorithm" then
       out.algorithm = val
-    elseif key == "linematch" then
-      out.linematch = tonumber(val)
     elseif v == "indent-heuristic" then
       out.indent_heuristic = true
+    elseif v == "iwhite" then
+      out.ignore_whitespace_change = true
+    elseif v == "iwhiteall" then
+      out.ignore_whitespace = true
+    elseif v == "iwhiteeol" then
+      out.ignore_whitespace_change_at_eol = true
+    elseif v == "iblank" then
+      out.ignore_blank_lines = true
     end
   end
   return out
@@ -366,4 +381,10 @@ function Diff1Inline:destroy()
 end
 
 M.Diff1Inline = Diff1Inline
+
+M._test = {
+  effective_diffopt = effective_diffopt,
+  render_opts = render_opts,
+}
+
 return M
