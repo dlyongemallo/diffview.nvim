@@ -230,12 +230,12 @@ local function render_file_tree_recurse(conf, panel, depth, comp, sign_pad)
 
   dir:add_text(ctx.collapsed and conf.signs.fold_closed or conf.signs.fold_open, "DiffviewNonText")
 
-  -- Always show folder icons since they're user-configurable and don't require
-  -- an icon provider like file-type icons do (#579).
-  dir:add_text(
-    " " .. (ctx.collapsed and conf.icons.folder_closed or conf.icons.folder_open) .. " ",
-    "DiffviewFolderSign"
-  )
+  if conf.use_icons then
+    dir:add_text(
+      " " .. (ctx.collapsed and conf.icons.folder_closed or conf.icons.folder_open) .. " ",
+      "DiffviewFolderSign"
+    )
+  end
 
   local tree_options = conf.file_panel.tree_options
   dir:add_text(format_folder_name(ctx.name, tree_options), "DiffviewFolderName")
