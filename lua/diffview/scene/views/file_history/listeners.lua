@@ -18,9 +18,7 @@ return function(view)
   return {
     tab_enter = function()
       local file = view.panel.cur_item[2]
-      if file then
-        view:set_file(file)
-      end
+      if file then view:set_file(file) end
 
       view:restore_panel_cursor()
     end,
@@ -28,9 +26,7 @@ return function(view)
       local file = view.panel.cur_item[2]
       view:save_panel_cursor()
 
-      if file then
-        file.layout:detach_files()
-      end
+      if file then file.layout:detach_files() end
 
       for _, entry in ipairs(view.panel.entries) do
         for _, f in ipairs(entry.files) do
@@ -75,23 +71,15 @@ return function(view)
       lib.add_view(new_view)
       new_view:open()
     end,
-    select_next_entry = function()
-      view:next_item()
-    end,
-    select_prev_entry = function()
-      view:prev_item()
-    end,
+    select_next_entry = function() view:next_item() end,
+    select_prev_entry = function() view:prev_item() end,
     select_first_entry = function()
       local entry = view.panel.entries[1]
-      if entry and #entry.files > 0 then
-        view:set_file(entry.files[1])
-      end
+      if entry and #entry.files > 0 then view:set_file(entry.files[1]) end
     end,
     select_last_entry = function()
       local entry = view.panel.entries[#view.panel.entries]
-      if entry and #entry.files > 0 then
-        view:set_file(entry.files[#entry.files])
-      end
+      if entry and #entry.files > 0 then view:set_file(entry.files[#entry.files]) end
     end,
     select_next_commit = function()
       local cur_entry = view.panel.cur_item[1]
@@ -161,12 +149,8 @@ return function(view)
       end
       view:set_file(cur_entry.files[prev_idx])
     end,
-    next_entry = function()
-      view.panel:highlight_next_file()
-    end,
-    prev_entry = function()
-      view.panel:highlight_prev_item()
-    end,
+    next_entry = function() view.panel:highlight_next_file() end,
+    prev_entry = function() view.panel:highlight_prev_item() end,
     select_entry = function()
       if view.panel:is_focused() then
         local item = view.panel:get_item_at_cursor()
@@ -183,9 +167,7 @@ return function(view)
         end
       elseif view.panel.option_panel:is_focused() then
         local option = view.panel.option_panel:get_item_at_cursor()
-        if option then
-          view.panel.option_panel.emitter:emit("set_option", option.key)
-        end
+        if option then view.panel.option_panel.emitter:emit("set_option", option.key) end
       end
     end,
     focus_entry = function()
@@ -208,25 +190,15 @@ return function(view)
       local file = view:infer_cur_file()
       if file then
         local entry = view.panel:find_entry(file)
-        if entry then
-          view.commit_log_panel:update(view.adapter.Rev.to_range(entry.commit.hash))
-        end
+        if entry then view.commit_log_panel:update(view.adapter.Rev.to_range(entry.commit.hash)) end
       end
     end,
-    focus_files = function()
-      view.panel:focus()
-    end,
-    toggle_files = function()
-      view.panel:toggle(true)
-    end,
+    focus_files = function() view.panel:focus() end,
+    toggle_files = function() view.panel:toggle(true) end,
     refresh_files = function()
       view.panel:update_entries(function(_, status)
-        if status >= JobStatus.ERROR then
-          return
-        end
-        if not view:cur_file() then
-          view:next_item()
-        end
+        if status >= JobStatus.ERROR then return end
+        if not view:cur_file() then view:next_item() end
       end)
     end,
     open_all_folds = function()
@@ -271,28 +243,23 @@ return function(view)
         -- Don't close the view if a floating window is focused; the float's
         -- own close listener should handle it.
         local win_conf = api.nvim_win_get_config(0)
-        if win_conf.relative == "" then
-          view:close()
-        end
+        if win_conf.relative == "" then view:close() end
       end
     end,
-    options = function()
-      view.panel.option_panel:focus()
-    end,
+    options = function() view.panel.option_panel:focus() end,
     copy_hash = function()
       if view.panel:is_focused() then
         local item = view.panel:get_item_at_cursor()
         if item then
-          vim.fn.setreg('"', item.commit.hash)
-          utils.info(string.format("Copied '%s' to the default register.", item.commit.hash))
+          local reg = vim.v.register
+          vim.fn.setreg(reg, item.commit.hash)
+          utils.info(string.format("Copied '%s' to register '%s'.", item.commit.hash, reg))
         end
       end
     end,
     open_commit_in_browser = function()
       local item = view.panel:get_item_at_cursor()
-      if not item then
-        item = view.panel.cur_item[1]
-      end
+      if not item then item = view.panel.cur_item[1] end
       if not item or not item.commit then return end
 
       if not view.adapter.get_commit_url then
@@ -317,9 +284,7 @@ return function(view)
         cmd = { "cmd", "/c", "start", "", url }
       end
 
-      if cmd then
-        vim.fn.jobstart(cmd, { detach = true })
-      end
+      if cmd then vim.fn.jobstart(cmd, { detach = true }) end
     end,
     restore_entry = async.void(function()
       local item = view:infer_cur_file()

@@ -150,12 +150,12 @@ describe("diffview.actions.set_layout (59237ad)", function()
 end)
 
 -----------------------------------------------------------------------
--- f728b1f: copy_hash writes to the unnamed register ("), not the
--- system clipboard (+).
+-- f728b1f: copy_hash honors the register prefix (vim.v.register),
+-- defaulting to the unnamed register (") when none is given.
 -----------------------------------------------------------------------
 
-describe("copy_hash uses unnamed register (f728b1f)", function()
-  it("setreg is called with the unnamed register ('\"')", function()
+describe("copy_hash honors vim.v.register (f728b1f)", function()
+  it("setreg target follows vim.v.register", function()
     local setreg_args = {}
     local orig_setreg = vim.fn.setreg
 
@@ -165,38 +165,39 @@ describe("copy_hash uses unnamed register (f728b1f)", function()
 
     -- Simulate what the copy_hash listener does.
     local hash = "abc123def456"
-    vim.fn.setreg('"', hash)
+    local reg = vim.v.register
+    vim.fn.setreg(reg, hash)
 
     vim.fn.setreg = orig_setreg
 
-    eq('"', setreg_args.reg)
+    eq(reg, setreg_args.reg)
     eq(hash, setreg_args.val)
   end)
 
-  it("does not write to the clipboard register", function()
+  it("writes to the clipboard register when vim.v.register is '+'", function()
     local regs_written = {}
     local orig_setreg = vim.fn.setreg
 
-    vim.fn.setreg = function(reg, val)
-      regs_written[reg] = val
+    vim.fn.setreg = function(r, val)
+      regs_written[r] = val
     end
 
-    -- Replicate the exact call from the listener.
     local hash = "deadbeef1234"
-    vim.fn.setreg('"', hash)
+    -- Emulate the user prefixing the mapping with "+.
+    local reg = "+"
+    vim.fn.setreg(reg, hash)
 
     vim.fn.setreg = orig_setreg
 
-    assert.is_not_nil(regs_written['"'])
-    assert.is_nil(regs_written['+'])
-    assert.is_nil(regs_written['*'])
+    eq(hash, regs_written['+'])
+    assert.is_nil(regs_written['"'])
   end)
 
-  it("info message says default register, not clipboard", function()
+  it("info message names the register that was written", function()
     local hash = "abc123def"
-    local msg = string.format("Copied '%s' to the default register.", hash)
-    assert.truthy(msg:find("default register"))
-    assert.falsy(msg:find("clipboard"))
+    local reg = "a"
+    local msg = string.format("Copied '%s' to register '%s'.", hash, reg)
+    assert.truthy(msg:find("register 'a'"))
   end)
 end)
 

@@ -1417,7 +1417,9 @@ conflict_choose_all({version})                  *diffview-actions-conflict_choos
 copy_hash                                       *diffview-actions-copy_hash*
         Contexts: `file_history_panel`
 
-        Copy the commit hash of the commit under the cursor.
+        Copy the commit hash of the commit under the cursor. Honors the
+        register prefix, so e.g. `"+y` copies the hash to the system
+        clipboard, while a bare `y` uses the unnamed register.
 
 diffget({target})                               *diffview-actions-diffget*
         Contexts: `merge_tool`
@@ -1999,7 +2001,8 @@ gf                      Open the local version of the file in a different
 <leader>e               Bring focus to the file panel.
 
                                                 *diffview-maps-copy_hash*
-y                       Copy the commit hash of the entry under the cursor.
+y                       Copy the commit hash of the entry under the cursor
+                        (accepts a register prefix, e.g. `"+y`).
 
                                                 *diffview-maps-file-panel*
 File panel maps ~
