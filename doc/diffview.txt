@@ -2006,22 +2006,9 @@ o                       Open the diff for the selected file entry.
 <2-LeftMouse>
 
                                                 *diffview-maps-toggle_select_entry*
-<Space>                 Toggle file selection for multi-file operations.
+w                       Toggle file selection for multi-file operations.
                         Works on directories and in visual mode.
 
-                        If `<Space>` conflicts with your leader key, you can
-                        remap it via `keymaps.file_panel`: >lua
-                            local actions = require("diffview.actions")
-                            require("diffview").setup({
-                              keymaps = {
-                                file_panel = {
-                                  { { "n", "x" }, "<space>", false },
-                                  { { "n", "x" }, "w", actions.toggle_select_entry,
-                                    { desc = "Toggle file selection" } },
-                                },
-                              },
-                            })
-<
                                                 *diffview-maps-clear_select_entries*
 C                       Clear all file selections.
 

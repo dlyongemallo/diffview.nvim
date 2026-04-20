@@ -236,24 +236,6 @@ require("diffview").setup({
 })
 ```
 
-If your leader key is `<space>`, then while your cursor is in the file panel
-buffer the panel's multi-file selection toggle (bound to `<space>` by default)
-will intercept `<leader>` sequences there. Remap or disable this buffer-local
-binding to avoid that conflict:
-
-```lua
-local actions = require("diffview.actions")
-require("diffview").setup({
-  keymaps = {
-    file_panel = {
-      { { "n", "x" }, "<space>", false },
-      { { "n", "x" }, "w", actions.toggle_select_entry,
-        { desc = "Toggle file selection" } },
-    },
-  },
-})
-```
-
 ## Platform Notes
 
 - **MSYS2/Cygwin on Windows:**
