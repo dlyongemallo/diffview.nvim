@@ -15,6 +15,10 @@ test:
 	nvim --headless -i NONE -n -u scripts/test_init.lua -c \
 		"PlenaryBustedDirectory $(TEST_PATH) { minimal_init = './scripts/test_init.lua' }"
 
+.PHONY: check-config-schema
+check-config-schema:
+	nvim --headless -i NONE -n -u NONE -c "luafile scripts/check_config_schema.lua"
+
 .PHONY: dev
 dev: .dev/lua/nvim
 
