@@ -449,7 +449,7 @@ enhanced_diff_hl                                *diffview-config-enhanced_diff_h
 
         In all layouts: highlight delete fill-chars more subtly. These chars
             are used as filler in places where other diff buffers have
-            insertions at that postion. Unfortunately many color schemes give
+            insertions at that position. Unfortunately many color schemes give
             it a distracting highlight, such as a bright red. This makes diffs
             more difficult to visually parse, as your eyes get drawn towards
             the bright red areas of your display with absolutely no
@@ -2308,7 +2308,7 @@ LogOptions                                      *diffview.git.LogOptions*
                 expression).
 
             {S} (string)
-                Look for differences that change the number of occurences of
+                Look for differences that change the number of occurrences of
                 the specified pattern (extended regular expression) in a
                 file.
 

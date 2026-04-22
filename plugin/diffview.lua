@@ -13,7 +13,7 @@ local diffview = lazy.require("diffview") ---@module "diffview"
 local api = vim.api
 local command = api.nvim_create_user_command
 
--- NOTE: Need this wrapper around the completion function becuase it doesn't
+-- NOTE: Need this wrapper around the completion function because it doesn't
 -- exist yet.
 local function completion(...)
   return diffview.completion(...)

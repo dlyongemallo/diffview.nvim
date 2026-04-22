@@ -380,7 +380,7 @@ function M.create_cursor_constraint(components)
   end)
 
   ---Given a cursor delta or target: returns the next valid line index inside a
-  ---contraining component. When the cursor is trying to move out of a
+  ---constraining component. When the cursor is trying to move out of a
   ---constraint, the next component is determined by the direction the cursor is
   ---moving.
   ---@param winid_or_opt number|{from: number, to: number}

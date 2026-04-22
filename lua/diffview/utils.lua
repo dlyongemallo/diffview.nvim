@@ -317,7 +317,7 @@ end
 ---@class utils.job.Opt
 ---@field cwd string Working directory of the job.
 ---@field writer string|string[] Something that will write to the stdin of this job.
----@field silent boolean Supress log output.
+---@field silent boolean Suppress log output.
 ---@field fail_on_empty boolean Return code 1 if stdout is empty.
 ---@field retry integer Number of times the job will be retried if it fails.
 ---@field timeout integer? Max duration in ms (default: 30000).
