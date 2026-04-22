@@ -4,7 +4,7 @@ local oop = require("diffview.oop")
 local fmt = string.format
 local uv = vim.uv
 
-local DEFAULT_ERROR = "Unkown error."
+local DEFAULT_ERROR = "Unknown error."
 
 local M = {}
 

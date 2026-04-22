@@ -35,7 +35,7 @@ local M = {}
 ---@field bg integer Background color integer
 ---@field sp integer Special color integer
 ---@field x_fg string Foreground color hex string
----@field x_bg string Bakground color hex string
+---@field x_bg string Background color hex string
 ---@field x_sp string Special color hex string
 ---@field bold boolean
 ---@field italic boolean

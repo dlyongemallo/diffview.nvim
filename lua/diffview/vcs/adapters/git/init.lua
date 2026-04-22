@@ -56,7 +56,7 @@ GitAdapter.COMMIT_PRETTY_FMT = (
   .. "%n..%gd" -- Reflog selectors
   .. "%n..%s"  -- Subject
   -- The leading dots here are only used for padding to ensure those lines
-  -- won't ever be completetely empty. This way the lines will be
+  -- won't ever be completely empty. This way the lines will be
   -- distinguishable from other empty lines outputted by Git.
 )
 -- stylua: ignore end
@@ -1027,7 +1027,7 @@ GitAdapter.fh_retry_commit = async.wrap(function(self, rev_arg, state, opt, call
     callback({
       name = "bad_data",
       msg = fmt(
-        "Malformed data or inbalance in stat data for commit '%s'! Raw data: \n%s",
+        "Malformed data or imbalance in stat data for commit '%s'! Raw data: \n%s",
         rev_arg,
         table.concat(job.stdout, "\n")
       ),
@@ -1575,7 +1575,7 @@ GitAdapter.file_restore = async.wrap(function(self, path, kind, commit, callback
   local exists_local = pl:readable(abs_path)
 
   if exists_local then
-    -- Wite file blob into db
+    -- Write file blob into db
     out, code = self:exec_sync({ "hash-object", "-w", "--", path }, self.ctx.toplevel)
     if code ~= 0 then
       utils.err(
