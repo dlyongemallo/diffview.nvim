@@ -253,7 +253,9 @@ return function(view)
         if item then
           local reg = vim.v.register
           vim.fn.setreg(reg, item.commit.hash)
-          utils.info(string.format("Copied '%s' to register '%s'.", item.commit.hash, reg))
+          local reg_desc = (reg == '"' or reg == "") and "the default register"
+            or string.format("register '%s'", reg)
+          utils.info(string.format("Copied '%s' to %s.", item.commit.hash, reg_desc))
         end
       end
     end,
