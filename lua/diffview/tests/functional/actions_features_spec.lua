@@ -155,49 +155,64 @@ end)
 -----------------------------------------------------------------------
 
 describe("copy_hash honors vim.v.register (f728b1f)", function()
-  it("setreg target follows vim.v.register", function()
-    local setreg_args = {}
+  local listeners_factory = require("diffview.scene.views.file_history.listeners")
+
+  -- Invoke the real copy_hash listener with a given register value and commit
+  -- hash, returning what setreg was called with and the message utils.info
+  -- emitted. vim.v.register is read-only, so vim.v itself is swapped out for
+  -- a stub that falls through to the real vim.v for any unrelated access.
+  local function run_copy_hash(reg, hash)
+    local captured = {}
     local orig_setreg = vim.fn.setreg
+    local orig_info = utils.info
+    local orig_v = vim.v
 
-    vim.fn.setreg = function(reg, val)
-      setreg_args = { reg = reg, val = val }
+    vim.fn.setreg = function(r, val)
+      captured.reg, captured.val = r, val
     end
+    utils.info = function(msg) captured.msg = msg end
+    vim.v = setmetatable({ register = reg }, { __index = orig_v })
 
-    -- Simulate what the copy_hash listener does.
-    local hash = "abc123def456"
-    local reg = vim.v.register
-    vim.fn.setreg(reg, hash)
+    local mock_view = {
+      panel = {
+        is_focused = function() return true end,
+        get_item_at_cursor = function() return { commit = { hash = hash } } end,
+      },
+    }
+    local listeners = listeners_factory(mock_view)
+
+    local ok, err = pcall(listeners.copy_hash)
 
     vim.fn.setreg = orig_setreg
+    utils.info = orig_info
+    vim.v = orig_v
 
-    eq(reg, setreg_args.reg)
-    eq(hash, setreg_args.val)
+    assert(ok, err)
+    return captured
+  end
+
+  it("setreg target follows vim.v.register", function()
+    local captured = run_copy_hash('"', "abc123def456")
+    eq('"', captured.reg)
+    eq("abc123def456", captured.val)
   end)
 
   it("writes to the clipboard register when vim.v.register is '+'", function()
-    local regs_written = {}
-    local orig_setreg = vim.fn.setreg
-
-    vim.fn.setreg = function(r, val)
-      regs_written[r] = val
-    end
-
-    local hash = "deadbeef1234"
-    -- Emulate the user prefixing the mapping with "+.
-    local reg = "+"
-    vim.fn.setreg(reg, hash)
-
-    vim.fn.setreg = orig_setreg
-
-    eq(hash, regs_written['+'])
-    assert.is_nil(regs_written['"'])
+    local captured = run_copy_hash("+", "deadbeef1234")
+    eq("+", captured.reg)
+    eq("deadbeef1234", captured.val)
   end)
 
-  it("info message names the register that was written", function()
-    local hash = "abc123def"
-    local reg = "a"
-    local msg = string.format("Copied '%s' to register '%s'.", hash, reg)
-    assert.truthy(msg:find("register 'a'"))
+  it("info message says 'the default register' when no prefix is given", function()
+    local captured = run_copy_hash('"', "abc123def")
+    assert.truthy(captured.msg:find("the default register", 1, true))
+    assert.falsy(captured.msg:find("register '\"'", 1, true))
+  end)
+
+  it("info message names the explicit register when a prefix is given", function()
+    local captured = run_copy_hash("a", "abc123def")
+    assert.truthy(captured.msg:find("register 'a'", 1, true))
+    assert.falsy(captured.msg:find("default register", 1, true))
   end)
 end)
 
