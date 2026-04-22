@@ -123,14 +123,18 @@ describe("diffview.ui.models.file_tree.node", function()
     end)
 
     it("custom sort_file returning true puts a before b", function()
-      stub_config(function() return true end)
+      stub_config(function()
+        return true
+      end)
       local a = make_file("z.lua")
       local b = make_file("a.lua")
       eq(true, Node.comparator(a, b))
     end)
 
     it("custom sort_file returning false puts b before a", function()
-      stub_config(function() return false end)
+      stub_config(function()
+        return false
+      end)
       local a = make_file("a.lua")
       local b = make_file("z.lua")
       eq(false, Node.comparator(a, b))

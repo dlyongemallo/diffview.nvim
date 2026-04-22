@@ -86,7 +86,9 @@ function FileDiffView:post_open()
 
     -- Open the first (only) file entry.
     local files = self.panel:ordered_file_list()
-    if files and files[1] then self:set_file(files[1], false, true) end
+    if files and files[1] then
+      self:set_file(files[1], false, true)
+    end
 
     self.ready = true
   end)

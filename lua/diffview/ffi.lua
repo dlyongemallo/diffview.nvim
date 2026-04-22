@@ -14,7 +14,9 @@ end
 ---See: |api-fast|, |textlock|
 ---@return boolean
 function M.nvim_is_locked()
-  if vim.in_fast_event() then return true end
+  if vim.in_fast_event() then
+    return true
+  end
   return C.textlock > 0 or C.allbuf_lock > 0 or C.expr_map_lock > 0
 end
 

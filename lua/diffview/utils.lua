@@ -28,7 +28,9 @@ end
 ---@param level integer
 function M.notify(msg, level, schedule)
   if schedule then
-    vim.schedule(function() M.notify(msg, level, false) end)
+    vim.schedule(function()
+      M.notify(msg, level, false)
+    end)
     return
   end
   if type(msg) == "table" then
@@ -349,7 +351,9 @@ function M.job(cmd, cwd_or_opt)
   local code = job.code
 
   if not ok then
-    if opt.fail_on_empty then code = 1 end
+    if opt.fail_on_empty then
+      code = 1
+    end
   end
 
   return job.stdout, code, job.stderr
@@ -407,7 +411,6 @@ function M.set_local(winids, option_map, opt)
 
         if o.method == "set" then
           vim.opt_local[option] = value
-
         else
           if o.method == "remove" then
             if is_list_like then
@@ -415,7 +418,6 @@ function M.set_local(winids, option_map, opt)
             else
               vim.opt_local[fullname]:remove(value)
             end
-
           elseif o.method == "append" then
             if is_list_like then
               vim.opt_local[fullname] = ("%s%s"):format(
@@ -425,7 +427,6 @@ function M.set_local(winids, option_map, opt)
             else
               vim.opt_local[fullname]:append(value)
             end
-
           elseif o.method == "prepend" then
             if is_list_like then
               vim.opt_local[fullname] = ("%s%s%s"):format(
@@ -533,9 +534,8 @@ end
 ---@param table_path string|any[] Either a `.` separated string of table keys, or a list.
 ---@return any?
 function M.tbl_access(t, table_path)
-  local keys = type(table_path) == "table"
-      and table_path
-      or vim.split(table_path --[[@as string ]], ".", { plain = true })
+  local keys = type(table_path) == "table" and table_path
+    or vim.split(table_path --[[@as string ]], ".", { plain = true })
 
   local cur = t
 
@@ -589,7 +589,7 @@ end
 function M.tbl_merge(t, ...)
   local ret = M.tbl_clone(t)
 
-  for _, theirs in ipairs({...}) do
+  for _, theirs in ipairs({ ... }) do
     for k, v in pairs(theirs) do
       if type(k) == "number" and k % 1 == 0 then
         ret[#ret + 1] = v
@@ -653,9 +653,8 @@ end
 ---@param value T
 ---@return T
 function M.tbl_set(t, table_path, value)
-  local keys = type(table_path) == "table"
-      and table_path
-      or vim.split(table_path --[[@as string ]], ".", { plain = true })
+  local keys = type(table_path) == "table" and table_path
+    or vim.split(table_path --[[@as string ]], ".", { plain = true })
 
   local cur = t
 
@@ -679,9 +678,8 @@ end
 ---@param table_path string|any[] Either a `.` separated string of table keys, or a list.
 ---@return table
 function M.tbl_ensure(t, table_path)
-  local keys = type(table_path) == "table"
-      and table_path
-      or vim.split(table_path --[[@as string ]], ".", { plain = true })
+  local keys = type(table_path) == "table" and table_path
+    or vim.split(table_path --[[@as string ]], ".", { plain = true })
 
   local ret = M.tbl_access(t, keys)
   if not ret then
@@ -756,7 +754,7 @@ end
 ---@return vector
 function M.vec_union(...)
   local result = {}
-  local args = {...}
+  local args = { ... }
   local seen = {}
 
   for i = 1, select("#", ...) do
@@ -782,13 +780,13 @@ end
 ---@param ... vector
 ---@return vector
 function M.vec_diff(...)
-  local args = {...}
+  local args = { ... }
   local seen = {}
 
   for i = 1, select("#", ...) do
     if type(args[i]) ~= "nil" then
       if type(args[i]) ~= "table" then
-        if i == 1  then
+        if i == 1 then
           seen[args[i]] = true
         elseif seen[args[i]] then
           seen[args[i]] = nil
@@ -813,7 +811,7 @@ end
 ---@return vector
 function M.vec_symdiff(...)
   local result = {}
-  local args = {...}
+  local args = { ... }
   local seen = {}
 
   for i = 1, select("#", ...) do
@@ -830,7 +828,7 @@ function M.vec_symdiff(...)
 
   for v, state in pairs(seen) do
     if state == 1 then
-      result[#result+1] = v
+      result[#result + 1] = v
     end
   end
 
@@ -857,7 +855,7 @@ end
 ---@param ... any
 ---@return vector t
 function M.vec_push(t, ...)
-  local args = {...}
+  local args = { ... }
 
   for i = 1, select("#", ...) do
     t[#t + 1] = args[i]
@@ -917,9 +915,7 @@ function M.buf_search(bufnr, pattern, opt)
   local ret = {}
 
   api.nvim_buf_call(bufnr, function()
-    local flags = ("n%s"):format(
-      opt.reverse and "b" or ""
-    )
+    local flags = ("n%s"):format(opt.reverse and "b" or "")
     local pos = vim.fn.searchpos(pattern, flags)
 
     if not (pos[1] == 0 and pos[2] == 0) then
@@ -941,7 +937,9 @@ function M.buf_search(bufnr, pattern, opt)
 
       if count.incomplete == 2 then
         total = ">" .. count.maxcount
-        if current > count.maxcount then current = total end
+        if current > count.maxcount then
+          current = total
+        end
       end
 
       ret.s_count = ("[%s/%s]"):format(current, total)
@@ -971,7 +969,7 @@ function M.list_bufs(opt)
     for _, winid in ipairs(wins) do
       bufnr = api.nvim_win_get_buf(winid)
       if not seen[bufnr] then
-        bufs[#bufs+1] = bufnr
+        bufs[#bufs + 1] = bufnr
       end
       seen[bufnr] = true
     end
@@ -1100,7 +1098,9 @@ end
 ---@param winid integer
 ---@return integer
 function M.win_content_height(winid)
-  if winid == 0 then winid = api.nvim_get_current_win() end
+  if winid == 0 then
+    winid = api.nvim_get_current_win()
+  end
   ---@diagnostic disable-next-line: redundant-parameter
   local topline = vim.fn.line("w0", winid)
   ---@diagnostic disable-next-line: redundant-parameter
@@ -1136,7 +1136,7 @@ function M.set_cursor(winid, line, column)
 
   pcall(api.nvim_win_set_cursor, winid, {
     M.clamp(line or 1, 1, api.nvim_buf_line_count(bufnr)),
-    math.max(0, column or 0)
+    math.max(0, column or 0),
   })
 end
 
@@ -1356,7 +1356,9 @@ end
 ---@param t T[]
 ---@param comparator? (fun(a: T, b: T): boolean)
 function M.merge_sort(t, comparator)
-  comparator = comparator or function(a, b) return a < b end
+  comparator = comparator or function(a, b)
+    return a < b
+  end
   split_merge(t, 1, #t, comparator)
 end
 
@@ -1372,7 +1374,7 @@ function M.flatten(t)
     local n = #_t
     for i = 1, n do
       local v = _t[i]
-      if type(v) == 'table' then
+      if type(v) == "table" then
         recurse(v)
       elseif v then
         table.insert(result, v)
@@ -1391,7 +1393,9 @@ M.path_sep = path_sep
 --- @return table t
 function M.add_reverse_lookup(t)
   local keys = vim.tbl_keys(t)
-  for _, k in ipairs(keys) do t[t[k]] = k end
+  for _, k in ipairs(keys) do
+    t[t[k]] = k
+  end
   return t
 end
 

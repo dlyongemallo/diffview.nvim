@@ -32,16 +32,22 @@ function lazy.wrap(t, handler)
 
   return setmetatable(ret, {
     __index = function(_, key)
-      if export == nil then ret.__get() end
+      if export == nil then
+        ret.__get()
+      end
       ---@cast export table
       return export[key]
     end,
     __newindex = function(_, key, value)
-      if export == nil then ret.__get() end
+      if export == nil then
+        ret.__get()
+      end
       export[key] = value
     end,
     __call = function(_, ...)
-      if export == nil then ret.__get() end
+      if export == nil then
+        ret.__get()
+      end
       ---@cast export table
       return export(...)
     end,
@@ -100,9 +106,8 @@ end
 ---@param access_path string|string[] Either a `.` separated string of table keys, or a list.
 ---@return LazyModule
 function lazy.access(x, access_path)
-  local keys = type(access_path) == "table"
-      and access_path
-      or vim.split(access_path --[[@as string ]], ".", { plain = true })
+  local keys = type(access_path) == "table" and access_path
+    or vim.split(access_path --[[@as string ]], ".", { plain = true })
 
   local handler = function(module)
     local export = module

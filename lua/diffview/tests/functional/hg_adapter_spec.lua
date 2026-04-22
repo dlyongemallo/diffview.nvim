@@ -106,96 +106,126 @@ describe("diffview.vcs.adapters.hg", function()
     end)
 
     after_each(function()
-      if repo then repo.cleanup() end
+      if repo then
+        repo.cleanup()
+      end
     end)
 
-    it("lists modified, added, and removed files", helpers.async_test(function()
-      if not hg_available() then pending("hg not installed") return end
+    it(
+      "lists modified, added, and removed files",
+      helpers.async_test(function()
+        if not hg_available() then
+          pending("hg not installed")
+          return
+        end
 
-      -- Initial commit.
-      repo.write("src/main.lua", 'print("v1")\n')
-      repo.write("src/utils.lua", "local M = {}\nreturn M\n")
-      repo.hg({ "add", "src/main.lua", "src/utils.lua" })
-      repo.hg({ "commit", "-m", "initial", "-u", "test <test@test.com>" })
+        -- Initial commit.
+        repo.write("src/main.lua", 'print("v1")\n')
+        repo.write("src/utils.lua", "local M = {}\nreturn M\n")
+        repo.hg({ "add", "src/main.lua", "src/utils.lua" })
+        repo.hg({ "commit", "-m", "initial", "-u", "test <test@test.com>" })
 
-      -- Working copy changes: modify, remove, add.
-      repo.write("src/main.lua", 'print("v2")\n')
-      repo.hg({ "remove", "src/utils.lua" })
-      repo.write("src/new.lua", "new\n")
-      repo.hg({ "add", "src/new.lua" })
+        -- Working copy changes: modify, remove, add.
+        repo.write("src/main.lua", 'print("v2")\n')
+        repo.hg({ "remove", "src/utils.lua" })
+        repo.write("src/new.lua", "new\n")
+        repo.hg({ "add", "src/new.lua" })
 
-      local adapter = repo.adapter()
-      local HgRev = adapter.Rev
-      local left = HgRev(RevType.COMMIT, "tip")
-      local right = HgRev(RevType.LOCAL)
+        local adapter = repo.adapter()
+        local HgRev = adapter.Rev
+        local left = HgRev(RevType.COMMIT, "tip")
+        local right = HgRev(RevType.LOCAL)
 
-      local err, files = await(adapter:tracked_files(
-        left, right, {}, "working",
-        { default_layout = Diff2, merge_layout = Diff2 }
-      ))
+        local err, files = await(
+          adapter:tracked_files(
+            left,
+            right,
+            {},
+            "working",
+            { default_layout = Diff2, merge_layout = Diff2 }
+          )
+        )
 
-      assert.is_nil(err)
+        assert.is_nil(err)
 
-      local by_name = {}
-      for _, file in ipairs(files) do
-        local name = file.path:match("[^/]+$")
-        by_name[name] = file
-      end
+        local by_name = {}
+        for _, file in ipairs(files) do
+          local name = file.path:match("[^/]+$")
+          by_name[name] = file
+        end
 
-      assert.is_not_nil(by_name["main.lua"], "main.lua should appear (modified)")
-      assert.equals("M", by_name["main.lua"].status)
+        assert.is_not_nil(by_name["main.lua"], "main.lua should appear (modified)")
+        assert.equals("M", by_name["main.lua"].status)
 
-      assert.is_not_nil(by_name["new.lua"], "new.lua should appear (added)")
-      assert.equals("A", by_name["new.lua"].status)
+        assert.is_not_nil(by_name["new.lua"], "new.lua should appear (added)")
+        assert.equals("A", by_name["new.lua"].status)
 
-      assert.is_not_nil(by_name["utils.lua"], "utils.lua should appear (removed)")
-      assert.equals("R", by_name["utils.lua"].status)
-    end))
+        assert.is_not_nil(by_name["utils.lua"], "utils.lua should appear (removed)")
+        assert.equals("R", by_name["utils.lua"].status)
+      end)
+    )
 
-    it("shows file content at a revision without errors", helpers.async_test(function()
-      if not hg_available() then pending("hg not installed") return end
+    it(
+      "shows file content at a revision without errors",
+      helpers.async_test(function()
+        if not hg_available() then
+          pending("hg not installed")
+          return
+        end
 
-      repo.write("hello.txt", "hello world\n")
-      repo.hg({ "add", "hello.txt" })
-      repo.hg({ "commit", "-m", "add hello", "-u", "test <test@test.com>" })
+        repo.write("hello.txt", "hello world\n")
+        repo.hg({ "add", "hello.txt" })
+        repo.hg({ "commit", "-m", "add hello", "-u", "test <test@test.com>" })
 
-      local adapter = repo.adapter()
-      local HgRev = adapter.Rev
-      local rev = HgRev(RevType.COMMIT, "tip")
+        local adapter = repo.adapter()
+        local HgRev = adapter.Rev
+        local rev = HgRev(RevType.COMMIT, "tip")
 
-      local err, content = await(adapter:show("hello.txt", rev))
+        local err, content = await(adapter:show("hello.txt", rev))
 
-      assert.is_nil(err)
-      assert.is_not_nil(content)
-      assert.equals("hello world", vim.trim(table.concat(content, "\n")))
-    end))
+        assert.is_nil(err)
+        assert.is_not_nil(content)
+        assert.equals("hello world", vim.trim(table.concat(content, "\n")))
+      end)
+    )
 
-    it("paths do not contain revision specifiers", helpers.async_test(function()
-      if not hg_available() then pending("hg not installed") return end
+    it(
+      "paths do not contain revision specifiers",
+      helpers.async_test(function()
+        if not hg_available() then
+          pending("hg not installed")
+          return
+        end
 
-      repo.write("file.lua", "content\n")
-      repo.hg({ "add", "file.lua" })
-      repo.hg({ "commit", "-m", "add file", "-u", "test <test@test.com>" })
-      repo.write("file.lua", "updated\n")
+        repo.write("file.lua", "content\n")
+        repo.hg({ "add", "file.lua" })
+        repo.hg({ "commit", "-m", "add file", "-u", "test <test@test.com>" })
+        repo.write("file.lua", "updated\n")
 
-      local adapter = repo.adapter()
-      local HgRev = adapter.Rev
-      local left = HgRev(RevType.COMMIT, "tip")
-      local right = HgRev(RevType.LOCAL)
+        local adapter = repo.adapter()
+        local HgRev = adapter.Rev
+        local left = HgRev(RevType.COMMIT, "tip")
+        local right = HgRev(RevType.LOCAL)
 
-      local err, files = await(adapter:tracked_files(
-        left, right, {}, "working",
-        { default_layout = Diff2, merge_layout = Diff2 }
-      ))
+        local err, files = await(
+          adapter:tracked_files(
+            left,
+            right,
+            {},
+            "working",
+            { default_layout = Diff2, merge_layout = Diff2 }
+          )
+        )
 
-      assert.is_nil(err)
-      assert.is_true(#files > 0)
+        assert.is_nil(err)
+        assert.is_true(#files > 0)
 
-      for _, file in ipairs(files) do
-        -- Mercurial paths should never contain revision specifiers.
-        assert.is_nil(file.path:match("#%d+"), ("path %q contains #rev"):format(file.path))
-        assert.is_nil(file.path:match("@%d+"), ("path %q contains @rev"):format(file.path))
-      end
-    end))
+        for _, file in ipairs(files) do
+          -- Mercurial paths should never contain revision specifiers.
+          assert.is_nil(file.path:match("#%d+"), ("path %q contains #rev"):format(file.path))
+          assert.is_nil(file.path:match("@%d+"), ("path %q contains @rev"):format(file.path))
+        end
+      end)
+    )
   end)
 end)

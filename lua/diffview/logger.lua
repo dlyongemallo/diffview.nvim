@@ -152,7 +152,9 @@ end
 ---@param precision number
 ---@return number
 local function to_precision(num, precision)
-  if num % 1 == 0 then return num end
+  if num % 1 == 0 then
+    return num
+  end
   local pow = math.pow(10, precision)
   return math.floor(num * pow) / pow
 end
@@ -162,10 +164,7 @@ end
 function Logger.dstring(object)
   local tp = type(object)
 
-  if tp == "thread"
-    or tp == "function"
-    or tp == "userdata"
-  then
+  if tp == "thread" or tp == "function" or tp == "userdata" then
     return fmt("<%s %p>", tp, object)
   elseif tp == "number" then
     return tostring(to_precision(object, 3))
@@ -175,11 +174,15 @@ function Logger.dstring(object)
     if mt and mt.__tostring then
       return tostring(object)
     elseif utils.islist(object) then
-      if #object == 0 then return "[]" end
+      if #object == 0 then
+        return "[]"
+      end
       local s = ""
 
       for i = 1, table.maxn(object) do
-        if i > 1 then s = s .. ", " end
+        if i > 1 then
+          s = s .. ", "
+        end
         s = s .. Logger.dstring(object[i])
       end
 
@@ -274,7 +277,9 @@ Logger.queue_msg = async.void(function(self, msg)
   table.insert(self.msg_buffer, msg)
   permit:forget()
 
-  if self.batch_handle then return end
+  if self.batch_handle then
+    return
+  end
 
   self.batch_handle = loop.set_timeout(
     async.void(function()
@@ -329,22 +334,30 @@ end
 
 do
   -- Create methods
-  for level, name in ipairs(Logger.LogLevels --[[@as string[] ]]) do
+  for level, name in
+    ipairs(Logger.LogLevels --[[@as string[] ]])
+  do
     ---@param self Logger
     Logger[name] = function(self, ...)
-      if self.level < level then return end
+      if self.level < level then
+        return
+      end
       self:_log(name, false, ...)
     end
 
     ---@param self Logger
     Logger["fmt_" .. name] = function(self, formatstring, ...)
-      if self.level < level then return end
+      if self.level < level then
+        return
+      end
       self:_log(name, false, fmt(formatstring, ...))
     end
 
     ---@param self Logger
     Logger["lazy_" .. name] = function(self, func)
-      if self.level < level then return end
+      if self.level < level then
+        return
+      end
       self:_log(name, true, func)
     end
   end
@@ -366,7 +379,9 @@ end
 function Logger:log_job(job, opt)
   opt = opt or {}
 
-  if opt.silent then return end
+  if opt.silent then
+    return
+  end
   if opt.debug_level and DiffviewGlobal.debug_level < opt.debug_level then
     return
   end

@@ -140,7 +140,10 @@ describe("diffview.path", function()
       eq([[D:\foo\bar\baz]], pl:absolute([[\foo\bar\baz]], [[D:\lorem\ipsum]]))
 
       eq([[\\wsl.localhost\foo\bar\baz]], pl:absolute([[bar\baz]], [[\\wsl.localhost\foo]]))
-      eq([[\\wsl.localhost\foo\bar\baz]], pl:absolute([[\\wsl.localhost\foo\bar\baz]], [[\\wsl.localhost\foo]]))
+      eq(
+        [[\\wsl.localhost\foo\bar\baz]],
+        pl:absolute([[\\wsl.localhost\foo\bar\baz]], [[\\wsl.localhost\foo]])
+      )
 
       eq([[\\.\foo\bar\baz]], pl:absolute([[bar\baz]], [[\\.\foo]]))
       eq([[\\.\foo\bar\baz]], pl:absolute([[\\.\foo\bar\baz]], [[\\.\foo]]))
@@ -241,7 +244,9 @@ describe("diffview.path", function()
     end)
 
     after_each(function()
-      for k, v in pairs(save_env) do vim.env[k] = v end
+      for k, v in pairs(save_env) do
+        vim.env[k] = v
+      end
     end)
 
     it("works", function()
@@ -287,9 +292,9 @@ describe("diffview.path", function()
     it("works for URIs", function()
       local pl = PathLib({ os = "unix" })
 
-      eq([[test:///foo/bar/baz]], pl:join({ "test://", "/", "foo", "bar", "baz"}))
-      eq([[test://foo/bar/baz]], pl:join({ "test://", "foo", "bar", "baz"}))
-      eq([[test://foo/bar/baz]], pl:join({ "test://", "foo/", "//bar/", "baz"}))
+      eq([[test:///foo/bar/baz]], pl:join({ "test://", "/", "foo", "bar", "baz" }))
+      eq([[test://foo/bar/baz]], pl:join({ "test://", "foo", "bar", "baz" }))
+      eq([[test://foo/bar/baz]], pl:join({ "test://", "foo/", "//bar/", "baz" }))
     end)
   end)
 

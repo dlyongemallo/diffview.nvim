@@ -17,19 +17,27 @@ describe("diffview.actions goto_file API", function()
   -- bound inside a DiffView tabpage). Verify they consistently error
   -- rather than silently misbehaving.
   it("goto_file errors without an active view (expected guard)", function()
-    assert.has_error(function() actions.goto_file() end)
+    assert.has_error(function()
+      actions.goto_file()
+    end)
   end)
 
   it("goto_file_edit errors without an active view (expected guard)", function()
-    assert.has_error(function() actions.goto_file_edit() end)
+    assert.has_error(function()
+      actions.goto_file_edit()
+    end)
   end)
 
   it("goto_file_split errors without an active view (expected guard)", function()
-    assert.has_error(function() actions.goto_file_split() end)
+    assert.has_error(function()
+      actions.goto_file_split()
+    end)
   end)
 
   it("goto_file_tab errors without an active view (expected guard)", function()
-    assert.has_error(function() actions.goto_file_tab() end)
+    assert.has_error(function()
+      actions.goto_file_tab()
+    end)
   end)
 end)
 
@@ -52,26 +60,51 @@ describe("diffview.actions goto_file command routing", function()
 
     local mock_file = {
       absolute_path = "/tmp/test.lua",
-      layout = { restore_winopts = function() end, get_main_win = function() return { id = 1 } end },
+      layout = {
+        restore_winopts = function() end,
+        get_main_win = function()
+          return { id = 1 }
+        end,
+      },
       active = true,
     }
     local mock_view = {
       class = DiffView_class,
-      instanceof = function(self, other) return self.class == other end,
-      infer_cur_file = function() return mock_file end,
+      instanceof = function(self, other)
+        return self.class == other
+      end,
+      infer_cur_file = function()
+        return mock_file
+      end,
       cur_entry = nil,
-      cur_layout = { get_main_win = function() return { id = 1 } end },
+      cur_layout = {
+        get_main_win = function()
+          return { id = 1 }
+        end,
+      },
     }
 
-    stub(lib, "get_current_view", function() return mock_view end)
-    stub(lib, "get_prev_non_view_tabpage", function() return nil end)
+    stub(lib, "get_current_view", function()
+      return mock_view
+    end)
+    stub(lib, "get_prev_non_view_tabpage", function()
+      return nil
+    end)
     stub(utils, "set_cursor", function() end)
-    stub(utils.path, "readable", function() return true end)
+    stub(utils.path, "readable", function()
+      return true
+    end)
     stub(vim.api, "nvim_set_current_tabpage", function() end)
-    stub(vim.api, "nvim_get_current_buf", function() return 999 end)
+    stub(vim.api, "nvim_get_current_buf", function()
+      return 999
+    end)
     stub(vim.api, "nvim_buf_delete", function() end)
-    stub(vim.fn, "fnameescape", function(p) return p end)
-    stub(vim, "cmd", function(c) cmds_issued[#cmds_issued + 1] = c end)
+    stub(vim.fn, "fnameescape", function(p)
+      return p
+    end)
+    stub(vim, "cmd", function(c)
+      cmds_issued[#cmds_issued + 1] = c
+    end)
   end)
 
   after_each(function()
@@ -95,14 +128,18 @@ describe("diffview.actions goto_file command routing", function()
   end)
 
   it("goto_file issues 'sp <file>' when a previous tab exists", function()
-    lib.get_prev_non_view_tabpage = function() return 1 end
+    lib.get_prev_non_view_tabpage = function()
+      return 1
+    end
     actions.goto_file()
     eq(1, #cmds_issued)
     assert.truthy(cmds_issued[1]:find("^sp "))
   end)
 
   it("goto_file_edit issues 'edit <file>' when a previous tab exists", function()
-    lib.get_prev_non_view_tabpage = function() return 1 end
+    lib.get_prev_non_view_tabpage = function()
+      return 1
+    end
     actions.goto_file_edit()
     eq(1, #cmds_issued)
     assert.truthy(cmds_issued[1]:find("^edit "))

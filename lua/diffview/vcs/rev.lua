@@ -4,10 +4,10 @@ local M = {}
 
 ---@enum RevType
 local RevType = oop.enum({
-  LOCAL   = 1,
-  COMMIT  = 2,
-  STAGE   = 3,
-  CUSTOM  = 4,
+  LOCAL = 1,
+  COMMIT = 2,
+  STAGE = 3,
+  CUSTOM = 4,
 })
 
 ---@alias RevRange { first: Rev, last: Rev }
@@ -33,10 +33,7 @@ function Rev:init(rev_type, revision, track_head)
   if t == "string" then
     assert(revision ~= "", "'revision' cannot be an empty string!")
   elseif t == "number" then
-    assert(
-      revision >= 0 and revision <= 3,
-      "'revision' must be a valid stage number ([0-3])!"
-    )
+    assert(revision >= 0 and revision <= 3, "'revision' must be a valid stage number ([0-3])!")
   end
 
   t = type(track_head)
@@ -73,7 +70,9 @@ end
 ---@param rev_from Rev|string
 ---@param rev_to? Rev|string
 ---@return string?
-function Rev.to_range(rev_from, rev_to) oop.abstract_stub() end
+function Rev.to_range(rev_from, rev_to)
+  oop.abstract_stub()
+end
 
 ---@param name string
 ---@param adapter? VCSAdapter
@@ -124,8 +123,12 @@ end
 ---@param b Rev?
 ---@return boolean
 function M.same_rev(a, b)
-  if a == nil and b == nil then return true end
-  if a == nil or b == nil then return false end
+  if a == nil and b == nil then
+    return true
+  end
+  if a == nil or b == nil then
+    return false
+  end
   return a.type == b.type
     and a.commit == b.commit
     and a.stage == b.stage

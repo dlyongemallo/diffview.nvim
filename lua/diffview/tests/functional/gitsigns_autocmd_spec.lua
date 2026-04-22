@@ -20,7 +20,9 @@ local function make_mock_view(opts)
     closing = closing,
     tabpage = opts.tabpage or api.nvim_get_current_tabpage(),
     update_files_called = false,
-    update_files = function(self) self.update_files_called = true end,
+    update_files = function(self)
+      self.update_files_called = true
+    end,
   }
 end
 
@@ -29,9 +31,8 @@ end
 ---@param view table  Mock view from make_mock_view.
 ---@return integer augroup_id
 local function register_autocmd(view)
-  local augroup = api.nvim_create_augroup(
-    "diffview_gitsigns_test_" .. view.tabpage, { clear = true }
-  )
+  local augroup =
+    api.nvim_create_augroup("diffview_gitsigns_test_" .. view.tabpage, { clear = true })
   api.nvim_create_autocmd("User", {
     group = augroup,
     pattern = "GitSignsChanged",

@@ -78,7 +78,7 @@ Panel.default_config_split = {
   position = "left",
   relative = "editor",
   win = 0,
-  win_opts = {}
+  win_opts = {},
 }
 
 ---@class PanelFloatSpec
@@ -104,7 +104,7 @@ Panel.default_config_float = {
   zindex = 50,
   style = "minimal",
   border = "single",
-  win_opts = {}
+  win_opts = {},
 }
 
 Panel.au = {
@@ -157,8 +157,15 @@ function Panel:get_config()
   local function valid_enum(arg, values, optional)
     return {
       arg,
-      function(v) return (optional and v == nil) or vim.tbl_contains(values, v) end,
-      table.concat(vim.tbl_map(function(v) return ([['%s']]):format(v) end, values), "|"),
+      function(v)
+        return (optional and v == nil) or vim.tbl_contains(values, v)
+      end,
+      table.concat(
+        vim.tbl_map(function(v)
+          return ([['%s']]):format(v)
+        end, values),
+        "|"
+      ),
     }
   end
 
@@ -173,11 +180,13 @@ function Panel:get_config()
       relative = valid_enum(config.relative, { "editor", "win" }),
       width = {
         config.width,
-        function(v) return v == nil or v == "auto" or type(v) == "number" end,
+        function(v)
+          return v == nil or v == "auto" or type(v) == "number"
+        end,
         "'auto' or number",
       },
       height = { config.height, "number", true },
-      win_opts = { config.win_opts, "table" }
+      win_opts = { config.win_opts, "table" },
     })
   else
     ---@cast config PanelFloatSpec
@@ -197,7 +206,9 @@ function Panel:get_config()
       border = {
         config.border,
         function(v)
-          if v == nil then return true end
+          if v == nil then
+            return true
+          end
 
           if type(v) == "table" then
             return #v >= 2
@@ -205,11 +216,12 @@ function Panel:get_config()
 
           return vim.tbl_contains(border, v)
         end,
-        ("%s or a list of length >=2"):format(
-          table.concat(vim.tbl_map(function(v)
+        ("%s or a list of length >=2"):format(table.concat(
+          vim.tbl_map(function(v)
             return ([['%s']]):format(v)
-          end, border), "|")
-        )
+          end, border),
+          "|"
+        )),
       },
     })
   end
@@ -306,8 +318,8 @@ function Panel:open()
     local split_dir = vim.tbl_contains({ "top", "left" }, position) and "aboveleft" or "belowright"
     local split_cmd = self.state.form == "row" and "sp" or "vsp"
     local rel_winid = config.relative == "win"
-      and api.nvim_win_is_valid(config.win or -1)
-      and config.win
+        and api.nvim_win_is_valid(config.win or -1)
+        and config.win
       or 0
 
     api.nvim_win_call(rel_winid, function()
@@ -324,7 +336,6 @@ function Panel:open()
         vim.cmd("wincmd =")
       end
     end)
-
   elseif config.type == "float" then
     self.winid = vim.api.nvim_open_win(self.bufid, false, utils.sanitize_float_config(config))
     if self.winid == 0 then
@@ -343,8 +354,12 @@ function Panel:open()
     self._win_resized_au = api.nvim_create_autocmd("WinResized", {
       group = Panel.au.group,
       callback = function()
-        if self._programmatic_resize then return end
-        if not self:is_open() or not self:buf_loaded() then return end
+        if self._programmatic_resize then
+          return
+        end
+        if not self:is_open() or not self:buf_loaded() then
+          return
+        end
         for _, w in ipairs(vim.v.event.windows) do
           if w == self.winid then
             self:render()
@@ -418,7 +433,9 @@ end
 ---spans on `_word_` patterns in file paths and commit subjects.
 ---@param bufid integer
 local function stop_external_treesitter(bufid)
-  if not api.nvim_buf_is_valid(bufid) then return end
+  if not api.nvim_buf_is_valid(bufid) then
+    return
+  end
   pcall(vim.treesitter.stop, bufid)
 end
 
@@ -461,7 +478,9 @@ function Panel:init_buffer()
     group = Panel.au.group,
     buffer = bn,
     callback = function()
-      vim.schedule(function() stop_external_treesitter(bn) end)
+      vim.schedule(function()
+        stop_external_treesitter(bn)
+      end)
     end,
   })
 
@@ -479,7 +498,8 @@ end
 function Panel:apply_keymaps(keymap_key, extra_defaults)
   local config = require("diffview.config")
   local conf = config.get_config()
-  local default_opt = vim.tbl_extend("force", { silent = true, buffer = self.bufid }, extra_defaults or {})
+  local default_opt =
+    vim.tbl_extend("force", { silent = true, buffer = self.bufid }, extra_defaults or {})
   for _, mapping in ipairs(conf.keymaps[keymap_key]) do
     local opt = vim.tbl_extend("force", default_opt, mapping[4] or {}, { buffer = self.bufid })
     vim.keymap.set(mapping[1], mapping[2], mapping[3], opt)
@@ -487,9 +507,13 @@ function Panel:apply_keymaps(keymap_key, extra_defaults)
   return conf
 end
 
-function Panel:update_components() oop.abstract_stub() end
+function Panel:update_components()
+  oop.abstract_stub()
+end
 
-function Panel:render() oop.abstract_stub() end
+function Panel:render()
+  oop.abstract_stub()
+end
 
 function Panel:redraw()
   if not self.render_data then
@@ -601,8 +625,9 @@ function Panel:on_autocmd(event, opts)
   local callback = function(_, state)
     local win_match, buf_match
     if state.event:match("^Win") then
-      if vim.tbl_contains({ "WinLeave", "WinEnter" }, state.event)
-          and api.nvim_get_current_win() == self.winid
+      if
+        vim.tbl_contains({ "WinLeave", "WinEnter" }, state.event)
+        and api.nvim_get_current_win() == self.winid
       then
         buf_match = state.buf
       else
@@ -612,9 +637,8 @@ function Panel:on_autocmd(event, opts)
       buf_match = state.buf
     end
 
-    if (win_match and win_match == self.winid)
-      or (buf_match and buf_match == self.bufid) then
-        opts.callback(state)
+    if (win_match and win_match == self.winid) or (buf_match and buf_match == self.bufid) then
+      opts.callback(state)
     end
   end
 
@@ -690,14 +714,20 @@ function Panel:infer_width()
   -- for the initial measurement pass.
   if config.width == "auto" then
     local cur_width = self:get_width()
-    if cur_width then return cur_width end
+    if cur_width then
+      return cur_width
+    end
     return vim.o.columns
   end
 
   local cur_width = self:get_width()
-  if cur_width then return cur_width end
+  if cur_width then
+    return cur_width
+  end
 
-  if config.width then return config.width end
+  if config.width then
+    return config.width
+  end
 
   -- PanelFloatSpec requires both width and height to be defined. If we get
   -- here then the panel is a split.
@@ -720,10 +750,14 @@ end
 
 function Panel:infer_height()
   local cur_height = self:get_height()
-  if cur_height then return cur_height end
+  if cur_height then
+    return cur_height
+  end
 
   local config = self:get_config()
-  if config.height then return config.height end
+  if config.height then
+    return config.height
+  end
 
   -- PanelFloatSpec requires both width and height to be defined. If we get
   -- here then the panel is a split.

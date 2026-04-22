@@ -43,8 +43,7 @@ function CDiffView:init(opt)
 
   if err then
     utils.err(
-      ("Failed to create an adapter for the repository: %s")
-      :format(utils.str_quote(opt.git_root))
+      ("Failed to create an adapter for the repository: %s"):format(utils.str_quote(opt.git_root))
     )
     return
   end
@@ -140,19 +139,22 @@ function CDiffView:create_file_entries(files)
 
     for _, file_data in ipairs(v.files) do
       if v.kind == "conflicting" then
-        table.insert(entries[v.kind], FileEntry.with_layout(CDiffView.get_default_merge_layout(), {
-          adapter = self.adapter,
-          path = file_data.path,
-          oldpath = file_data.oldpath,
-          status = "U",
-          kind = "conflicting",
-          revs = {
-            a = Rev(RevType.STAGE, 2),
-            b = Rev(RevType.LOCAL),
-            c = Rev(RevType.STAGE, 3),
-            d = Rev(RevType.STAGE, 1),
-          },
-        }))
+        table.insert(
+          entries[v.kind],
+          FileEntry.with_layout(CDiffView.get_default_merge_layout(), {
+            adapter = self.adapter,
+            path = file_data.path,
+            oldpath = file_data.oldpath,
+            status = "U",
+            kind = "conflicting",
+            revs = {
+              a = Rev(RevType.STAGE, 2),
+              b = Rev(RevType.LOCAL),
+              c = Rev(RevType.STAGE, 3),
+              d = Rev(RevType.STAGE, 1),
+            },
+          })
+        )
       else
         local layout_class = CDiffView.get_default_layout()
 
@@ -179,22 +181,25 @@ function CDiffView:create_file_entries(files)
           })
         end
 
-        table.insert(entries[v.kind], FileEntry({
-          adapter = self.adapter,
-          path = file_data.path,
-          oldpath = file_data.oldpath,
-          status = file_data.status,
-          stats = file_data.stats,
-          kind = v.kind,
-          revs = {
-            a = v.left,
-            b = v.right,
-          },
-          layout = layout_class({
-            a = create_file(v.left, "a"),
-            b = create_file(v.right, "b"),
-          }),
-        }))
+        table.insert(
+          entries[v.kind],
+          FileEntry({
+            adapter = self.adapter,
+            path = file_data.path,
+            oldpath = file_data.oldpath,
+            status = file_data.status,
+            stats = file_data.stats,
+            kind = v.kind,
+            revs = {
+              a = v.left,
+              b = v.right,
+            },
+            layout = layout_class({
+              a = create_file(v.left, "a"),
+              b = create_file(v.right, "b"),
+            }),
+          })
+        )
       end
 
       if file_data.selected then

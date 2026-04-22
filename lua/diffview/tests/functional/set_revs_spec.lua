@@ -16,8 +16,12 @@ describe("DiffView:set_revs", function()
       commit = commit,
       track_head = false,
       stage = nil,
-      abbrev = function(self, len) return self.commit:sub(1, len or 7) end,
-      object_name = function(self) return self.commit end,
+      abbrev = function(self, len)
+        return self.commit:sub(1, len or 7)
+      end,
+      object_name = function(self)
+        return self.commit
+      end,
     }
   end
 
@@ -31,10 +35,14 @@ describe("DiffView:set_revs", function()
       local i = 0
       return function()
         i = i + 1
-        if i <= #all then return i, all[i] end
+        if i <= #all then
+          return i, all[i]
+        end
       end
     end
-    function files:len() return #all end
+    function files:len()
+      return #all
+    end
     return files
   end
 
@@ -54,7 +62,9 @@ describe("DiffView:set_revs", function()
       rev_to_pretty_string = function(_, left, right)
         return (left.commit or "?") .. ".." .. (right.commit or "?")
       end,
-      instanceof = function() return false end,
+      instanceof = function()
+        return false
+      end,
     }
   end
 
@@ -127,7 +137,7 @@ describe("DiffView:set_revs", function()
     it("does nothing when parse_revs fails", function()
       local left = make_rev("aaa111")
       local right = make_rev("bbb222")
-      local adapter = make_adapter({})  -- No valid results for any rev_arg.
+      local adapter = make_adapter({}) -- No valid results for any rev_arg.
 
       local view = make_view(adapter, left, right, "aaa111..bbb222")
 
@@ -148,7 +158,9 @@ describe("DiffView:set_revs", function()
 
       local update_called = false
       local view = make_view(adapter, make_rev("aaa111"), make_rev("bbb222"), "aaa111..bbb222")
-      view.update_files = function() update_called = true end
+      view.update_files = function()
+        update_called = true
+      end
 
       view:set_revs("ccc333..ddd444")
 
@@ -159,7 +171,9 @@ describe("DiffView:set_revs", function()
       local adapter = make_adapter({})
       local update_called = false
       local view = make_view(adapter, make_rev("aaa111"), make_rev("bbb222"), "aaa111..bbb222")
-      view.update_files = function() update_called = true end
+      view.update_files = function()
+        update_called = true
+      end
 
       view:set_revs("invalid..ref")
 
@@ -194,7 +208,9 @@ describe("DiffView:set_revs", function()
       tmpdir = vim.fn.tempname()
       vim.fn.mkdir(tmpdir, "p")
       saved_get_path = selection_store.get_path
-      selection_store.get_path = function() return tmpdir .. "/test.json" end
+      selection_store.get_path = function()
+        return tmpdir .. "/test.json"
+      end
     end)
 
     after_each(function()
@@ -331,7 +347,7 @@ describe("diffview.api.set_revs", function()
     local lib = require("diffview.lib")
     local saved = lib.get_current_view
     lib.get_current_view = function()
-      return { panel = {} }  -- Not a DiffView, no set_revs.
+      return { panel = {} } -- Not a DiffView, no set_revs.
     end
 
     assert.has_no.errors(function()

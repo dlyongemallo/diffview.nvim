@@ -48,7 +48,9 @@ local function cleanup_repo(repo)
 end
 
 local function close_view(view)
-  if not view then return end
+  if not view then
+    return
+  end
   if view.tabpage and api.nvim_tabpage_is_valid(view.tabpage) then
     view:close()
   end
@@ -84,7 +86,8 @@ describe("diffview.scene.views.diff.DiffView", function()
     -- HEAD-tracking refresh, so committing while such a view stayed open
     -- left `self.left` pinned to the stale HEAD and the file diff was
     -- computed against the wrong base.
-    it("refreshes left when track_head is set and HEAD moves, even when right is STAGE",
+    it(
+      "refreshes left when track_head is set and HEAD moves, even when right is STAGE",
       test_utils.async_test(function()
         local repo = make_repo()
         local view
@@ -99,12 +102,18 @@ describe("diffview.scene.views.diff.DiffView", function()
             left = Rev(RevType.COMMIT, initial_head, true),
             right = Rev(RevType.STAGE, 0),
             files = make_files(),
-            update_files = function() return make_files() end,
-            get_file_data = function() return {} end,
+            update_files = function()
+              return make_files()
+            end,
+            get_file_data = function()
+              return {}
+            end,
           })
 
           view:open()
-          vim.wait(2000, function() return view.initialized end, 10)
+          vim.wait(2000, function()
+            return view.initialized
+          end, 10)
           eq(initial_head, view.left.commit)
 
           -- Advance HEAD by committing a new file outside the view.
@@ -119,14 +128,19 @@ describe("diffview.scene.views.diff.DiffView", function()
           -- Trigger a refresh; the track_head block in update_files must
           -- pick up the new HEAD.
           view:update_files()
-          vim.wait(2000, function() return view.left.commit == new_head end, 10)
+          vim.wait(2000, function()
+            return view.left.commit == new_head
+          end, 10)
 
           eq(new_head, view.left.commit)
         end)
 
         close_view(view)
         cleanup_repo(repo)
-        if not ok then error(err) end
-      end))
+        if not ok then
+          error(err)
+        end
+      end)
+    )
   end)
 end)

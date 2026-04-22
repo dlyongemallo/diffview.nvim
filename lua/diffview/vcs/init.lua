@@ -1,8 +1,8 @@
 local config = require("diffview.config")
-local GitAdapter = require('diffview.vcs.adapters.git').GitAdapter
-local HgAdapter = require('diffview.vcs.adapters.hg').HgAdapter
-local JjAdapter = require('diffview.vcs.adapters.jj').JjAdapter
-local P4Adapter = require('diffview.vcs.adapters.p4').P4Adapter
+local GitAdapter = require("diffview.vcs.adapters.git").GitAdapter
+local HgAdapter = require("diffview.vcs.adapters.hg").HgAdapter
+local JjAdapter = require("diffview.vcs.adapters.jj").JjAdapter
+local P4Adapter = require("diffview.vcs.adapters.p4").P4Adapter
 
 local M = {}
 
@@ -40,8 +40,12 @@ function M.get_adapter(opt)
     local path_args
     local top_indicators = opt.top_indicators
 
-    if not kind.bootstrap.done then kind.run_bootstrap() end
-    if not kind.bootstrap.ok then goto continue end
+    if not kind.bootstrap.done then
+      kind.run_bootstrap()
+    end
+    if not kind.bootstrap.ok then
+      goto continue
+    end
 
     if not top_indicators then
       path_args, top_indicators = kind.get_repo_paths(opt.cmd_ctx.path_args, opt.cmd_ctx.cpath)

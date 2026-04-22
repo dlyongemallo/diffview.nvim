@@ -49,7 +49,9 @@ return function(view)
         end
       end
     end,
-    file_open_new = function(_, entry) actions.jump_to_first_change(view) end,
+    file_open_new = function(_, entry)
+      actions.jump_to_first_change(view)
+    end,
     ---@diagnostic disable-next-line: unused-local
     files_updated = function(_, files)
       view.initialized = true
@@ -106,7 +108,9 @@ return function(view)
       end
     end,
     toggle_select_entry = function()
-      if not view.panel:is_open() then return end
+      if not view.panel:is_open() then
+        return
+      end
 
       -- Visual-mode: toggle all files in the selected line range.
       local mode = api.nvim_get_mode().mode
@@ -135,13 +139,17 @@ return function(view)
 
       ---@type any
       local item = view.panel:get_item_at_cursor()
-      if not item then return end
+      if not item then
+        return
+      end
 
       if type(item.collapsed) == "boolean" then
         -- Directory: select all if any child is unselected, else deselect all.
         ---@cast item DirData
         local node = item._node
-        if not node then return end
+        if not node then
+          return
+        end
 
         local leaves = node:leaves()
         local all_selected = true
@@ -173,7 +181,9 @@ return function(view)
       view.panel:highlight_next_file()
     end,
     clear_select_entries = function()
-      if not view.panel:is_open() then return end
+      if not view.panel:is_open() then
+        return
+      end
       view.panel:clear_selections()
       view.panel:render()
       view.panel:redraw()
@@ -251,16 +261,18 @@ return function(view)
         end
 
         if #failed > 0 then
-          utils.err(("Failed to stage/unstage %d file(s): %s"):format(
-            #failed, table.concat(failed, ", ")
-          ))
+          utils.err(
+            ("Failed to stage/unstage %d file(s): %s"):format(#failed, table.concat(failed, ", "))
+          )
         end
 
         view.panel:clear_selections()
       else
         -- Single file operation (existing behaviour).
         local item = view:infer_cur_file(true)
-        if not item then return end
+        if not item then
+          return
+        end
 
         local success
         if item.kind == "working" or item.kind == "conflicting" then
@@ -310,18 +322,16 @@ return function(view)
         end
       end
 
-      view:update_files(
-        vim.schedule_wrap(function()
-          view.panel:highlight_cur_file()
-          -- Auto-close if all working/conflicting files have been staged.
-          if config.get_config().auto_close_on_empty then
-            if #view.files.working == 0 and #view.files.conflicting == 0 then
-              view:close()
-              lib.dispose_view(view)
-            end
+      view:update_files(vim.schedule_wrap(function()
+        view.panel:highlight_cur_file()
+        -- Auto-close if all working/conflicting files have been staged.
+        if config.get_config().auto_close_on_empty then
+          if #view.files.working == 0 and #view.files.conflicting == 0 then
+            view:close()
+            lib.dispose_view(view)
           end
-        end)
-      )
+        end
+      end))
       view.emitter:emit(EventName.FILES_STAGED, view)
     end,
     stage_all = function()
@@ -395,12 +405,16 @@ return function(view)
       else
         -- Single item restore (existing behaviour).
         local item = view:infer_cur_file(true)
-        if not item then return end
+        if not item then
+          return
+        end
 
         if type(item.collapsed) == "boolean" then
           ---@cast item DirData
           local node = item._node
-          if not node then return end
+          if not node then
+            return
+          end
 
           local leaves = node:leaves()
           local restored_count = 0
@@ -471,7 +485,9 @@ return function(view)
       view:update_files()
     end,
     open_all_folds = function()
-      if not view.panel:is_focused() or view.panel.listing_style ~= "tree" then return end
+      if not view.panel:is_focused() or view.panel.listing_style ~= "tree" then
+        return
+      end
 
       for _, file_set in ipairs({
         view.panel.components.conflicting.files,
@@ -489,7 +505,9 @@ return function(view)
       view.panel:redraw()
     end,
     close_all_folds = function()
-      if not view.panel:is_focused() or view.panel.listing_style ~= "tree" then return end
+      if not view.panel:is_focused() or view.panel.listing_style ~= "tree" then
+        return
+      end
 
       for _, file_set in ipairs({
         view.panel.components.conflicting.files,
@@ -507,12 +525,18 @@ return function(view)
       view.panel:redraw()
     end,
     open_fold = function()
-      if not view.panel:is_focused() then return end
+      if not view.panel:is_focused() then
+        return
+      end
       local dir = view.panel:get_dir_at_cursor()
-      if dir then view.panel:set_item_fold(dir, true) end
+      if dir then
+        view.panel:set_item_fold(dir, true)
+      end
     end,
     close_fold = function()
-      if not view.panel:is_focused() then return end
+      if not view.panel:is_focused() then
+        return
+      end
       local dir, comp = view.panel:get_dir_at_cursor()
       if dir and comp then
         if not dir.collapsed then
@@ -526,9 +550,13 @@ return function(view)
       end
     end,
     toggle_fold = function()
-      if not view.panel:is_focused() then return end
+      if not view.panel:is_focused() then
+        return
+      end
       local dir = view.panel:get_dir_at_cursor()
-      if dir then view.panel:toggle_item_fold(dir) end
+      if dir then
+        view.panel:toggle_item_fold(dir)
+      end
     end,
   }
 end

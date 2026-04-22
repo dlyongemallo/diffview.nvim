@@ -34,7 +34,9 @@ function M.check()
 
   -- LuaJIT
   if not _G.jit then
-    health.error("Not running on LuaJIT! Non-JIT Lua runtimes are not officially supported by the plugin. Mileage may vary.")
+    health.error(
+      "Not running on LuaJIT! Non-JIT Lua runtimes are not officially supported by the plugin. Mileage may vary."
+    )
   end
 
   health.start("Checking plugin dependencies")
@@ -54,11 +56,12 @@ function M.check()
     end
   end
 
-  health.start("Checking VCS tools")
-
-  ;(function()
+  health.start("Checking VCS tools");
+  (function()
     if missing_essential then
-      health.warn("Cannot perform checks on external dependencies without all essential plugin dependencies installed!")
+      health.warn(
+        "Cannot perform checks on external dependencies without all essential plugin dependencies installed!"
+      )
       return
     end
 
@@ -74,7 +77,9 @@ function M.check()
 
     for _, kind in ipairs(adapter_kinds) do
       local bs = kind.class.bootstrap
-      if not bs.done then kind.class.run_bootstrap() end
+      if not bs.done then
+        kind.class.run_bootstrap()
+      end
 
       if bs.version_string then
         health.ok(fmt("%s found.", kind.name))

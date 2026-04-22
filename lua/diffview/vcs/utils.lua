@@ -54,11 +54,11 @@ end
 
 ---@enum JobStatus
 local JobStatus = oop.enum({
-  SUCCESS  = 1,
+  SUCCESS = 1,
   PROGRESS = 2,
-  ERROR    = 3,
-  KILLED   = 4,
-  FATAL    = 5,
+  ERROR = 3,
+  KILLED = 4,
+  FATAL = 5,
 })
 
 ---@type diffview.Job[]
@@ -77,12 +77,16 @@ local job_watchdogs = {}
 ---@param job diffview.Job
 local function start_job_watchdog(job)
   local timer = uv.new_timer()
-  if not timer then return end
+  if not timer then
+    return
+  end
 
   job_watchdogs[job] = timer
 
   timer:start(SYNC_JOB_TIMEOUT, 0, function()
-    if not timer:is_closing() then timer:close() end
+    if not timer:is_closing() then
+      timer:close()
+    end
     job_watchdogs[job] = nil
 
     if not job:is_done() then
@@ -97,7 +101,9 @@ end
 local function cancel_job_watchdog(job)
   local timer = job_watchdogs[job]
   if timer then
-    if not timer:is_closing() then timer:close() end
+    if not timer:is_closing() then
+      timer:close()
+    end
     job_watchdogs[job] = nil
   end
 end
@@ -150,20 +156,13 @@ M.diff_file_list = async.wrap(function(adapter, left, right, path_args, dv_opt, 
   local files = FileDict()
   local rev_args = adapter:rev_to_args(left, right)
   local errors = {}
-
-  ;(function()
+  (function()
     local err, tfiles, tconflicts = await(
-      adapter:tracked_files(
-        left,
-        right,
-        utils.vec_join(rev_args, "--", path_args),
-        "working",
-        opt
-      )
+      adapter:tracked_files(left, right, utils.vec_join(rev_args, "--", path_args), "working", opt)
     )
 
     if err then
-      errors[#errors+1] = err
+      errors[#errors + 1] = err
       utils.err("Failed to get git status for tracked files!", true)
       return
     end
@@ -171,17 +170,20 @@ M.diff_file_list = async.wrap(function(adapter, left, right, path_args, dv_opt, 
     files:set_working(tfiles)
     files:set_conflicting(tconflicts)
 
-    if not adapter:show_untracked({
+    if
+      not adapter:show_untracked({
         dv_opt = dv_opt,
         revs = { left = left, right = right },
       })
-    then return end
+    then
+      return
+    end
 
     ---@diagnostic disable-next-line: redefined-local
     local err, ufiles = await(adapter:untracked_files(left, right, opt))
 
     if err then
-      errors[#errors+1] = err
+      errors[#errors + 1] = err
       utils.err("Failed to get git status for untracked files!", true)
     else
       files:set_working(utils.vec_join(files.working, ufiles))
@@ -207,7 +209,7 @@ M.diff_file_list = async.wrap(function(adapter, left, right, path_args, dv_opt, 
     )
 
     if err then
-      errors[#errors+1] = err
+      errors[#errors + 1] = err
       utils.err("Failed to get git status for staged files!", true)
     else
       files:set_staged(tfiles)
@@ -326,7 +328,6 @@ local function parse_diff_hunk(scanner, old_row, old_size, new_row, new_size)
     if cur_start == " " then
       ret.common_content[#ret.common_content + 1] = line:sub(2) or ""
       common_idx = common_idx + 1
-
     elseif cur_start == "-" then
       local content = { line:sub(2) or "" }
 
@@ -336,7 +337,6 @@ local function parse_diff_hunk(scanner, old_row, old_size, new_row, new_size)
 
       ret.old_content[#ret.old_content + 1] = { common_idx + old_offset, content }
       old_offset = old_offset + #content
-
     elseif cur_start == "+" then
       local content = { line:sub(2) or "" }
 
@@ -378,8 +378,9 @@ local function parse_file_diff(scanner)
   -- The current line will here be the diff header
 
   -- Extended git diff headers
-  while scanner:peek_line() and
-    not is_diff_header(scanner:peek_line() or "")
+  while
+    scanner:peek_line()
+    and not is_diff_header(scanner:peek_line() or "")
     and not (scanner:peek_line() or ""):match(DIFF_HUNK_HEADER)
   do
     -- Extended header lines:
@@ -498,13 +499,16 @@ local function parse_file_diff(scanner)
     scanner:next_line() -- Current line is now the hunk header
 
     if old_row then
-      table.insert(ret.hunks, parse_diff_hunk(
-        scanner,
-        tonumber(old_row) or -1,
-        tonumber(old_size) or -1,
-        tonumber(new_row) or -1,
-        tonumber(new_size) or -1
-      ))
+      table.insert(
+        ret.hunks,
+        parse_diff_hunk(
+          scanner,
+          tonumber(old_row) or -1,
+          tonumber(old_size) or -1,
+          tonumber(new_row) or -1,
+          tonumber(new_size) or -1
+        )
+      )
     end
 
     line = scanner:peek_line()
@@ -592,20 +596,20 @@ function M.parse_conflicts(lines, winid)
 
   local function handle(data)
     local first = math.min(
-     data.ours.first or math.huge,
-     data.base.first or math.huge,
-     data.theirs.first or math.huge
+      data.ours.first or math.huge,
+      data.base.first or math.huge,
+      data.theirs.first or math.huge
     )
 
-    if first == math.huge then return end
+    if first == math.huge then
+      return
+    end
 
-    local last = math.max(
-      data.ours.last or -1,
-      data.base.last or -1,
-      data.theirs.last or -1
-    )
+    local last = math.max(data.ours.last or -1, data.base.last or -1, data.theirs.last or -1)
 
-    if last == -1 then return end
+    if last == -1 then
+      return
+    end
 
     if data.ours.first and data.ours.last and data.ours.first < data.ours.last then
       data.ours.content = utils.vec_slice(lines, data.ours.first + 1, data.ours.last)
@@ -717,7 +721,6 @@ function M.check_semver(version, required)
   end
   return true
 end
-
 
 M.JobStatus = JobStatus
 return M

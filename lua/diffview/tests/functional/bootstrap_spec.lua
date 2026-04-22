@@ -23,7 +23,9 @@ describe("diffview.vcs.adapter.bootstrap_preamble", function()
   end)
 
   it("returns the err function when the executable is found", function()
-    vim.fn.executable = function() return 1 end
+    vim.fn.executable = function()
+      return 1
+    end
 
     local bs = { done = false, ok = false }
     local err = VCSAdapter.bootstrap_preamble(bs, { "git" }, "TestAdapter", "git_cmd")
@@ -34,7 +36,9 @@ describe("diffview.vcs.adapter.bootstrap_preamble", function()
   end)
 
   it("returns nil and sets bs.err when executable is not found", function()
-    vim.fn.executable = function() return 0 end
+    vim.fn.executable = function()
+      return 0
+    end
 
     local bs = { done = false, ok = false }
     local result = VCSAdapter.bootstrap_preamble(bs, { "nonexistent" }, "TestAdapter", "test_cmd")
@@ -46,7 +50,9 @@ describe("diffview.vcs.adapter.bootstrap_preamble", function()
   end)
 
   it("sets bs.done = true regardless of outcome", function()
-    vim.fn.executable = function() return 0 end
+    vim.fn.executable = function()
+      return 0
+    end
 
     local bs = { done = false, ok = false }
     VCSAdapter.bootstrap_preamble(bs, { "x" }, "Test", "test_cmd")
@@ -54,7 +60,9 @@ describe("diffview.vcs.adapter.bootstrap_preamble", function()
   end)
 
   it("err function sets bs.err and logs", function()
-    vim.fn.executable = function() return 1 end
+    vim.fn.executable = function()
+      return 1
+    end
 
     local bs = { done = false, ok = false }
     local err = VCSAdapter.bootstrap_preamble(bs, { "git" }, "TestAdapter", "git_cmd")

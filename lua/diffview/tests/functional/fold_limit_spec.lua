@@ -40,7 +40,9 @@ describe("fold limit removal (a67a808, fc62484)", function()
 
     local adapter = {
       ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
-      is_binary = function() return false end,
+      is_binary = function()
+        return false
+      end,
     }
 
     local file = File({

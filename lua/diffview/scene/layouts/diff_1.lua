@@ -12,7 +12,6 @@ local Rev = lazy.access("diffview.vcs.rev", "Rev") ---@type Rev|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
 local Window = lazy.access("diffview.scene.window", "Window") ---@type Window|LazyModule
 
-
 local M = {}
 
 ---@class Diff1 : Layout
@@ -111,7 +110,7 @@ function Diff1:to_diff4(layout)
       get_data = main.get_data,
       rev = Rev(RevType.STAGE, 1),
       nulled = false, -- FIXME
-    })
+    }),
   })
 end
 
@@ -125,11 +124,9 @@ function Diff1.should_null(rev, status, sym)
   if rev.type == RevType.LOCAL then
     -- Deleted files have no LOCAL content.
     return status == "D"
-
   elseif rev.type == RevType.COMMIT then
     -- Deleted files have no content on the newer side.
     return status == "D"
-
   elseif rev.type == RevType.STAGE then
     -- Deleted files have no staged content.
     return status == "D"

@@ -18,7 +18,9 @@ return function(view)
   return {
     tab_enter = function()
       local file = view.panel.cur_item[2]
-      if file then view:set_file(file) end
+      if file then
+        view:set_file(file)
+      end
 
       view:restore_panel_cursor()
     end,
@@ -26,7 +28,9 @@ return function(view)
       local file = view.panel.cur_item[2]
       view:save_panel_cursor()
 
-      if file then file.layout:detach_files() end
+      if file then
+        file.layout:detach_files()
+      end
 
       for _, entry in ipairs(view.panel.entries) do
         for _, f in ipairs(entry.files) do
@@ -34,7 +38,9 @@ return function(view)
         end
       end
     end,
-    file_open_new = function(_, entry) actions.jump_to_first_change(view) end,
+    file_open_new = function(_, entry)
+      actions.jump_to_first_change(view)
+    end,
     open_in_diffview = function()
       local file = view:infer_cur_file()
 
@@ -56,10 +62,14 @@ return function(view)
     ---Open a diffview comparing HEAD with the commit under cursor.
     diff_against_head = function()
       local item = view.panel:get_item_at_cursor()
-      if not item then return end
+      if not item then
+        return
+      end
 
       local commit = item.commit or (item.entry and item.entry.commit)
-      if not commit then return end
+      if not commit then
+        return
+      end
 
       local new_view = DiffView({
         adapter = view.adapter,
@@ -71,44 +81,64 @@ return function(view)
       lib.add_view(new_view)
       new_view:open()
     end,
-    select_next_entry = function() view:next_item() end,
-    select_prev_entry = function() view:prev_item() end,
+    select_next_entry = function()
+      view:next_item()
+    end,
+    select_prev_entry = function()
+      view:prev_item()
+    end,
     select_first_entry = function()
       local entry = view.panel.entries[1]
-      if entry and #entry.files > 0 then view:set_file(entry.files[1]) end
+      if entry and #entry.files > 0 then
+        view:set_file(entry.files[1])
+      end
     end,
     select_last_entry = function()
       local entry = view.panel.entries[#view.panel.entries]
-      if entry and #entry.files > 0 then view:set_file(entry.files[#entry.files]) end
+      if entry and #entry.files > 0 then
+        view:set_file(entry.files[#entry.files])
+      end
     end,
     select_next_commit = function()
       local cur_entry = view.panel.cur_item[1]
-      if not cur_entry then return end
+      if not cur_entry then
+        return
+      end
       local entry_idx = utils.vec_indexof(view.panel.entries, cur_entry)
-      if entry_idx == -1 then return end
+      if entry_idx == -1 then
+        return
+      end
 
       local next_idx
       if config.get_config().wrap_entries then
         next_idx = (entry_idx + vim.v.count1 - 1) % #view.panel.entries + 1
       else
         next_idx = math.min(entry_idx + vim.v.count1, #view.panel.entries)
-        if next_idx == entry_idx then return end
+        if next_idx == entry_idx then
+          return
+        end
       end
       local next_entry = view.panel.entries[next_idx]
       view:set_file(next_entry.files[1])
     end,
     select_prev_commit = function()
       local cur_entry = view.panel.cur_item[1]
-      if not cur_entry then return end
+      if not cur_entry then
+        return
+      end
       local entry_idx = utils.vec_indexof(view.panel.entries, cur_entry)
-      if entry_idx == -1 then return end
+      if entry_idx == -1 then
+        return
+      end
 
       local next_idx
       if config.get_config().wrap_entries then
         next_idx = (entry_idx - vim.v.count1 - 1) % #view.panel.entries + 1
       else
         next_idx = math.max(entry_idx - vim.v.count1, 1)
-        if next_idx == entry_idx then return end
+        if next_idx == entry_idx then
+          return
+        end
       end
       local next_entry = view.panel.entries[next_idx]
       view:set_file(next_entry.files[1])
@@ -117,17 +147,23 @@ return function(view)
     next_entry_in_commit = function()
       local cur_entry = view.panel.cur_item[1]
       local cur_file = view.panel.cur_item[2]
-      if not cur_entry or not cur_file then return end
+      if not cur_entry or not cur_file then
+        return
+      end
 
       local file_idx = utils.vec_indexof(cur_entry.files, cur_file)
-      if file_idx == -1 then return end
+      if file_idx == -1 then
+        return
+      end
 
       local next_idx
       if config.get_config().wrap_entries then
         next_idx = (file_idx % #cur_entry.files) + 1
       else
         next_idx = math.min(file_idx + 1, #cur_entry.files)
-        if next_idx == file_idx then return end
+        if next_idx == file_idx then
+          return
+        end
       end
       view:set_file(cur_entry.files[next_idx])
     end,
@@ -135,22 +171,32 @@ return function(view)
     prev_entry_in_commit = function()
       local cur_entry = view.panel.cur_item[1]
       local cur_file = view.panel.cur_item[2]
-      if not cur_entry or not cur_file then return end
+      if not cur_entry or not cur_file then
+        return
+      end
 
       local file_idx = utils.vec_indexof(cur_entry.files, cur_file)
-      if file_idx == -1 then return end
+      if file_idx == -1 then
+        return
+      end
 
       local prev_idx
       if config.get_config().wrap_entries then
         prev_idx = ((file_idx - 2) % #cur_entry.files) + 1
       else
         prev_idx = math.max(file_idx - 1, 1)
-        if prev_idx == file_idx then return end
+        if prev_idx == file_idx then
+          return
+        end
       end
       view:set_file(cur_entry.files[prev_idx])
     end,
-    next_entry = function() view.panel:highlight_next_file() end,
-    prev_entry = function() view.panel:highlight_prev_item() end,
+    next_entry = function()
+      view.panel:highlight_next_file()
+    end,
+    prev_entry = function()
+      view.panel:highlight_prev_item()
+    end,
     select_entry = function()
       if view.panel:is_focused() then
         local item = view.panel:get_item_at_cursor()
@@ -167,7 +213,9 @@ return function(view)
         end
       elseif view.panel.option_panel:is_focused() then
         local option = view.panel.option_panel:get_item_at_cursor()
-        if option then view.panel.option_panel.emitter:emit("set_option", option.key) end
+        if option then
+          view.panel.option_panel.emitter:emit("set_option", option.key)
+        end
       end
     end,
     focus_entry = function()
@@ -190,15 +238,25 @@ return function(view)
       local file = view:infer_cur_file()
       if file then
         local entry = view.panel:find_entry(file)
-        if entry then view.commit_log_panel:update(view.adapter.Rev.to_range(entry.commit.hash)) end
+        if entry then
+          view.commit_log_panel:update(view.adapter.Rev.to_range(entry.commit.hash))
+        end
       end
     end,
-    focus_files = function() view.panel:focus() end,
-    toggle_files = function() view.panel:toggle(true) end,
+    focus_files = function()
+      view.panel:focus()
+    end,
+    toggle_files = function()
+      view.panel:toggle(true)
+    end,
     refresh_files = function()
       view.panel:update_entries(function(_, status)
-        if status >= JobStatus.ERROR then return end
-        if not view:cur_file() then view:next_item() end
+        if status >= JobStatus.ERROR then
+          return
+        end
+        if not view:cur_file() then
+          view:next_item()
+        end
       end)
     end,
     open_all_folds = function()
@@ -220,19 +278,31 @@ return function(view)
       end
     end,
     open_fold = function()
-      if view.panel.single_file or not view.panel:is_focused() then return end
+      if view.panel.single_file or not view.panel:is_focused() then
+        return
+      end
       local entry = view.panel:get_log_entry_at_cursor()
-      if entry then view.panel:set_entry_fold(entry, true) end
+      if entry then
+        view.panel:set_entry_fold(entry, true)
+      end
     end,
     close_fold = function()
-      if view.panel.single_file or not view.panel:is_focused() then return end
+      if view.panel.single_file or not view.panel:is_focused() then
+        return
+      end
       local entry = view.panel:get_log_entry_at_cursor()
-      if entry then view.panel:set_entry_fold(entry, false) end
+      if entry then
+        view.panel:set_entry_fold(entry, false)
+      end
     end,
     toggle_fold = function()
-      if view.panel.single_file or not view.panel:is_focused() then return end
+      if view.panel.single_file or not view.panel:is_focused() then
+        return
+      end
       local entry = view.panel:get_log_entry_at_cursor()
-      if entry then view.panel:toggle_entry_fold(entry) end
+      if entry then
+        view.panel:toggle_entry_fold(entry)
+      end
     end,
     close = function()
       if view.panel.option_panel:is_focused() then
@@ -243,10 +313,14 @@ return function(view)
         -- Don't close the view if a floating window is focused; the float's
         -- own close listener should handle it.
         local win_conf = api.nvim_win_get_config(0)
-        if win_conf.relative == "" then view:close() end
+        if win_conf.relative == "" then
+          view:close()
+        end
       end
     end,
-    options = function() view.panel.option_panel:focus() end,
+    options = function()
+      view.panel.option_panel:focus()
+    end,
     copy_hash = function()
       if view.panel:is_focused() then
         local item = view.panel:get_item_at_cursor()
@@ -261,8 +335,12 @@ return function(view)
     end,
     open_commit_in_browser = function()
       local item = view.panel:get_item_at_cursor()
-      if not item then item = view.panel.cur_item[1] end
-      if not item or not item.commit then return end
+      if not item then
+        item = view.panel.cur_item[1]
+      end
+      if not item or not item.commit then
+        return
+      end
 
       if not view.adapter.get_commit_url then
         utils.err("Opening commits in browser is not supported for this VCS.")
@@ -286,11 +364,15 @@ return function(view)
         cmd = { "cmd", "/c", "start", "", url }
       end
 
-      if cmd then vim.fn.jobstart(cmd, { detach = true }) end
+      if cmd then
+        vim.fn.jobstart(cmd, { detach = true })
+      end
     end,
     restore_entry = async.void(function()
       local item = view:infer_cur_file()
-      if not item then return end
+      if not item then
+        return
+      end
 
       local bufid = utils.find_file_buffer(item.path)
 

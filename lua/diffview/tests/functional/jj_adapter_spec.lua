@@ -40,7 +40,8 @@ describe("diffview.vcs.adapters.jj", function()
     end
 
     adapter.symmetric_diff_revs = function(_, _)
-      return adapter.Rev(RevType.COMMIT, "merge_base_hash"), adapter.Rev(RevType.COMMIT, adapter._rev_map["@"])
+      return adapter.Rev(RevType.COMMIT, "merge_base_hash"),
+        adapter.Rev(RevType.COMMIT, adapter._rev_map["@"])
     end
 
     adapter.has_bookmark = function(_, _)
@@ -200,10 +201,8 @@ describe("diffview.vcs.adapters.jj", function()
 
     it("returns --from for commit..LOCAL", function()
       local adapter = new_adapter()
-      local args = adapter:rev_to_args(
-        adapter.Rev(RevType.COMMIT, "left_hash"),
-        adapter.Rev(RevType.LOCAL)
-      )
+      local args =
+        adapter:rev_to_args(adapter.Rev(RevType.COMMIT, "left_hash"), adapter.Rev(RevType.LOCAL))
 
       eq({ "--from", "left_hash" }, args)
     end)
@@ -274,94 +273,130 @@ describe("diffview.vcs.adapters.jj", function()
     end)
 
     after_each(function()
-      if repo then repo.cleanup() end
+      if repo then
+        repo.cleanup()
+      end
     end)
 
-    it("lists modified, added, and deleted files", helpers.async_test(function()
-      if not jj_available() then pending("jj not installed") return end
+    it(
+      "lists modified, added, and deleted files",
+      helpers.async_test(function()
+        if not jj_available() then
+          pending("jj not installed")
+          return
+        end
 
-      -- Initial commit with two files.
-      repo.write("src/main.lua", 'print("v1")\n')
-      repo.write("src/utils.lua", "local M = {}\nreturn M\n")
-      repo.jj({ "describe", "-m", "initial" })
-      repo.jj({ "new" })
+        -- Initial commit with two files.
+        repo.write("src/main.lua", 'print("v1")\n')
+        repo.write("src/utils.lua", "local M = {}\nreturn M\n")
+        repo.jj({ "describe", "-m", "initial" })
+        repo.jj({ "new" })
 
-      -- Modify one, delete one, add one.
-      repo.write("src/main.lua", 'print("v2")\n')
-      os.remove(repo.dir .. "/src/utils.lua")
-      repo.write("src/new.lua", "new\n")
+        -- Modify one, delete one, add one.
+        repo.write("src/main.lua", 'print("v2")\n')
+        os.remove(repo.dir .. "/src/utils.lua")
+        repo.write("src/new.lua", "new\n")
 
-      local adapter = repo.adapter()
-      local left = adapter.Rev(RevType.COMMIT, run({ "jj", "show", "-T", "commit_id", "@-", "--no-patch" }, repo.dir))
-      local right = adapter.Rev(RevType.LOCAL)
-      local args = adapter:rev_to_args(left, right)
+        local adapter = repo.adapter()
+        local left = adapter.Rev(
+          RevType.COMMIT,
+          run({ "jj", "show", "-T", "commit_id", "@-", "--no-patch" }, repo.dir)
+        )
+        local right = adapter.Rev(RevType.LOCAL)
+        local args = adapter:rev_to_args(left, right)
 
-      local err, files = await(adapter:tracked_files(
-        left, right, args, "working",
-        { default_layout = Diff2, merge_layout = Diff2 }
-      ))
+        local err, files = await(
+          adapter:tracked_files(
+            left,
+            right,
+            args,
+            "working",
+            { default_layout = Diff2, merge_layout = Diff2 }
+          )
+        )
 
-      assert.is_nil(err)
+        assert.is_nil(err)
 
-      local by_name = {}
-      for _, file in ipairs(files) do
-        local name = file.path:match("[^/]+$")
-        by_name[name] = file
-      end
+        local by_name = {}
+        for _, file in ipairs(files) do
+          local name = file.path:match("[^/]+$")
+          by_name[name] = file
+        end
 
-      assert.is_not_nil(by_name["main.lua"], "main.lua should appear (modified)")
-      assert.equals("M", by_name["main.lua"].status)
+        assert.is_not_nil(by_name["main.lua"], "main.lua should appear (modified)")
+        assert.equals("M", by_name["main.lua"].status)
 
-      assert.is_not_nil(by_name["new.lua"], "new.lua should appear (added)")
-      assert.equals("A", by_name["new.lua"].status)
+        assert.is_not_nil(by_name["new.lua"], "new.lua should appear (added)")
+        assert.equals("A", by_name["new.lua"].status)
 
-      assert.is_not_nil(by_name["utils.lua"], "utils.lua should appear (deleted)")
-      assert.equals("D", by_name["utils.lua"].status)
-    end))
+        assert.is_not_nil(by_name["utils.lua"], "utils.lua should appear (deleted)")
+        assert.equals("D", by_name["utils.lua"].status)
+      end)
+    )
 
-    it("shows file content at a revision without errors", helpers.async_test(function()
-      if not jj_available() then pending("jj not installed") return end
+    it(
+      "shows file content at a revision without errors",
+      helpers.async_test(function()
+        if not jj_available() then
+          pending("jj not installed")
+          return
+        end
 
-      repo.write("hello.txt", "hello world\n")
-      repo.jj({ "describe", "-m", "add hello" })
+        repo.write("hello.txt", "hello world\n")
+        repo.jj({ "describe", "-m", "add hello" })
 
-      local adapter = repo.adapter()
-      local commit_id = run({ "jj", "show", "-T", "commit_id", "@", "--no-patch" }, repo.dir)
-      local rev = adapter.Rev(RevType.COMMIT, commit_id)
+        local adapter = repo.adapter()
+        local commit_id = run({ "jj", "show", "-T", "commit_id", "@", "--no-patch" }, repo.dir)
+        local rev = adapter.Rev(RevType.COMMIT, commit_id)
 
-      local err, content = await(adapter:show("hello.txt", rev))
+        local err, content = await(adapter:show("hello.txt", rev))
 
-      assert.is_nil(err)
-      assert.is_not_nil(content)
-      assert.equals("hello world", vim.trim(table.concat(content, "\n")))
-    end))
+        assert.is_nil(err)
+        assert.is_not_nil(content)
+        assert.equals("hello world", vim.trim(table.concat(content, "\n")))
+      end)
+    )
 
-    it("paths do not contain revision specifiers", helpers.async_test(function()
-      if not jj_available() then pending("jj not installed") return end
+    it(
+      "paths do not contain revision specifiers",
+      helpers.async_test(function()
+        if not jj_available() then
+          pending("jj not installed")
+          return
+        end
 
-      repo.write("file.lua", "content\n")
-      repo.jj({ "describe", "-m", "add file" })
-      repo.jj({ "new" })
-      repo.write("file.lua", "updated\n")
+        repo.write("file.lua", "content\n")
+        repo.jj({ "describe", "-m", "add file" })
+        repo.jj({ "new" })
+        repo.write("file.lua", "updated\n")
 
-      local adapter = repo.adapter()
-      local left = adapter.Rev(RevType.COMMIT, run({ "jj", "show", "-T", "commit_id", "@-", "--no-patch" }, repo.dir))
-      local right = adapter.Rev(RevType.LOCAL)
-      local args = adapter:rev_to_args(left, right)
+        local adapter = repo.adapter()
+        local left = adapter.Rev(
+          RevType.COMMIT,
+          run({ "jj", "show", "-T", "commit_id", "@-", "--no-patch" }, repo.dir)
+        )
+        local right = adapter.Rev(RevType.LOCAL)
+        local args = adapter:rev_to_args(left, right)
 
-      local err, files = await(adapter:tracked_files(
-        left, right, args, "working",
-        { default_layout = Diff2, merge_layout = Diff2 }
-      ))
+        local err, files = await(
+          adapter:tracked_files(
+            left,
+            right,
+            args,
+            "working",
+            { default_layout = Diff2, merge_layout = Diff2 }
+          )
+        )
 
-      assert.is_nil(err)
-      assert.is_true(#files > 0)
+        assert.is_nil(err)
+        assert.is_true(#files > 0)
 
-      for _, file in ipairs(files) do
-        -- Jujutsu paths should never contain revision specifiers.
-        assert.is_nil(file.path:match("@"), ("path %q contains @"):format(file.path))
-        assert.is_nil(file.path:match("#%d+"), ("path %q contains #rev"):format(file.path))
-      end
-    end))
+        for _, file in ipairs(files) do
+          -- Jujutsu paths should never contain revision specifiers.
+          assert.is_nil(file.path:match("@"), ("path %q contains @"):format(file.path))
+          assert.is_nil(file.path:match("#%d+"), ("path %q contains #rev"):format(file.path))
+        end
+      end)
+    )
   end)
 end)

@@ -63,8 +63,12 @@ describe("diffview.utils.set_win_buf", function()
 
     local calls = 0
     local ok, err = pcall(function()
-      vim.api.nvim_win_set_buf = function() calls = calls + 1 end
-      utils.no_win_event_call = function() error("should not be called") end
+      vim.api.nvim_win_set_buf = function()
+        calls = calls + 1
+      end
+      utils.no_win_event_call = function()
+        error("should not be called")
+      end
 
       local success, msg, recovered = utils.set_win_buf(1, 1)
 
@@ -77,7 +81,9 @@ describe("diffview.utils.set_win_buf", function()
     vim.api.nvim_win_set_buf = original_set_win_buf
     utils.no_win_event_call = original_no_win_event_call
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
   end)
 
   it("retries with ignored events when the first set fails", function()
@@ -113,7 +119,9 @@ describe("diffview.utils.set_win_buf", function()
     vim.api.nvim_win_set_buf = original_set_win_buf
     utils.no_win_event_call = original_no_win_event_call
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
   end)
 
   it("returns an error when both attempts fail", function()
@@ -152,7 +160,9 @@ describe("diffview.utils.set_win_buf", function()
     vim.api.nvim_win_set_buf = original_set_win_buf
     utils.no_win_event_call = original_no_win_event_call
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
   end)
 end)
 

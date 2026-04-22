@@ -162,7 +162,9 @@ describe("view.inline.style", function()
 
   it("treats omitted style (e.g. view.inline = {}) as 'use default'", function()
     local err_called = false
-    utils.err = function() err_called = true end
+    utils.err = function()
+      err_called = true
+    end
 
     local conf = setup_with({ view = { inline = {} } })
 
@@ -172,7 +174,9 @@ describe("view.inline.style", function()
 
   it("warns and falls back when view.inline is a non-table value", function()
     local warned = false
-    utils.warn = function() warned = true end
+    utils.warn = function()
+      warned = true
+    end
 
     -- A truthy non-table (e.g. user typo'd `view.inline = "overleaf"`) would
     -- crash on `view.inline.style` without the type guard.

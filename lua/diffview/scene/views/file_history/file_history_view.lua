@@ -4,7 +4,8 @@ local oop = require("diffview.oop")
 
 local CommitLogPanel = lazy.access("diffview.ui.panels.commit_log_panel", "CommitLogPanel") ---@type CommitLogPanel|LazyModule
 local EventName = lazy.access("diffview.events", "EventName") ---@type EventName|LazyModule
-local FileHistoryPanel = lazy.access("diffview.scene.views.file_history.file_history_panel", "FileHistoryPanel") ---@type FileHistoryPanel|LazyModule
+local FileHistoryPanel =
+  lazy.access("diffview.scene.views.file_history.file_history_panel", "FileHistoryPanel") ---@type FileHistoryPanel|LazyModule
 local JobStatus = lazy.access("diffview.vcs.utils", "JobStatus") ---@type JobStatus|LazyModule
 local LogEntry = lazy.access("diffview.vcs.log_entry", "LogEntry") ---@type LogEntry|LazyModule
 local File = lazy.access("diffview.vcs.file", "File") ---@type vcs.File|LazyModule
@@ -139,7 +140,9 @@ end)
 function FileHistoryView:next_item()
   self:ensure_layout()
 
-  if self:file_safeguard() then return end
+  if self:file_safeguard() then
+    return
+  end
 
   if self.panel:num_items() > 1 or self.nulled then
     local cur = self.panel:next_file()
@@ -157,7 +160,9 @@ end
 function FileHistoryView:prev_item()
   self:ensure_layout()
 
-  if self:file_safeguard() then return end
+  if self:file_safeguard() then
+    return
+  end
 
   if self.panel:num_items() > 1 or self.nulled then
     local cur = self.panel:prev_file()
@@ -179,7 +184,9 @@ FileHistoryView.set_file = async.void(function(self, file, focus)
   ---@diagnostic disable: invisible
   self:ensure_layout()
 
-  if self:file_safeguard() or not file then return end
+  if self:file_safeguard() or not file then
+    return
+  end
 
   local entry = self.panel:find_entry(file)
   local cur_entry = self.panel.cur_item[1]
@@ -200,7 +207,6 @@ FileHistoryView.set_file = async.void(function(self, file, focus)
   end
   ---@diagnostic enable: invisible
 end)
-
 
 ---Ensures there are files to load, and loads the null buffer otherwise.
 ---@return boolean

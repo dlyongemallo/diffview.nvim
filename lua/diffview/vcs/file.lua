@@ -15,7 +15,6 @@ local pl = lazy.access(utils, "path") ---@type PathLib
 local api = vim.api
 local M = {}
 
-
 ---@alias git.FileDataProducer fun(kind: vcs.FileKind, path: string, pos: "left"|"right"): string[]
 
 ---@class vcs.File : diffview.Object
@@ -81,26 +80,27 @@ function File:init(opt)
   self.active = true
   self.ready = false
 
-  self.winopts = opt.winopts or {
-    diff = true,
-    scrollbind = true,
-    cursorbind = true,
-    foldmethod = "diff",
-    scrollopt = { "ver", "hor", "jump" },
-    foldcolumn = "1",
-    -- Resolved from `view.foldlevel` at window open (see `Window:open_file`).
-    foldlevel = 0,
-    foldenable = true,
-    -- Use prepend method so diffview's highlights take precedence but don't
-    -- clobber user's additional winhl customizations (#515).
-    winhl = {
-      "DiffAdd:DiffviewDiffAdd",
-      "DiffDelete:DiffviewDiffDelete",
-      "DiffChange:DiffviewDiffChange",
-      "DiffText:DiffviewDiffText",
-      opt = { method = "prepend" },
-    },
-  }
+  self.winopts = opt.winopts
+    or {
+      diff = true,
+      scrollbind = true,
+      cursorbind = true,
+      foldmethod = "diff",
+      scrollopt = { "ver", "hor", "jump" },
+      foldcolumn = "1",
+      -- Resolved from `view.foldlevel` at window open (see `Window:open_file`).
+      foldlevel = 0,
+      foldenable = true,
+      -- Use prepend method so diffview's highlights take precedence but don't
+      -- clobber user's additional winhl customizations (#515).
+      winhl = {
+        "DiffAdd:DiffviewDiffAdd",
+        "DiffDelete:DiffviewDiffDelete",
+        "DiffChange:DiffviewDiffChange",
+        "DiffText:DiffviewDiffText",
+        opt = { method = "prepend" },
+      },
+    }
 
   -- Set winbar info
   if self.rev then
@@ -289,7 +289,9 @@ File.create_buffer = async.wrap(function(self, callback)
   end
 
   local err, lines = await(self:produce_data())
-  if err then error(table.concat(err, "\n")) end
+  if err then
+    error(table.concat(err, "\n"))
+  end
 
   await(async.scheduler())
 
@@ -341,7 +343,9 @@ File.create_buffer = async.wrap(function(self, callback)
     buffer = self.bufnr,
     callback = function(ev)
       local client_id = ev.data and ev.data.client_id
-      if not client_id then return end
+      if not client_id then
+        return
+      end
       vim.schedule(function()
         if api.nvim_buf_is_valid(ev.buf) then
           pcall(vim.lsp.buf_detach_client, ev.buf, client_id)
@@ -443,7 +447,9 @@ end
 ---@param lhs string
 local function save_existing_keymap(bufnr, saved, mode_map_cache, mode, lhs)
   local key = mode .. " " .. lhs
-  if saved[key] then return end
+  if saved[key] then
+    return
+  end
 
   local mode_cache = mode_map_cache[mode]
   if not mode_cache then
@@ -457,7 +463,9 @@ local function save_existing_keymap(bufnr, saved, mode_map_cache, mode, lhs)
   end
 
   local km = mode_cache[lhs]
-  if not km then return end
+  if not km then
+    return
+  end
 
   saved[key] = {
     mode = mode,
@@ -507,7 +515,8 @@ function File:attach_buffer(force, opt)
             mapping[2]
           )
         end
-        local map_opt = vim.tbl_extend("force", default_map_opt, mapping[4] or {}, { buffer = self.bufnr })
+        local map_opt =
+          vim.tbl_extend("force", default_map_opt, mapping[4] or {}, { buffer = self.bufnr })
         vim.keymap.set(mapping[1], mapping[2], mapping[3], map_opt)
       end
 

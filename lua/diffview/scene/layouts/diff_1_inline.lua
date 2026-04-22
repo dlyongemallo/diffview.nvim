@@ -88,7 +88,9 @@ end
 ---@param file vcs.File?
 function Diff1Inline:_set_a_file(file)
   self.a_file = file
-  if file then file.symbol = "a" end
+  if file then
+    file.symbol = "a"
+  end
 end
 
 ---@override
@@ -171,16 +173,24 @@ function Diff1Inline:_repaint()
   -- Batched buffer edits toggle this flag so each intermediate `TextChanged`
   -- doesn't trigger a full `vim.diff` + extmark pass; the batch owner fires
   -- a single repaint once all edits are applied.
-  if self._suppress_repaint then return end
-  if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then return end
+  if self._suppress_repaint then
+    return
+  end
+  if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then
+    return
+  end
   local bufnr = self.b.file.bufnr
-  if not api.nvim_buf_is_valid(bufnr) then return end
+  if not api.nvim_buf_is_valid(bufnr) then
+    return
+  end
 
   -- The cache is populated at the end of the initial `_render_inline`. If
   -- a repaint fires before that completes (e.g. a synthetic TextChanged
   -- during buffer setup), skip rather than double-fetch from disk.
   local old_lines = self._cached_old_lines
-  if old_lines == nil then return end
+  if old_lines == nil then
+    return
+  end
 
   local new_lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
   inline_diff.render(bufnr, old_lines, new_lines, render_opts())
@@ -198,32 +208,38 @@ end
 ---@param self Diff1Inline
 ---@param bufnr integer
 local function register_repaint_autocmds(self, bufnr)
-  if self._repaint_bufnr == bufnr then return end
+  if self._repaint_bufnr == bufnr then
+    return
+  end
   -- Different buffer than last time (or first install): clear any prior
   -- registration before attaching to the new one, and close any pending
   -- debounce timer so it doesn't fire against the old buffer.
   if self._repaint_bufnr and api.nvim_buf_is_valid(self._repaint_bufnr) then
     pcall(api.nvim_clear_autocmds, { group = repaint_augroup, buffer = self._repaint_bufnr })
   end
-  if self._repaint_debounced then self._repaint_debounced:close() end
+  if self._repaint_debounced then
+    self._repaint_debounced:close()
+  end
   self._repaint_bufnr = bufnr
-  self._repaint_debounced = debounce.debounce_trailing(
-    INSERT_REPAINT_DEBOUNCE_MS,
-    false,
-    function() self:_repaint() end
-  )
+  self._repaint_debounced = debounce.debounce_trailing(INSERT_REPAINT_DEBOUNCE_MS, false, function()
+    self:_repaint()
+  end)
   api.nvim_create_autocmd({ "InsertLeave", "TextChanged" }, {
     group = repaint_augroup,
     buffer = bufnr,
     callback = function()
-      if self._repaint_debounced then self._repaint_debounced:cancel() end
+      if self._repaint_debounced then
+        self._repaint_debounced:cancel()
+      end
       self:_repaint()
     end,
   })
   api.nvim_create_autocmd("TextChangedI", {
     group = repaint_augroup,
     buffer = bufnr,
-    callback = function() self._repaint_debounced() end,
+    callback = function()
+      self._repaint_debounced()
+    end,
   })
 end
 
@@ -231,7 +247,9 @@ end
 ---diff as extmarks on the new-side buffer.
 ---@param self Diff1Inline
 Diff1Inline._render_inline = async.void(function(self)
-  if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then return end
+  if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then
+    return
+  end
 
   local bufnr = self.b.file.bufnr
   local winid = self.b.id
@@ -248,7 +266,9 @@ Diff1Inline._render_inline = async.void(function(self)
   if old_lines == nil then
     old_lines = await(self:_load_old_lines())
     await(async.scheduler())
-    if not (self.b and self.b:is_valid() and api.nvim_buf_is_valid(bufnr)) then return end
+    if not (self.b and self.b:is_valid() and api.nvim_buf_is_valid(bufnr)) then
+      return
+    end
     self._cached_old_lines = old_lines
   end
 
@@ -276,15 +296,23 @@ end)
 ---@param last integer
 ---@return integer
 function Diff1Inline:diffget(first, last)
-  if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then return 0 end
+  if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then
+    return 0
+  end
   local bufnr = self.b.file.bufnr
-  if not api.nvim_buf_is_valid(bufnr) then return 0 end
+  if not api.nvim_buf_is_valid(bufnr) then
+    return 0
+  end
 
   local old_lines = self._cached_old_lines
-  if old_lines == nil then return 0 end
+  if old_lines == nil then
+    return 0
+  end
 
   local hunks = inline_diff.get_hunks(bufnr)
-  if not hunks then return 0 end
+  if not hunks then
+    return 0
+  end
 
   local matches = {}
   for _, h in ipairs(hunks) do
@@ -298,10 +326,14 @@ function Diff1Inline:diffget(first, last)
       local anchor = new_start == 0 and 1 or new_start
       overlaps = first <= anchor and anchor <= last
     end
-    if overlaps then matches[#matches + 1] = h end
+    if overlaps then
+      matches[#matches + 1] = h
+    end
   end
 
-  if #matches == 0 then return 0 end
+  if #matches == 0 then
+    return 0
+  end
 
   -- Suppress the per-edit `TextChanged` repaint so a multi-hunk batch
   -- doesn't trigger N full re-diffs; a single trailing repaint below
@@ -330,7 +362,9 @@ function Diff1Inline:diffget(first, last)
     end
   end)
   self._suppress_repaint = nil
-  if not ok then error(err) end
+  if not ok then
+    error(err)
+  end
 
   self:_repaint()
 
@@ -344,7 +378,9 @@ end
 ---@return vcs.File[]
 function Diff1Inline:owned_files()
   local out = Layout.files(self)
-  if self.a_file and not vim.tbl_contains(out, self.a_file) then out[#out + 1] = self.a_file end
+  if self.a_file and not vim.tbl_contains(out, self.a_file) then
+    out[#out + 1] = self.a_file
+  end
   return out
 end
 
@@ -356,7 +392,9 @@ end
 ---@param sym string
 ---@return vcs.File?
 function Diff1Inline:get_file_for(sym)
-  if sym == "a" then return self.a_file end
+  if sym == "a" then
+    return self.a_file
+  end
   return Layout.get_file_for(self, sym)
 end
 
@@ -371,7 +409,9 @@ function Diff1Inline:teardown_render()
   end
   self._repaint_bufnr = nil
   self._cached_old_lines = nil
-  if self.b and self.b.file and self.b.file.bufnr then inline_diff.detach(self.b.file.bufnr) end
+  if self.b and self.b.file and self.b.file.bufnr then
+    inline_diff.detach(self.b.file.bufnr)
+  end
 end
 
 ---@override

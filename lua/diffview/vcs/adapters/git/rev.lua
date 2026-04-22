@@ -1,6 +1,6 @@
 local oop = require("diffview.oop")
-local Rev = require('diffview.vcs.rev').Rev
-local RevType = require('diffview.vcs.rev').RevType
+local Rev = require("diffview.vcs.rev").Rev
+local RevType = require("diffview.vcs.rev").RevType
 
 local M = {}
 
@@ -24,10 +24,7 @@ function GitRev:init(rev_type, revision, track_head)
   if t == "string" then
     assert(revision ~= "", "'revision' cannot be an empty string!")
   elseif t == "number" then
-    assert(
-      revision >= 0 and revision <= 3,
-      "'revision' must be a valid stage number ([0-3])!"
-    )
+    assert(revision >= 0 and revision <= 3, "'revision' must be a valid stage number ([0-3])!")
   end
 
   t = type(track_head)
@@ -95,7 +92,10 @@ end
 ---@return Rev?
 function GitRev.earliest_commit(adapter)
   local out, code = adapter:exec_sync({
-    "rev-list", "--max-parents=0", "--first-parent", "HEAD"
+    "rev-list",
+    "--max-parents=0",
+    "--first-parent",
+    "HEAD",
   }, adapter.ctx.toplevel)
 
   if code ~= 0 then
@@ -138,7 +138,7 @@ function GitRev:object_name(abbrev_len)
 
     return self.commit
   elseif self.type == RevType.STAGE then
-    return ":" ..  self.stage
+    return ":" .. self.stage
   end
 
   return "UNKNOWN"

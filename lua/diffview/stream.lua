@@ -18,7 +18,7 @@ local M = {}
 local Stream = oop.create_class("Stream")
 M.Stream = Stream
 
-Stream.EOF = oop.Symbol("Stream.EOF");
+Stream.EOF = oop.Symbol("Stream.EOF")
 
 ---@alias Stream.SrcFunc fun(): (item: unknown, continue: boolean?)
 
@@ -75,7 +75,9 @@ function Stream:skip(n)
     return
   end
 
-  for _ = 1, n do self:next() end
+  for _ = 1, n do
+    self:next()
+  end
 
   return self
 end
@@ -85,7 +87,9 @@ function Stream:iter()
   return function()
     local v, i = self:next()
     ---@diagnostic disable-next-line: missing-return-value, return-type-mismatch
-    if v == Stream.EOF then return nil end
+    if v == Stream.EOF then
+      return nil
+    end
     ---@cast i -?
     return i, v
   end
@@ -94,7 +98,9 @@ end
 ---@return unknown[]
 function Stream:collect()
   local ret = {}
-  for i, v in self:iter() do ret[i] = v end
+  for i, v in self:iter() do
+    ret[i] = v
+  end
   return ret
 end
 
@@ -102,11 +108,17 @@ end
 ---@param last? integer (default: math.huge)
 ---@return Stream
 function Stream:slice(first, last)
-  if first == nil then first = 1 end
-  if last == nil then last = math.huge end
+  if first == nil then
+    first = 1
+  end
+  if last == nil then
+    last = math.huge
+  end
 
   return Stream(function()
-    if self.head > last then return nil, false end
+    if self.head > last then
+      return nil, false
+    end
     if first > self.head then
       self:skip(first - self.head)
     end
@@ -123,7 +135,9 @@ function Stream:map(f)
 
     while v ~= Stream.EOF do
       v = f(v)
-      if v ~= nil then break end
+      if v ~= nil then
+        break
+      end
       v = self:next()
     end
 
@@ -153,8 +167,12 @@ end
 ---@return T
 function Stream:reduce(f, init)
   local acc = init
-  if not acc then acc = self:next() end
-  for _, v in self:iter() do acc = f(acc, v) end
+  if not acc then
+    acc = self:next()
+  end
+  for _, v in self:iter() do
+    acc = f(acc, v)
+  end
 
   return acc
 end
@@ -242,7 +260,9 @@ end
 ---Append the given items to the end of the stream. Pushing `Stream.EOF` will
 ---close the stream.
 function AsyncListStream:push(...)
-  if self:is_closed() then return end
+  if self:is_closed() then
+    return
+  end
   local args = { ... }
   local permit = await(self.sem:acquire()) --[[@as Permit ]]
 
@@ -258,7 +278,7 @@ function AsyncListStream:push(...)
           self:invoke_listeners("on_close")
           permit = await(self.sem:acquire()) --[[@as Permit ]]
 
-          self.data[#self.data+1] = args[i]
+          self.data[#self.data + 1] = args[i]
           self.flow_state = StreamState.CLOSED
 
           self:invoke_listeners("on_post_close")
@@ -266,7 +286,7 @@ function AsyncListStream:push(...)
           break
         end
       else
-        self.data[#self.data+1] = args[i]
+        self.data[#self.data + 1] = args[i]
       end
     end
   end
@@ -282,7 +302,9 @@ end
 
 ---@param ... any Arguments to pass to the `on_close` callback.
 function AsyncListStream:close(...)
-  if self:is_closed() then return end
+  if self:is_closed() then
+    return
+  end
   self.state.on_close.args = utils.tbl_pack(...)
   self:push(Stream.EOF)
 end

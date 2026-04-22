@@ -75,14 +75,14 @@ describe("diffview.vcs.adapters.git.parser", function()
 
     local function make_stat_data(overrides)
       local defaults = {
-        "abc123 def456",            -- [1] right_hash left_hash
-        "Test Author",              -- [2] author
-        "1700000000",               -- [3] epoch
-        "2023-11-14 12:00 +0100",   -- [4] date with offset
-        "2 days ago",               -- [5] relative date
-        "::HEAD -> main",           -- [6] ref names
-        "::",                       -- [7] reflog selector
-        "::Fix a bug",              -- [8] subject
+        "abc123 def456", -- [1] right_hash left_hash
+        "Test Author", -- [2] author
+        "1700000000", -- [3] epoch
+        "2023-11-14 12:00 +0100", -- [4] date with offset
+        "2 days ago", -- [5] relative date
+        "::HEAD -> main", -- [6] ref names
+        "::", -- [7] reflog selector
+        "::Fix a bug", -- [8] subject
       }
 
       if overrides then

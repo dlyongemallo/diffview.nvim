@@ -65,7 +65,6 @@ function FHOptionPanel:init(parent)
       self:_set_option(option_name, not cur_value)
       self:render()
       self:redraw()
-
     elseif self.flags.options[option_name] then
       local o = self.flags.options[option_name]
 
@@ -83,7 +82,6 @@ function FHOptionPanel:init(parent)
           self:render()
           self:redraw()
         end)
-
       else
         local completion = type(o.completion) == "function" and o.completion(self) or o.completion
 
@@ -127,7 +125,7 @@ function FHOptionPanel:init(parent)
   self:on_autocmd("WinClosed", {
     callback = function()
       if not vim.deep_equal(self.option_state, self.parent:get_log_options()) then
-        vim.schedule(function ()
+        vim.schedule(function()
           self.option_state = nil
           self.winid = nil
           self.parent:update_entries(function(_, status)
@@ -166,14 +164,9 @@ function FHOptionPanel:setup_buffer()
   for _, group in pairs(self.flags) do
     ---@cast group FlagOption[]
     for option_name, v in pairs(group) do
-      vim.keymap.set(
-        "n",
-        v.keymap,
-        function()
-          self.emitter:emit("set_option", option_name)
-        end,
-        { silent = true, buffer = self.bufid }
-      )
+      vim.keymap.set("n", v.keymap, function()
+        self.emitter:emit("set_option", option_name)
+      end, { silent = true, buffer = self.bufid })
     end
   end
 end
@@ -182,10 +175,10 @@ function FHOptionPanel:update_components()
   local switch_schema = {}
   local option_schema = {}
   for _, option in ipairs(self.flags.switches) do
-    table.insert(switch_schema, { name = "switch", context = { option = option, }, })
+    table.insert(switch_schema, { name = "switch", context = { option = option } })
   end
   for _, option in ipairs(self.flags.options) do
-    table.insert(option_schema, { name = "option", context = { option = option }, })
+    table.insert(option_schema, { name = "option", context = { option = option } })
   end
 
   ---@type CompStruct

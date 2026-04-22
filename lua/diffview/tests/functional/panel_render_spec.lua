@@ -111,7 +111,10 @@ describe("panel_render", function()
   describe("file count on collapsed folders", function()
     describe("Node:leaves()", function()
       it("returns leaf nodes for a flat directory", function()
-        local root = Node("root", { name = "root", path = "root", kind = "working", collapsed = false, status = "M" })
+        local root = Node(
+          "root",
+          { name = "root", path = "root", kind = "working", collapsed = false, status = "M" }
+        )
         root:add_child(Node("a.lua", { path = "root/a.lua", status = "M" }))
         root:add_child(Node("b.lua", { path = "root/b.lua", status = "A" }))
         root:add_child(Node("c.lua", { path = "root/c.lua", status = "D" }))
@@ -123,9 +126,21 @@ describe("panel_render", function()
       it("returns leaf nodes across nested directories", function()
         -- Structure: src/ -> components/ -> [a.lua, b.lua]
         --                  -> utils/ -> [c.lua]
-        local src = Node("src", { name = "src", path = "src", kind = "working", collapsed = false, status = "M" })
-        local components = Node("components", { name = "components", path = "src/components", kind = "working", collapsed = false, status = "M" })
-        local utils_dir = Node("utils", { name = "utils", path = "src/utils", kind = "working", collapsed = false, status = "A" })
+        local src = Node(
+          "src",
+          { name = "src", path = "src", kind = "working", collapsed = false, status = "M" }
+        )
+        local components = Node("components", {
+          name = "components",
+          path = "src/components",
+          kind = "working",
+          collapsed = false,
+          status = "M",
+        })
+        local utils_dir = Node(
+          "utils",
+          { name = "utils", path = "src/utils", kind = "working", collapsed = false, status = "A" }
+        )
         src:add_child(components)
         src:add_child(utils_dir)
         components:add_child(Node("a.lua", { path = "src/components/a.lua", status = "M" }))
@@ -138,9 +153,14 @@ describe("panel_render", function()
 
       it("returns only the deeply nested leaf in a long chain", function()
         -- Chain: a/ -> b/ -> c/ -> file.lua
-        local a = Node("a", { name = "a", path = "a", kind = "working", collapsed = false, status = "M" })
-        local b = Node("b", { name = "b", path = "a/b", kind = "working", collapsed = false, status = "M" })
-        local c = Node("c", { name = "c", path = "a/b/c", kind = "working", collapsed = false, status = "M" })
+        local a =
+          Node("a", { name = "a", path = "a", kind = "working", collapsed = false, status = "M" })
+        local b =
+          Node("b", { name = "b", path = "a/b", kind = "working", collapsed = false, status = "M" })
+        local c = Node(
+          "c",
+          { name = "c", path = "a/b/c", kind = "working", collapsed = false, status = "M" }
+        )
         a:add_child(b)
         b:add_child(c)
         c:add_child(Node("file.lua", { path = "a/b/c/file.lua", status = "M" }))
@@ -158,7 +178,10 @@ describe("panel_render", function()
         config.setup(conf)
 
         -- Build a directory node with 3 leaves.
-        local dir_node = Node("src", { name = "src", path = "src", kind = "working", collapsed = true, status = "M" })
+        local dir_node = Node(
+          "src",
+          { name = "src", path = "src", kind = "working", collapsed = true, status = "M" }
+        )
         dir_node:add_child(Node("a.lua", { path = "src/a.lua", status = "M" }))
         dir_node:add_child(Node("b.lua", { path = "src/b.lua", status = "M" }))
         dir_node:add_child(Node("c.lua", { path = "src/c.lua", status = "M" }))
@@ -187,7 +210,10 @@ describe("panel_render", function()
         conf.file_panel.tree_options.folder_count_style = "grouped"
         config.setup(conf)
 
-        local dir_node = Node("src", { name = "src", path = "src", kind = "working", collapsed = true, status = "M" })
+        local dir_node = Node(
+          "src",
+          { name = "src", path = "src", kind = "working", collapsed = true, status = "M" }
+        )
         dir_node:add_child(Node("a.lua", { path = "src/a.lua", status = "M" }))
         dir_node:add_child(Node("b.lua", { path = "src/b.lua", status = "A" }))
         dir_node:add_child(Node("c.lua", { path = "src/c.lua", status = "M" }))
@@ -203,7 +229,10 @@ describe("panel_render", function()
         assert.truthy(added_text:find("1"), "expected A-status highlight to contain count 1")
         assert.is_nil(added_text:find("2"), "did not expect A-status highlight to contain count 2")
         assert.truthy(modified_text:find("2"), "expected M-status highlight to contain count 2")
-        assert.is_nil(modified_text:find("1"), "did not expect M-status highlight to contain count 1")
+        assert.is_nil(
+          modified_text:find("1"),
+          "did not expect M-status highlight to contain count 1"
+        )
 
         -- The opening and closing parentheses should be DiffviewDim1.
         local dim_segs = comp:segments_by_hl("DiffviewDim1")
@@ -216,7 +245,10 @@ describe("panel_render", function()
         conf.file_panel.tree_options.folder_count_style = "grouped"
         config.setup(conf)
 
-        local dir_node = Node("src", { name = "src", path = "src", kind = "working", collapsed = true, status = "M" })
+        local dir_node = Node(
+          "src",
+          { name = "src", path = "src", kind = "working", collapsed = true, status = "M" }
+        )
         dir_node:add_child(Node("x.lua", { path = "src/x.lua", status = "D" }))
         dir_node:add_child(Node("y.lua", { path = "src/y.lua", status = "D" }))
         dir_node:add_child(Node("z.lua", { path = "src/z.lua", status = "A" }))
@@ -232,7 +264,10 @@ describe("panel_render", function()
         assert.truthy(added_text:find("1"), "expected A-status highlight to contain count 1")
         assert.is_nil(added_text:find("2"), "did not expect A-status highlight to contain count 2")
         assert.truthy(deleted_text:find("2"), "expected D-status highlight to contain count 2")
-        assert.is_nil(deleted_text:find("1"), "did not expect D-status highlight to contain count 1")
+        assert.is_nil(
+          deleted_text:find("1"),
+          "did not expect D-status highlight to contain count 1"
+        )
 
         -- The opening and closing parentheses should be DiffviewDim1.
         local dim_segs = comp:segments_by_hl("DiffviewDim1")
@@ -245,7 +280,10 @@ describe("panel_render", function()
         conf.file_panel.tree_options.folder_count_style = "none"
         config.setup(conf)
 
-        local dir_node = Node("src", { name = "src", path = "src", kind = "working", collapsed = true, status = "M" })
+        local dir_node = Node(
+          "src",
+          { name = "src", path = "src", kind = "working", collapsed = true, status = "M" }
+        )
         dir_node:add_child(Node("a.lua", { path = "src/a.lua", status = "M" }))
         dir_node:add_child(Node("b.lua", { path = "src/b.lua", status = "A" }))
 
@@ -258,7 +296,10 @@ describe("panel_render", function()
 
       it("does not show count when directory is expanded", function()
         -- When collapsed is false, the count section is skipped.
-        local dir_node = Node("src", { name = "src", path = "src", kind = "working", collapsed = false, status = "M" })
+        local dir_node = Node(
+          "src",
+          { name = "src", path = "src", kind = "working", collapsed = false, status = "M" }
+        )
         dir_node:add_child(Node("a.lua", { path = "src/a.lua", status = "M" }))
 
         local ctx = {
@@ -315,14 +356,20 @@ describe("panel_render", function()
       local files = { conflicting = {}, working = working or {}, staged = {} }
       function files:iter()
         local all = {}
-        for _, f in ipairs(self.working) do all[#all + 1] = f end
+        for _, f in ipairs(self.working) do
+          all[#all + 1] = f
+        end
         local i = 0
         return function()
           i = i + 1
-          if i <= #all then return i, all[i] end
+          if i <= #all then
+            return i, all[i]
+          end
         end
       end
-      function files:len() return #self.conflicting + #self.working + #self.staged end
+      function files:len()
+        return #self.conflicting + #self.working + #self.staged
+      end
       return files
     end
 
@@ -333,7 +380,9 @@ describe("panel_render", function()
 
       local adapter = {
         ctx = { toplevel = "/tmp", dir = "/tmp/.git" },
-        get_branch_name = function() return nil end,
+        get_branch_name = function()
+          return nil
+        end,
       }
       local panel = FilePanel(adapter, make_files(entries or {}), {})
       panel.listing_style = "list"
@@ -408,19 +457,30 @@ describe("panel_render", function()
     local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
 
     local function make_files(conflicting, working, staged)
-      local files = { conflicting = conflicting or {}, working = working or {}, staged = staged or {} }
+      local files =
+        { conflicting = conflicting or {}, working = working or {}, staged = staged or {} }
       function files:iter()
         local all = {}
-        for _, f in ipairs(self.conflicting) do all[#all + 1] = f end
-        for _, f in ipairs(self.working) do all[#all + 1] = f end
-        for _, f in ipairs(self.staged) do all[#all + 1] = f end
+        for _, f in ipairs(self.conflicting) do
+          all[#all + 1] = f
+        end
+        for _, f in ipairs(self.working) do
+          all[#all + 1] = f
+        end
+        for _, f in ipairs(self.staged) do
+          all[#all + 1] = f
+        end
         local i = 0
         return function()
           i = i + 1
-          if i <= #all then return i, all[i] end
+          if i <= #all then
+            return i, all[i]
+          end
         end
       end
-      function files:len() return #self.conflicting + #self.working + #self.staged end
+      function files:len()
+        return #self.conflicting + #self.working + #self.staged
+      end
       return files
     end
 
@@ -430,7 +490,9 @@ describe("panel_render", function()
 
       local adapter = {
         ctx = { toplevel = "/tmp", dir = "/tmp/.git" },
-        get_branch_name = function() return nil end,
+        get_branch_name = function()
+          return nil
+        end,
       }
       local panel = FilePanel(adapter, make_files(conflicting, working, staged), {})
       panel.listing_style = "list"
@@ -459,7 +521,10 @@ describe("panel_render", function()
 
       local lines = vim.api.nvim_buf_get_lines(panel.bufid, 0, -1, false)
       local joined = table.concat(lines, "\n")
-      assert.falsy(joined:find("Working tree clean"), "should not show clean message with working files")
+      assert.falsy(
+        joined:find("Working tree clean"),
+        "should not show clean message with working files"
+      )
 
       panel:destroy()
     end)
@@ -475,8 +540,10 @@ describe("panel_render", function()
       local lines = vim.api.nvim_buf_get_lines(panel.bufid, 0, -1, false)
       local joined = table.concat(lines, "\n")
       -- "Working tree clean" should NOT appear because conflicts exist.
-      assert.falsy(joined:find("Working tree clean"),
-        "should not show clean message when conflicts exist")
+      assert.falsy(
+        joined:find("Working tree clean"),
+        "should not show clean message when conflicts exist"
+      )
 
       panel:destroy()
     end)
@@ -491,8 +558,10 @@ describe("panel_render", function()
       local joined = table.concat(lines, "\n")
       -- When staged files exist but working is empty, it should say "(empty)"
       -- for the working section, not "Working tree clean".
-      assert.falsy(joined:find("Working tree clean"),
-        "should not show clean message when staged files exist")
+      assert.falsy(
+        joined:find("Working tree clean"),
+        "should not show clean message when staged files exist"
+      )
 
       panel:destroy()
     end)
@@ -725,14 +794,20 @@ describe("panel_render", function()
       local files = { conflicting = {}, working = working or {}, staged = {} }
       function files:iter()
         local all = {}
-        for _, f in ipairs(self.working) do all[#all + 1] = f end
+        for _, f in ipairs(self.working) do
+          all[#all + 1] = f
+        end
         local i = 0
         return function()
           i = i + 1
-          if i <= #all then return i, all[i] end
+          if i <= #all then
+            return i, all[i]
+          end
         end
       end
-      function files:len() return #self.conflicting + #self.working + #self.staged end
+      function files:len()
+        return #self.conflicting + #self.working + #self.staged
+      end
       return files
     end
 
@@ -741,7 +816,9 @@ describe("panel_render", function()
 
       local adapter = {
         ctx = { toplevel = "/tmp", dir = "/tmp/.git" },
-        get_branch_name = function() return nil end,
+        get_branch_name = function()
+          return nil
+        end,
       }
       local panel = FilePanel(adapter, make_files(entries or {}), {})
       panel.listing_style = "list"
@@ -753,7 +830,11 @@ describe("panel_render", function()
     ---Get all sign extmarks in the selection signs namespace.
     local function get_signs(panel)
       return vim.api.nvim_buf_get_extmarks(
-        panel.bufid, selection_signs_ns, 0, -1, { details = true }
+        panel.bufid,
+        selection_signs_ns,
+        0,
+        -1,
+        { details = true }
       )
     end
 
@@ -842,48 +923,54 @@ describe("panel_render", function()
       panel:destroy()
     end)
 
-    it("sign_column mode places no signs when nothing is selected and always_show_marks is false", function()
-      local conf = config.get_config()
-      conf.file_panel.mark_placement = "sign_column"
-      conf.file_panel.always_show_marks = false
-      config.setup(conf)
+    it(
+      "sign_column mode places no signs when nothing is selected and always_show_marks is false",
+      function()
+        local conf = config.get_config()
+        conf.file_panel.mark_placement = "sign_column"
+        conf.file_panel.always_show_marks = false
+        config.setup(conf)
 
-      local f = make_entry("a.lua")
-      local panel = make_panel({ f })
-      -- No selections.
-      panel:update_components()
-      panel:render()
-      panel:redraw()
+        local f = make_entry("a.lua")
+        local panel = make_panel({ f })
+        -- No selections.
+        panel:update_components()
+        panel:render()
+        panel:redraw()
 
-      eq(0, #get_signs(panel))
+        eq(0, #get_signs(panel))
 
-      panel:destroy()
-    end)
-
-    it("sign_column mode places signs when always_show_marks is true even with no selections", function()
-      local conf = config.get_config()
-      conf.file_panel.mark_placement = "sign_column"
-      conf.file_panel.always_show_marks = true
-      config.setup(conf)
-
-      local f1 = make_entry("a.lua")
-      local f2 = make_entry("b.lua")
-      local panel = make_panel({ f1, f2 })
-      -- No selections.
-      panel:update_components()
-      panel:render()
-      panel:redraw()
-
-      local signs = get_signs(panel)
-      eq(2, #signs)
-
-      -- All signs should show the unselected mark.
-      for _, s in ipairs(signs) do
-        eq(conf.signs.unselected_file, vim.trim(s[4].sign_text))
+        panel:destroy()
       end
+    )
 
-      panel:destroy()
-    end)
+    it(
+      "sign_column mode places signs when always_show_marks is true even with no selections",
+      function()
+        local conf = config.get_config()
+        conf.file_panel.mark_placement = "sign_column"
+        conf.file_panel.always_show_marks = true
+        config.setup(conf)
+
+        local f1 = make_entry("a.lua")
+        local f2 = make_entry("b.lua")
+        local panel = make_panel({ f1, f2 })
+        -- No selections.
+        panel:update_components()
+        panel:render()
+        panel:redraw()
+
+        local signs = get_signs(panel)
+        eq(2, #signs)
+
+        -- All signs should show the unselected mark.
+        for _, s in ipairs(signs) do
+          eq(conf.signs.unselected_file, vim.trim(s[4].sign_text))
+        end
+
+        panel:destroy()
+      end
+    )
 
     it("sign_column mode uses DiffviewFilePanelMarked highlight for selected files", function()
       local conf = config.get_config()
@@ -1037,7 +1124,9 @@ describe("panel_render", function()
 
         local adapter = {
           ctx = { toplevel = "/tmp", dir = "/tmp/.git" },
-          get_branch_name = function() return nil end,
+          get_branch_name = function()
+            return nil
+          end,
         }
         local fd = FileDict()
         for i, e in ipairs(entries) do
@@ -1185,8 +1274,12 @@ describe("panel_render", function()
     ---Create a minimal panel stub exposing the methods render_file depends on.
     local function make_panel_stub()
       return {
-        is_selected = function(_, _) return false end,
-        has_any_selections = function(_) return false end,
+        is_selected = function(_, _)
+          return false
+        end,
+        has_any_selections = function(_)
+          return false
+        end,
       }
     end
 
@@ -1375,7 +1468,9 @@ describe("panel_render", function()
       -- installed in the test environment.
       saved_devicons = package.loaded["nvim-web-devicons"]
       package.loaded["nvim-web-devicons"] = {
-        get_icon = function() return "", nil end,
+        get_icon = function()
+          return "", nil
+        end,
       }
     end)
 
@@ -1396,7 +1491,9 @@ describe("panel_render", function()
 
       local adapter = {
         ctx = { toplevel = "/tmp", dir = "/tmp/.git" },
-        get_branch_name = function() return nil end,
+        get_branch_name = function()
+          return nil
+        end,
       }
       local fd = FileDict()
       for i, e in ipairs(entries) do

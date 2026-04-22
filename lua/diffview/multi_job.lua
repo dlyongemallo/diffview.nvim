@@ -51,9 +51,7 @@ MultiJob.FAIL_COND = {
     local failed = {}
 
     for _, job in ipairs(mj.jobs) do
-      if #job.stdout == 1 and job.stdout[1] == ""
-        or #job.stdout == 0
-      then
+      if #job.stdout == 1 and job.stdout[1] == "" or #job.stdout == 0 then
         failed[#failed + 1] = job
       end
     end
@@ -77,8 +75,12 @@ function MultiJob:init(jobs, opt)
   self.log_opt = job_utils.default_log_opt(opt.log_opt, 4)
   self.check_status = job_utils.resolve_fail_cond(opt.fail_cond, MultiJob.FAIL_COND)
 
-  if opt.on_exit then self:on_exit(opt.on_exit) end
-  if opt.on_retry then self:on_retry(opt.on_retry) end
+  if opt.on_exit then
+    self:on_exit(opt.on_exit)
+  end
+  if opt.on_retry then
+    self:on_retry(opt.on_retry)
+  end
 end
 
 ---@private
@@ -116,7 +118,9 @@ MultiJob.start = async.wrap(function(self, callback)
     local ok, err
     ok, jobs, err = self:check_status()
 
-    if ok then break end
+    if ok then
+      break
+    end
     ---@cast jobs -?
 
     if i == self.retry + 1 then
@@ -164,7 +168,9 @@ MultiJob.await = async.sync_wrap(function(self, callback)
   if self:is_done() then
     callback(self:is_success())
   elseif self:is_running() then
-    self:on_exit(function(_, ...) callback(...) end)
+    self:on_exit(function(_, ...)
+      callback(...)
+    end)
   else
     callback(await(self:start()))
   end
@@ -174,7 +180,9 @@ end)
 ---@return string? err
 function MultiJob:is_success()
   local ok, _, err = self:check_status()
-  if not ok then return false, err end
+  if not ok then
+    return false, err
+  end
   return true
 end
 
@@ -230,7 +238,9 @@ function MultiJob:kill(code, signal)
   for _, job in ipairs(self.jobs) do
     if job:is_running() then
       local success = job:kill(code, signal)
-      if not success then ret = nil end
+      if not success then
+        ret = nil
+      end
     end
   end
 

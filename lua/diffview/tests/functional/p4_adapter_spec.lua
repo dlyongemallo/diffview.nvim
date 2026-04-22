@@ -44,10 +44,7 @@ local function create_p4_repo()
   -- Create a client workspace.
   local spec = run({ "p4", "client", "-o", p4client }, workspace, env)
   spec = spec:gsub("Root:\t[^\n]+", "Root:\t" .. workspace)
-  vim.fn.system(
-    { "p4", "-p", p4port, "-u", p4user, "client", "-i" },
-    spec
-  )
+  vim.fn.system({ "p4", "-p", p4port, "-u", p4user, "client", "-i" }, spec)
   assert.equals(0, vim.v.shell_error, "p4 client -i failed")
 
   --- Build common p4 flags including -d for the workspace directory.
@@ -144,7 +141,10 @@ describe("diffview.vcs.adapters.p4", function()
     end)
 
     it("to_range formats single and double revision strings", function()
-      assert.equals("@1,@5", P4Rev.to_range(P4Rev(RevType.COMMIT, "@1"), P4Rev(RevType.COMMIT, "@5")))
+      assert.equals(
+        "@1,@5",
+        P4Rev.to_range(P4Rev(RevType.COMMIT, "@1"), P4Rev(RevType.COMMIT, "@5"))
+      )
       assert.equals("@1", P4Rev.to_range(P4Rev(RevType.COMMIT, "@1")))
       assert.equals("@1", P4Rev.to_range(P4Rev(RevType.COMMIT, "@1"), P4Rev(RevType.COMMIT, "@1")))
     end)
@@ -223,114 +223,145 @@ describe("diffview.vcs.adapters.p4", function()
     end)
 
     after_each(function()
-      if repo then repo:cleanup() end
+      if repo then
+        repo:cleanup()
+      end
     end)
 
-    it("parses p4 opened output without double revision specifiers", test_utils.async_test(function()
-      if not p4_available() then pending("p4/p4d not installed") return end
+    it(
+      "parses p4 opened output without double revision specifiers",
+      test_utils.async_test(function()
+        if not p4_available() then
+          pending("p4/p4d not installed")
+          return
+        end
 
-      -- Seed the depot with an initial file.
-      repo.write("src/main.lua", 'print("v1")\n')
-      repo.p4({ "add", "src/main.lua" })
-      repo.p4({ "submit", "-d", "CL 1: add main.lua" })
+        -- Seed the depot with an initial file.
+        repo.write("src/main.lua", 'print("v1")\n')
+        repo.p4({ "add", "src/main.lua" })
+        repo.p4({ "submit", "-d", "CL 1: add main.lua" })
 
-      -- Open the file for edit so it appears in `p4 opened`.
-      repo.p4({ "edit", "src/main.lua" })
-      repo.write("src/main.lua", 'print("v2")\n')
+        -- Open the file for edit so it appears in `p4 opened`.
+        repo.p4({ "edit", "src/main.lua" })
+        repo.write("src/main.lua", 'print("v2")\n')
 
-      local adapter = repo:adapter()
-      local left = P4Rev(RevType.COMMIT, "#head")
-      local right = P4Rev(RevType.LOCAL)
-      local args = adapter:rev_to_args(left, right)
+        local adapter = repo:adapter()
+        local left = P4Rev(RevType.COMMIT, "#head")
+        local right = P4Rev(RevType.LOCAL)
+        local args = adapter:rev_to_args(left, right)
 
-      local err, files = await(adapter:tracked_files(
-        left, right, args, "working",
-        { default_layout = Diff2, merge_layout = Diff2 }
-      ))
-
-      assert.is_nil(err)
-      assert.is_true(#files > 0)
-
-      -- Paths must be workspace-relative (no depot prefix, no #rev).
-      for _, file in ipairs(files) do
-        assert.is_nil(
-          file.path:match("#%d+"),
-          ("path %q should not contain a revision specifier"):format(file.path)
+        local err, files = await(
+          adapter:tracked_files(
+            left,
+            right,
+            args,
+            "working",
+            { default_layout = Diff2, merge_layout = Diff2 }
+          )
         )
-        assert.is_nil(
-          file.path:match("^//"),
-          ("path %q should not be a depot path"):format(file.path)
+
+        assert.is_nil(err)
+        assert.is_true(#files > 0)
+
+        -- Paths must be workspace-relative (no depot prefix, no #rev).
+        for _, file in ipairs(files) do
+          assert.is_nil(
+            file.path:match("#%d+"),
+            ("path %q should not contain a revision specifier"):format(file.path)
+          )
+          assert.is_nil(
+            file.path:match("^//"),
+            ("path %q should not be a depot path"):format(file.path)
+          )
+        end
+      end)
+    )
+
+    it(
+      "parses diff2 -ds output for commit-to-commit diffs",
+      test_utils.async_test(function()
+        if not p4_available() then
+          pending("p4/p4d not installed")
+          return
+        end
+
+        -- CL 1: add two files.
+        repo.write("src/main.lua", 'print("v1")\n')
+        repo.write("src/utils.lua", "local M = {}; return M\n")
+        repo.p4({ "add", "src/main.lua", "src/utils.lua" })
+        repo.p4({ "submit", "-d", "CL 1: initial" })
+
+        -- CL 2: edit main, delete utils, add new.
+        repo.p4({ "edit", "src/main.lua" })
+        repo.write("src/main.lua", 'print("v2")\n')
+        repo.p4({ "delete", "src/utils.lua" })
+        repo.write("src/new.lua", "new\n")
+        repo.p4({ "add", "src/new.lua" })
+        repo.p4({ "submit", "-d", "CL 2: modify, delete, add" })
+
+        local adapter = repo:adapter()
+        local left = P4Rev(RevType.COMMIT, "@1")
+        local right = P4Rev(RevType.COMMIT, "@2")
+        local args = adapter:rev_to_args(left, right)
+
+        local err, files = await(
+          adapter:tracked_files(
+            left,
+            right,
+            args,
+            "working",
+            { default_layout = Diff2, merge_layout = Diff2 }
+          )
         )
-      end
-    end))
 
-    it("parses diff2 -ds output for commit-to-commit diffs", test_utils.async_test(function()
-      if not p4_available() then pending("p4/p4d not installed") return end
+        assert.is_nil(err)
 
-      -- CL 1: add two files.
-      repo.write("src/main.lua", 'print("v1")\n')
-      repo.write("src/utils.lua", "local M = {}; return M\n")
-      repo.p4({ "add", "src/main.lua", "src/utils.lua" })
-      repo.p4({ "submit", "-d", "CL 1: initial" })
+        -- Build a status lookup keyed by the last component of the depot path.
+        local by_name = {}
+        for _, file in ipairs(files) do
+          local name = file.path:match("[^/]+$")
+          by_name[name] = file
 
-      -- CL 2: edit main, delete utils, add new.
-      repo.p4({ "edit", "src/main.lua" })
-      repo.write("src/main.lua", 'print("v2")\n')
-      repo.p4({ "delete", "src/utils.lua" })
-      repo.write("src/new.lua", "new\n")
-      repo.p4({ "add", "src/new.lua" })
-      repo.p4({ "submit", "-d", "CL 2: modify, delete, add" })
+          -- No path should contain a #rev suffix.
+          assert.is_nil(
+            file.path:match("#%d+"),
+            ("path %q should not contain a revision specifier"):format(file.path)
+          )
+        end
 
-      local adapter = repo:adapter()
-      local left = P4Rev(RevType.COMMIT, "@1")
-      local right = P4Rev(RevType.COMMIT, "@2")
-      local args = adapter:rev_to_args(left, right)
+        assert.is_not_nil(by_name["main.lua"], "main.lua should appear (modified)")
+        assert.equals("M", by_name["main.lua"].status)
 
-      local err, files = await(adapter:tracked_files(
-        left, right, args, "working",
-        { default_layout = Diff2, merge_layout = Diff2 }
-      ))
+        assert.is_not_nil(by_name["new.lua"], "new.lua should appear (added)")
+        assert.equals("A", by_name["new.lua"].status)
 
-      assert.is_nil(err)
+        assert.is_not_nil(by_name["utils.lua"], "utils.lua should appear (deleted)")
+        assert.equals("D", by_name["utils.lua"].status)
+      end)
+    )
 
-      -- Build a status lookup keyed by the last component of the depot path.
-      local by_name = {}
-      for _, file in ipairs(files) do
-        local name = file.path:match("[^/]+$")
-        by_name[name] = file
+    it(
+      "shows file content via get_show_args without errors",
+      test_utils.async_test(function()
+        if not p4_available() then
+          pending("p4/p4d not installed")
+          return
+        end
 
-        -- No path should contain a #rev suffix.
-        assert.is_nil(
-          file.path:match("#%d+"),
-          ("path %q should not contain a revision specifier"):format(file.path)
-        )
-      end
+        repo.write("hello.txt", "hello world\n")
+        repo.p4({ "add", "hello.txt" })
+        repo.p4({ "submit", "-d", "add hello" })
 
-      assert.is_not_nil(by_name["main.lua"], "main.lua should appear (modified)")
-      assert.equals("M", by_name["main.lua"].status)
+        local adapter = repo:adapter()
 
-      assert.is_not_nil(by_name["new.lua"], "new.lua should appear (added)")
-      assert.equals("A", by_name["new.lua"].status)
+        -- Simulate what the plugin does: show file at #head.
+        local err, content =
+          await(adapter:show("//depot/hello.txt", P4Rev(RevType.COMMIT, "#head")))
 
-      assert.is_not_nil(by_name["utils.lua"], "utils.lua should appear (deleted)")
-      assert.equals("D", by_name["utils.lua"].status)
-    end))
-
-    it("shows file content via get_show_args without errors", test_utils.async_test(function()
-      if not p4_available() then pending("p4/p4d not installed") return end
-
-      repo.write("hello.txt", "hello world\n")
-      repo.p4({ "add", "hello.txt" })
-      repo.p4({ "submit", "-d", "add hello" })
-
-      local adapter = repo:adapter()
-
-      -- Simulate what the plugin does: show file at #head.
-      local err, content = await(adapter:show("//depot/hello.txt", P4Rev(RevType.COMMIT, "#head")))
-
-      assert.is_nil(err)
-      assert.is_not_nil(content)
-      assert.equals("hello world", vim.trim(table.concat(content, "\n")))
-    end))
+        assert.is_nil(err)
+        assert.is_not_nil(content)
+        assert.equals("hello world", vim.trim(table.concat(content, "\n")))
+      end)
+    )
   end)
 end)

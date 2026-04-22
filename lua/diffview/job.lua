@@ -74,7 +74,9 @@ Job.FAIL_COND = {
   on_empty = function(j)
     local msg = fmt("Job expected output, but returned nothing! Code: %d", j.code)
     local n = #j.stdout
-    if n == 0 or (n == 1 and j.stdout[1] == "") then return false, msg end
+    if n == 0 or (n == 1 and j.stdout[1] == "") then
+      return false, msg
+    end
     return true
   end,
 }
@@ -98,10 +100,18 @@ function Job:init(opt)
   self.log_opt = job_utils.default_log_opt(opt.log_opt, 4)
   self.check_status = job_utils.resolve_fail_cond(opt.fail_cond, Job.FAIL_COND)
 
-  if opt.on_stdout then self:on_stdout(opt.on_stdout) end
-  if opt.on_stderr then self:on_stderr(opt.on_stderr) end
-  if opt.on_exit then self:on_exit(opt.on_exit) end
-  if opt.on_retry then self:on_retry(opt.on_retry) end
+  if opt.on_stdout then
+    self:on_stdout(opt.on_stdout)
+  end
+  if opt.on_stderr then
+    self:on_stderr(opt.on_stderr)
+  end
+  if opt.on_exit then
+    self:on_exit(opt.on_exit)
+  end
+  if opt.on_retry then
+    self:on_retry(opt.on_retry)
+  end
 end
 
 ---@param ... uv_handle_t
@@ -127,7 +137,9 @@ local function process_chunks(chunks)
 
   local has_eof = data:sub(-1) == "\n"
   local ret = vim.split(data, "\r?\n")
-  if has_eof then ret[#ret] = nil end
+  if has_eof then
+    ret[#ret] = nil
+  end
 
   return ret
 end
@@ -158,7 +170,7 @@ function Job:line_reader(pipe, out, line_listeners)
 
   ---@param err? string
   ---@param data? string
-  return function (err, data)
+  return function(err, data)
     if err then
       logger:error("[Job:line_reader()] " .. err)
     end
@@ -174,7 +186,7 @@ function Job:line_reader(pipe, out, line_listeners)
         if not has_eol and i == #lines then
           line_buffer = line
         else
-          out[#out+1] = line
+          out[#out + 1] = line
 
           if line_listeners then
             for _, listener in ipairs(line_listeners) do
@@ -185,7 +197,7 @@ function Job:line_reader(pipe, out, line_listeners)
       end
     else
       if line_buffer then
-        out[#out+1] = line_buffer
+        out[#out + 1] = line_buffer
 
         if line_listeners then
           for _, listener in ipairs(line_listeners) do
@@ -220,7 +232,9 @@ end
 ---@param data string|string[]
 function Job:handle_writer(pipe, data)
   if type(data) == "string" then
-    if data:sub(-1) ~= "\n" then data = data .. "\n" end
+    if data:sub(-1) ~= "\n" then
+      data = data .. "\n"
+    end
     pipe:write(data, function(err)
       if err then
         logger:error("[Job:handle_writer()] " .. err)
@@ -228,7 +242,6 @@ function Job:handle_writer(pipe, data)
 
       try_close(pipe)
     end)
-
   else
     ---@cast data string[]
     local c = #data
@@ -292,15 +305,18 @@ Job.start = async.wrap(function(self, callback)
     cwd = self.cwd,
     env = self.env,
     hide = true,
-  },
-  function(code, signal)
+  }, function(code, signal)
     ---@cast handle -?
     handle:close()
     self.p_out:read_stop()
     self.p_err:read_stop()
 
-    if not self.code then self.code = code end
-    if not self.signal then self.signal = signal end
+    if not self.code then
+      self.code = code
+    end
+    if not self.signal then
+      self.signal = signal
+    end
 
     try_close(self.p_out, self.p_err, self.p_in)
 
@@ -419,7 +435,9 @@ end
 ---@return string? err_name
 ---@return string? err_msg
 function Job:kill(code, signal)
-  if not self.handle then return 0 end
+  if not self.handle then
+    return 0
+  end
 
   if not self.handle:is_closing() then
     self.code = code
@@ -437,7 +455,9 @@ Job.await = async.sync_wrap(function(self, callback)
   if self:is_done() then
     callback(self:is_success())
   elseif self:is_running() then
-    self:on_exit(function(_, ...) callback(...) end)
+    self:on_exit(function(_, ...)
+      callback(...)
+    end)
   else
     callback(await(self:start()))
   end
@@ -514,7 +534,9 @@ end
 ---@return string? err
 function Job:is_success()
   local ok, err = self:check_status()
-  if not ok then return false, err end
+  if not ok then
+    return false, err
+  end
   return true
 end
 

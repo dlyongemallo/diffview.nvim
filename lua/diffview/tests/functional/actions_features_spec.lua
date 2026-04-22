@@ -4,7 +4,8 @@ local lib = require("diffview.lib")
 local utils = require("diffview.utils")
 
 local DiffView_class = require("diffview.scene.views.diff.diff_view").DiffView
-local FileHistoryView_class = require("diffview.scene.views.file_history.file_history_view").FileHistoryView
+local FileHistoryView_class =
+  require("diffview.scene.views.file_history.file_history_view").FileHistoryView
 local Diff1 = require("diffview.scene.layouts.diff_1").Diff1
 local Diff2Hor = require("diffview.scene.layouts.diff_2_hor").Diff2Hor
 local Diff2Ver = require("diffview.scene.layouts.diff_2_ver").Diff2Ver
@@ -64,11 +65,17 @@ describe("diffview.actions.set_layout (59237ad)", function()
   local function mock_diff_view(files, cur_entry)
     return {
       class = DiffView_class,
-      instanceof = function(self, other) return self.class == other end,
+      instanceof = function(self, other)
+        return self.class == other
+      end,
       cur_entry = cur_entry,
       cur_layout = {
-        get_main_win = function() return { id = 1 } end,
-        is_focused = function() return false end,
+        get_main_win = function()
+          return { id = 1 }
+        end,
+        is_focused = function()
+          return false
+        end,
         sync_scroll = function() end,
       },
       panel = {
@@ -95,8 +102,12 @@ describe("diffview.actions.set_layout (59237ad)", function()
       local file = mock_file_entry(Diff2Hor)
       local view = mock_diff_view({ file }, file)
 
-      stub(lib, "get_current_view", function() return view end)
-      stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+      stub(lib, "get_current_view", function()
+        return view
+      end)
+      stub(vim.api, "nvim_win_get_cursor", function()
+        return { 1, 0 }
+      end)
 
       local action_fn = actions.set_layout(name)
       action_fn()
@@ -108,8 +119,12 @@ describe("diffview.actions.set_layout (59237ad)", function()
 
   it("emits an error for an invalid layout name", function()
     local err_called = false
-    stub(utils, "err", function() err_called = true end)
-    stub(lib, "get_current_view", function() return mock_diff_view({}, nil) end)
+    stub(utils, "err", function()
+      err_called = true
+    end)
+    stub(lib, "get_current_view", function()
+      return mock_diff_view({}, nil)
+    end)
 
     local action_fn = actions.set_layout("nonexistent_layout")
     action_fn()
@@ -127,8 +142,12 @@ describe("diffview.actions.set_layout (59237ad)", function()
     -- cur_entry must be one of the files for set_file to be called.
     local view = mock_diff_view(files, files[1])
 
-    stub(lib, "get_current_view", function() return view end)
-    stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+    stub(lib, "get_current_view", function()
+      return view
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
 
     local action_fn = actions.set_layout("diff2_vertical")
     action_fn()
@@ -140,11 +159,15 @@ describe("diffview.actions.set_layout (59237ad)", function()
   end)
 
   it("returns early without error when no view is active", function()
-    stub(lib, "get_current_view", function() return nil end)
+    stub(lib, "get_current_view", function()
+      return nil
+    end)
 
     local action_fn = actions.set_layout("diff2_horizontal")
     -- Should not error.
-    assert.has_no.errors(function() action_fn() end)
+    assert.has_no.errors(function()
+      action_fn()
+    end)
     eq(0, #converted_layouts)
   end)
 end)
@@ -170,13 +193,19 @@ describe("copy_hash honors vim.v.register (f728b1f)", function()
     vim.fn.setreg = function(r, val)
       captured.reg, captured.val = r, val
     end
-    utils.info = function(msg) captured.msg = msg end
+    utils.info = function(msg)
+      captured.msg = msg
+    end
     vim.v = setmetatable({ register = reg }, { __index = orig_v })
 
     local mock_view = {
       panel = {
-        is_focused = function() return true end,
-        get_item_at_cursor = function() return { commit = { hash = hash } } end,
+        is_focused = function()
+          return true
+        end,
+        get_item_at_cursor = function()
+          return { commit = { hash = hash } }
+        end,
       },
     }
     local listeners = listeners_factory(mock_view)
@@ -234,7 +263,9 @@ describe("scrollbind/cursorbind cleanup (431ee89)", function()
   it("default File winopts enable scrollbind and cursorbind", function()
     local adapter = {
       ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
-      is_binary = function() return false end,
+      is_binary = function()
+        return false
+      end,
     }
 
     local file = File({
@@ -252,7 +283,9 @@ describe("scrollbind/cursorbind cleanup (431ee89)", function()
   it("_save_winopts reads scrollbind from vim.wo, not vim.o", function()
     local adapter = {
       ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
-      is_binary = function() return false end,
+      is_binary = function()
+        return false
+      end,
     }
 
     local file = File({
@@ -289,7 +322,9 @@ describe("scrollbind/cursorbind cleanup (431ee89)", function()
   it("_save_winopts reads cursorbind from vim.wo, not vim.o", function()
     local adapter = {
       ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
-      is_binary = function() return false end,
+      is_binary = function()
+        return false
+      end,
     }
 
     local file = File({

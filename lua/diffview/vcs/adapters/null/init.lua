@@ -19,7 +19,9 @@ NullAdapter.Rev = NullRev
 
 ---@param opt NullAdapter.create.Opt
 ---@return NullAdapter
-function NullAdapter.create(opt) return NullAdapter(opt) end
+function NullAdapter.create(opt)
+  return NullAdapter(opt)
+end
 
 ---@param opt NullAdapter.create.Opt
 function NullAdapter:init(opt)
@@ -46,22 +48,30 @@ end
 ---@param path string
 ---@param rev Rev
 ---@return boolean
-function NullAdapter:is_binary(path, rev) return false end
+function NullAdapter:is_binary(path, rev)
+  return false
+end
 
 function NullAdapter:init_completion() end
 
 ---@param arg_lead string
 ---@param opt? RevCompletionSpec
 ---@return string[]
-function NullAdapter:rev_candidates(arg_lead, opt) return {} end
+function NullAdapter:rev_candidates(arg_lead, opt)
+  return {}
+end
 
 ---@return Rev?
-function NullAdapter:head_rev() return nil end
+function NullAdapter:head_rev()
+  return nil
+end
 
 ---@param path string
 ---@param rev_arg string?
 ---@return string?
-function NullAdapter:file_blob_hash(path, rev_arg) return nil end
+function NullAdapter:file_blob_hash(path, rev_arg)
+  return nil
+end
 
 ---@return string[]
 function NullAdapter:get_command()
@@ -74,20 +84,28 @@ end
 ---@param path string
 ---@param rev Rev
 ---@return string[]
-function NullAdapter:get_show_args(path, rev) return {} end
+function NullAdapter:get_show_args(path, rev)
+  return {}
+end
 
 ---@param args table
 ---@return string[]
-function NullAdapter:get_log_args(args) return {} end
+function NullAdapter:get_log_args(args)
+  return {}
+end
 
 ---@return vcs.MergeContext?
-function NullAdapter:get_merge_context() return nil end
+function NullAdapter:get_merge_context()
+  return nil
+end
 
 ---@param range? { [1]: integer, [2]: integer }
 ---@param paths string[]
 ---@param argo ArgObject
 ---@return nil
-function NullAdapter:file_history_options(range, paths, argo) return nil end
+function NullAdapter:file_history_options(range, paths, argo)
+  return nil
+end
 
 ---@param out_stream any
 ---@param opt any
@@ -96,20 +114,28 @@ NullAdapter.file_history_worker = async.void(function(self, out_stream, opt) end
 ---@param left Rev
 ---@param right Rev
 ---@return string[]
-function NullAdapter:rev_to_args(left, right) return {} end
+function NullAdapter:rev_to_args(left, right)
+  return {}
+end
 
 ---@param left Rev
 ---@param right Rev
 ---@return string|nil
-function NullAdapter:rev_to_pretty_string(left, right) return nil end
+function NullAdapter:rev_to_pretty_string(left, right)
+  return nil
+end
 
 ---@param argo ArgObject
 ---@return nil
-function NullAdapter:diffview_options(argo) return nil end
+function NullAdapter:diffview_options(argo)
+  return nil
+end
 
 ---@param opt? VCSAdapter.show_untracked.Opt
 ---@return boolean
-function NullAdapter:show_untracked(opt) return false end
+function NullAdapter:show_untracked(opt)
+  return false
+end
 
 ---@param path string
 ---@param kind string
@@ -118,15 +144,21 @@ function NullAdapter:restore_file(path, kind, commit) end
 
 ---@param paths string[]
 ---@return boolean
-function NullAdapter:add_files(paths) return false end
+function NullAdapter:add_files(paths)
+  return false
+end
 
 ---@param paths string[]?
 ---@return boolean
-function NullAdapter:reset_files(paths) return false end
+function NullAdapter:reset_files(paths)
+  return false
+end
 
 ---@param file vcs.File
 ---@return boolean
-function NullAdapter:stage_index_file(file) return false end
+function NullAdapter:stage_index_file(file)
+  return false
+end
 
 ---@param left Rev
 ---@param right Rev
@@ -134,33 +166,37 @@ function NullAdapter:stage_index_file(file) return false end
 ---@param kind vcs.FileKind
 ---@param opt table
 ---@param callback fun(err?: string[], files?: FileEntry[], conflicts?: FileEntry[])
-NullAdapter.tracked_files = async.wrap(
-  function(self, left, right, args, kind, opt, callback) callback(nil, {}, {}) end,
-  7
-)
+NullAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, opt, callback)
+  callback(nil, {}, {})
+end, 7)
 
 ---@param left Rev
 ---@param right Rev
 ---@param opt table
 ---@param callback? fun(err?: string[], files?: FileEntry[])
-NullAdapter.untracked_files = async.wrap(
-  function(self, left, right, opt, callback) callback(nil, {}) end,
-  5
-)
+NullAdapter.untracked_files = async.wrap(function(self, left, right, opt, callback)
+  callback(nil, {})
+end, 5)
 
 ---@param path_args string[]
 ---@param cpath? string
 ---@return string[], string[]
-function NullAdapter.get_repo_paths(path_args, cpath) return {}, {} end
+function NullAdapter.get_repo_paths(path_args, cpath)
+  return {}, {}
+end
 
 ---@param top_indicators string[]
 ---@return string?, string
-function NullAdapter.find_toplevel(top_indicators) return nil, "" end
+function NullAdapter.find_toplevel(top_indicators)
+  return nil, ""
+end
 
 ---@param left Rev
 ---@param right Rev
 ---@return boolean
-function NullAdapter:force_entry_refresh_on_noop(left, right) return false end
+function NullAdapter:force_entry_refresh_on_noop(left, right)
+  return false
+end
 
 M.NullAdapter = NullAdapter
 return M

@@ -22,7 +22,9 @@ local function make_file(bufnr)
       toplevel = vim.uv.cwd(),
       dir = vim.uv.cwd(),
     },
-    is_binary = function() return false end,
+    is_binary = function()
+      return false
+    end,
   }
 
   local file = File({
@@ -120,7 +122,9 @@ describe("keymap save/restore on attach/detach", function()
   it("saves callback-based keymaps correctly", function()
     local bufnr = scratch_buf()
     local called = false
-    local original_cb = function() called = true end
+    local original_cb = function()
+      called = true
+    end
 
     vim.keymap.set("n", test_lhs, original_cb, {
       buffer = bufnr,
@@ -191,7 +195,9 @@ describe("keymap save/restore on attach/detach", function()
   it("restores a callback-based keymap on detach", function()
     local bufnr = scratch_buf()
     local call_count = 0
-    local original_cb = function() call_count = call_count + 1 end
+    local original_cb = function()
+      call_count = call_count + 1
+    end
 
     vim.keymap.set("n", test_lhs, original_cb, { buffer = bufnr })
 
@@ -246,7 +252,9 @@ describe("keymap save/restore on attach/detach", function()
 
       local au_id = api.nvim_create_autocmd("BufReadPost", {
         buffer = bufnr,
-        callback = function() fired = true end,
+        callback = function()
+          fired = true
+        end,
       })
 
       local file = make_file(bufnr)
@@ -265,7 +273,9 @@ describe("keymap save/restore on attach/detach", function()
 
       local au_id = api.nvim_create_autocmd("BufReadPost", {
         buffer = bufnr,
-        callback = function() count = count + 1 end,
+        callback = function()
+          count = count + 1
+        end,
       })
 
       local file = make_file(bufnr)
@@ -292,7 +302,9 @@ describe("keymap save/restore on attach/detach", function()
       local ft_fired = false
       local au_id = api.nvim_create_autocmd("FileType", {
         callback = function(ev)
-          if ev.buf == bufnr then ft_fired = true end
+          if ev.buf == bufnr then
+            ft_fired = true
+          end
         end,
       })
 

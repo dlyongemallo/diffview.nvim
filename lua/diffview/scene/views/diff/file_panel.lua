@@ -84,7 +84,9 @@ end
 function FilePanel:setup_buffer()
   local conf = self:apply_keymaps("file_panel", { nowait = true })
   local help_keymap = config.find_help_keymap(conf.keymaps.file_panel)
-  if help_keymap then self.help_mapping = help_keymap[2] end
+  if help_keymap then
+    self.help_mapping = help_keymap[2]
+  end
 end
 
 ---@param files FileEntry[]
@@ -210,7 +212,9 @@ function FilePanel:prev_file()
       new_idx = (i - vim.v.count1 - 1) % #files + 1
     else
       new_idx = math.max(i - vim.v.count1, 1)
-      if new_idx == i then return end
+      if new_idx == i then
+        return
+      end
     end
     self:set_cur_file(files[new_idx])
     return self.cur_file
@@ -231,7 +235,9 @@ function FilePanel:next_file()
       new_idx = (i + vim.v.count1 - 1) % #files + 1
     else
       new_idx = math.min(i + vim.v.count1, #files)
-      if new_idx == i then return end
+      if new_idx == i then
+        return
+      end
     end
     self:set_cur_file(files[new_idx])
     return self.cur_file
@@ -253,7 +259,9 @@ end
 ---Get the file entry under the cursor.
 ---@return (FileEntry|DirData)?
 function FilePanel:get_item_at_cursor()
-  if not (self:is_open() and self:buf_loaded()) then return end
+  if not (self:is_open() and self:buf_loaded()) then
+    return
+  end
 
   local line = api.nvim_win_get_cursor(self.winid)[1]
   return self:get_item_at_line(line)
@@ -263,13 +271,19 @@ end
 ---@return DirData?
 ---@return RenderComponent?
 function FilePanel:get_dir_at_cursor()
-  if self.listing_style ~= "tree" then return end
-  if not (self:is_open() and self:buf_loaded()) then return end
+  if self.listing_style ~= "tree" then
+    return
+  end
+  if not (self:is_open() and self:buf_loaded()) then
+    return
+  end
 
   local line = api.nvim_win_get_cursor(self.winid)[1]
   local comp = self.components.comp:get_comp_on_line(line)
 
-  if not comp then return end
+  if not comp then
+    return
+  end
 
   if comp.name == "dir_name" then
     local dir_comp = comp.parent
@@ -297,7 +311,6 @@ function FilePanel:highlight_file(file)
         end
       end
     end
-
   else -- tree
     for _, comp_struct in ipairs({
       self.components.conflicting.files,
@@ -458,7 +471,6 @@ function FilePanel:_notify_selection_changed()
   end
 end
 
-
 ---Select a file entry.
 ---@param file FileEntry
 function FilePanel:select_file(file)
@@ -501,9 +513,13 @@ end
 ---@param dir_data DirData
 ---@return "all"|"some"|"none"
 function FilePanel:dir_selection_state(dir_data)
-  if not dir_data._node then return "none" end
+  if not dir_data._node then
+    return "none"
+  end
   local leaves = dir_data._node:leaves()
-  if #leaves == 0 then return "none" end
+  if #leaves == 0 then
+    return "none"
+  end
   local selected, total = 0, 0
   for _, leaf in ipairs(leaves) do
     if leaf.data then
@@ -513,8 +529,12 @@ function FilePanel:dir_selection_state(dir_data)
       end
     end
   end
-  if selected == 0 then return "none" end
-  if selected == total then return "all" end
+  if selected == 0 then
+    return "none"
+  end
+  if selected == total then
+    return "all"
+  end
   return "some"
 end
 
@@ -559,7 +579,9 @@ end
 
 ---@override
 function FilePanel:get_autosize_components()
-  if not self.components then return nil end
+  if not self.components then
+    return nil
+  end
   return {
     self.components.conflicting.comp,
     self.components.working.comp,

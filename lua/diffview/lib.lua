@@ -5,7 +5,8 @@ require("diffview.bootstrap")
 
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local FileDiffView = lazy.access("diffview.scene.views.diff.file_diff_view", "FileDiffView") ---@type FileDiffView|LazyModule
-local FileHistoryView = lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
+local FileHistoryView =
+  lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
 local NullAdapter = lazy.access("diffview.vcs.adapters.null", "NullAdapter") ---@type NullAdapter|LazyModule
 local StandardView = lazy.access("diffview.scene.views.standard.standard_view", "StandardView") ---@type StandardView|LazyModule
 local arg_parser = lazy.require("diffview.arg_parser") ---@module "diffview.arg_parser"
@@ -34,12 +35,14 @@ local same_rev = lazy.access(rev_lib, "same_rev") ---@type fun(a: Rev?, b: Rev?)
 ---@return DiffView?
 function M.find_existing_view(adapter, rev_arg, path_args, left, right)
   for _, view in ipairs(M.views) do
-    if DiffView.__get():ancestorof(view)
-        and view.adapter.ctx.toplevel == adapter.ctx.toplevel
-        and view.rev_arg == rev_arg
-        and vim.deep_equal(view.path_args or {}, path_args or {})
-        and same_rev(view.left, left)
-        and same_rev(view.right, right) then
+    if
+      DiffView.__get():ancestorof(view)
+      and view.adapter.ctx.toplevel == adapter.ctx.toplevel
+      and view.rev_arg == rev_arg
+      and vim.deep_equal(view.path_args or {}, path_args or {})
+      and same_rev(view.left, left)
+      and same_rev(view.right, right)
+    then
       return view
     end
   end
@@ -51,10 +54,13 @@ function M.diffview_open(args)
   local argo = arg_parser.parse(utils.flatten({ default_args, args }))
   local rev_arg = argo.args[1]
 
-  logger:info("[command call] :DiffviewOpen " .. table.concat(utils.flatten({
-    default_args,
-    args,
-  }), " "))
+  logger:info("[command call] :DiffviewOpen " .. table.concat(
+    utils.flatten({
+      default_args,
+      args,
+    }),
+    " "
+  ))
 
   local err, adapter = vcs.get_adapter({
     cmd_ctx = {
@@ -77,7 +83,8 @@ function M.diffview_open(args)
   end
 
   -- Check for existing view with matching parameters (including revisions).
-  local existing = M.find_existing_view(adapter, rev_arg, adapter.ctx.path_args, opts.left, opts.right)
+  local existing =
+    M.find_existing_view(adapter, rev_arg, adapter.ctx.path_args, opts.left, opts.right)
   if existing and existing.tabpage and api.nvim_tabpage_is_valid(existing.tabpage) then
     api.nvim_set_current_tabpage(existing.tabpage)
     logger:debug("Switched to existing DiffView")
@@ -109,10 +116,13 @@ function M.file_history(range, args)
   local default_args = config.get_config().default_args.DiffviewFileHistory
   local argo = arg_parser.parse(utils.flatten({ default_args, args }))
 
-  logger:info("[command call] :DiffviewFileHistory " .. table.concat(utils.flatten({
-    default_args,
-    args,
-  }), " "))
+  logger:info("[command call] :DiffviewFileHistory " .. table.concat(
+    utils.flatten({
+      default_args,
+      args,
+    }),
+    " "
+  ))
 
   local err, adapter = vcs.get_adapter({
     cmd_ctx = {

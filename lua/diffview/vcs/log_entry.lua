@@ -28,11 +28,13 @@ function LogEntry:init(opt)
   self.nulled = utils.sate(opt.nulled, false)
   -- NOTE: This only detects commits at remote branch/tag tips via %D
   -- decorations, not full reachability from upstream.
-  self.has_remote_ref = opt.commit and opt.commit.ref_names
-    and (opt.commit.ref_names:find("origin/")
-      or opt.commit.ref_names:find("upstream/")
-      or opt.commit.ref_names:find("remotes/"))
-    and true or false
+  self.has_remote_ref = opt.commit
+      and opt.commit.ref_names
+      and (opt.commit.ref_names:find("origin/") or opt.commit.ref_names:find("upstream/") or opt.commit.ref_names:find(
+        "remotes/"
+      ))
+      and true
+    or false
   self:update_status()
   self:update_stats()
 end
@@ -86,7 +88,9 @@ end
 ---@param path string
 ---@return diff.FileEntry?
 function LogEntry:get_diff(path)
-  if not self.commit.diff then return nil end
+  if not self.commit.diff then
+    return nil
+  end
 
   for _, diff_entry in ipairs(self.commit.diff) do
     if path == (diff_entry.path_new or diff_entry.path_old) then
@@ -101,12 +105,10 @@ end
 function LogEntry.new_null_entry(adapter, opt)
   opt = opt or {}
 
-  return LogEntry(
-    vim.tbl_extend("force", opt, {
-      nulled = true,
-      files = { FileEntry.new_null_entry(adapter) },
-    })
-  )
+  return LogEntry(vim.tbl_extend("force", opt, {
+    nulled = true,
+    files = { FileEntry.new_null_entry(adapter) },
+  }))
 end
 
 M.LogEntry = LogEntry

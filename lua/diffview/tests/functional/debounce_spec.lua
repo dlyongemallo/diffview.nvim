@@ -6,166 +6,196 @@ local await = async.await
 
 describe("diffview.debounce", function()
   describe("debounce_trailing", function()
-    it("eventually fires the debounced function", test_utils.async_test(function()
-      local fired = false
-      local fn = debounce.debounce_trailing(10, false, function()
-        fired = true
+    it(
+      "eventually fires the debounced function",
+      test_utils.async_test(function()
+        local fired = false
+        local fn = debounce.debounce_trailing(10, false, function()
+          fired = true
+        end)
+
+        fn()
+
+        await(async.timeout(50))
+        await(async.scheduler())
+
+        assert.is_true(fired)
+        fn.close()
       end)
+    )
 
-      fn()
+    it(
+      "runs callback inside the main loop",
+      test_utils.async_test(function()
+        local in_fast_event = true
+        local fn = debounce.debounce_trailing(10, false, function()
+          in_fast_event = vim.in_fast_event()
+        end)
 
-      await(async.timeout(50))
-      await(async.scheduler())
+        fn()
 
-      assert.is_true(fired)
-      fn.close()
-    end))
+        await(async.timeout(50))
+        await(async.scheduler())
 
-    it("runs callback inside the main loop", test_utils.async_test(function()
-      local in_fast_event = true
-      local fn = debounce.debounce_trailing(10, false, function()
-        in_fast_event = vim.in_fast_event()
+        assert.is_false(in_fast_event)
+        fn.close()
       end)
+    )
 
-      fn()
+    it(
+      "cancel drops a pending trailing call",
+      test_utils.async_test(function()
+        local count = 0
+        local fn = debounce.debounce_trailing(10, false, function()
+          count = count + 1
+        end)
 
-      await(async.timeout(50))
-      await(async.scheduler())
+        fn()
+        fn.cancel()
 
-      assert.is_false(in_fast_event)
-      fn.close()
-    end))
+        await(async.timeout(50))
+        await(async.scheduler())
 
-    it("cancel drops a pending trailing call", test_utils.async_test(function()
-      local count = 0
-      local fn = debounce.debounce_trailing(10, false, function()
-        count = count + 1
+        assert.equals(0, count)
+        fn.close()
       end)
+    )
 
-      fn()
-      fn.cancel()
+    it(
+      "can be re-scheduled after cancel",
+      test_utils.async_test(function()
+        local count = 0
+        local fn = debounce.debounce_trailing(10, false, function()
+          count = count + 1
+        end)
 
-      await(async.timeout(50))
-      await(async.scheduler())
+        fn()
+        fn.cancel()
 
-      assert.equals(0, count)
-      fn.close()
-    end))
+        await(async.timeout(30))
+        await(async.scheduler())
+        assert.equals(0, count)
 
-    it("can be re-scheduled after cancel", test_utils.async_test(function()
-      local count = 0
-      local fn = debounce.debounce_trailing(10, false, function()
-        count = count + 1
+        fn()
+
+        await(async.timeout(50))
+        await(async.scheduler())
+        assert.equals(1, count)
+
+        fn.close()
       end)
-
-      fn()
-      fn.cancel()
-
-      await(async.timeout(30))
-      await(async.scheduler())
-      assert.equals(0, count)
-
-      fn()
-
-      await(async.timeout(50))
-      await(async.scheduler())
-      assert.equals(1, count)
-
-      fn.close()
-    end))
+    )
   end)
 
   describe("throttle_trailing", function()
-    it("fires after the throttle interval", test_utils.async_test(function()
-      local fired = false
-      local fn = debounce.throttle_trailing(10, false, function()
-        fired = true
+    it(
+      "fires after the throttle interval",
+      test_utils.async_test(function()
+        local fired = false
+        local fn = debounce.throttle_trailing(10, false, function()
+          fired = true
+        end)
+
+        fn()
+
+        await(async.timeout(50))
+        await(async.scheduler())
+
+        assert.is_true(fired)
+        fn.close()
       end)
+    )
 
-      fn()
+    it(
+      "runs callback inside the main loop",
+      test_utils.async_test(function()
+        local in_fast_event = true
+        local fn = debounce.throttle_trailing(10, false, function()
+          in_fast_event = vim.in_fast_event()
+        end)
 
-      await(async.timeout(50))
-      await(async.scheduler())
+        fn()
 
-      assert.is_true(fired)
-      fn.close()
-    end))
+        await(async.timeout(50))
+        await(async.scheduler())
 
-    it("runs callback inside the main loop", test_utils.async_test(function()
-      local in_fast_event = true
-      local fn = debounce.throttle_trailing(10, false, function()
-        in_fast_event = vim.in_fast_event()
+        assert.is_false(in_fast_event)
+        fn.close()
       end)
-
-      fn()
-
-      await(async.timeout(50))
-      await(async.scheduler())
-
-      assert.is_false(in_fast_event)
-      fn.close()
-    end))
+    )
   end)
 
   describe("set_timeout", function()
-    it("fires callback after the delay", test_utils.async_test(function()
-      local fired = false
+    it(
+      "fires callback after the delay",
+      test_utils.async_test(function()
+        local fired = false
 
-      local handle = debounce.set_timeout(function()
-        fired = true
-      end, 10)
+        local handle = debounce.set_timeout(function()
+          fired = true
+        end, 10)
 
-      assert.is_false(fired)
+        assert.is_false(fired)
 
-      await(async.timeout(50))
-      await(async.scheduler())
+        await(async.timeout(50))
+        await(async.scheduler())
 
-      assert.is_true(fired)
-      handle.close()
-    end))
+        assert.is_true(fired)
+        handle.close()
+      end)
+    )
 
-    it("runs callback inside the main loop", test_utils.async_test(function()
-      local in_fast_event = true
+    it(
+      "runs callback inside the main loop",
+      test_utils.async_test(function()
+        local in_fast_event = true
 
-      local handle = debounce.set_timeout(function()
-        in_fast_event = vim.in_fast_event()
-      end, 10)
+        local handle = debounce.set_timeout(function()
+          in_fast_event = vim.in_fast_event()
+        end, 10)
 
-      await(async.timeout(50))
-      await(async.scheduler())
+        await(async.timeout(50))
+        await(async.scheduler())
 
-      assert.is_false(in_fast_event)
-      handle.close()
-    end))
+        assert.is_false(in_fast_event)
+        handle.close()
+      end)
+    )
   end)
 
   describe("set_interval", function()
-    it("fires callback multiple times", test_utils.async_test(function()
-      local count = 0
+    it(
+      "fires callback multiple times",
+      test_utils.async_test(function()
+        local count = 0
 
-      local handle = debounce.set_interval(function()
-        count = count + 1
-      end, 10)
+        local handle = debounce.set_interval(function()
+          count = count + 1
+        end, 10)
 
-      await(async.timeout(80))
-      await(async.scheduler())
+        await(async.timeout(80))
+        await(async.scheduler())
 
-      assert.is_true(count >= 2)
-      handle.close()
-    end))
+        assert.is_true(count >= 2)
+        handle.close()
+      end)
+    )
 
-    it("runs callback inside the main loop", test_utils.async_test(function()
-      local in_fast_event = true
+    it(
+      "runs callback inside the main loop",
+      test_utils.async_test(function()
+        local in_fast_event = true
 
-      local handle = debounce.set_interval(function()
-        in_fast_event = vim.in_fast_event()
-      end, 10)
+        local handle = debounce.set_interval(function()
+          in_fast_event = vim.in_fast_event()
+        end, 10)
 
-      await(async.timeout(50))
-      await(async.scheduler())
+        await(async.timeout(50))
+        await(async.scheduler())
 
-      assert.is_false(in_fast_event)
-      handle.close()
-    end))
+        assert.is_false(in_fast_event)
+        handle.close()
+      end)
+    )
   end)
 end)

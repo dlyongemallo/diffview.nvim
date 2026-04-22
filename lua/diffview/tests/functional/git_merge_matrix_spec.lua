@@ -50,7 +50,6 @@ local function setup_repo(case_name)
     assert.is_true(merge.code ~= 0)
 
     return repo, "conflict.txt"
-
   elseif case_name == "modify_delete" then
     local path = repo .. "/delete_conflict.txt"
     local f = assert(io.open(path, "w"))
@@ -82,56 +81,63 @@ end
 
 describe("diffview.vcs.adapters.git merge conflict matrix", function()
   for _, case_name in ipairs({ "modify_modify", "modify_delete" }) do
-    it("opens conflict stages safely for " .. case_name, test_utils.async_test(function()
-      local repo, conflict_path = setup_repo(case_name)
+    it(
+      "opens conflict stages safely for " .. case_name,
+      test_utils.async_test(function()
+        local repo, conflict_path = setup_repo(case_name)
 
-      local ok, err = pcall(function()
-        local adapter = GitAdapter({
-          toplevel = repo,
-          cpath = repo,
-          path_args = {},
-        })
+        local ok, err = pcall(function()
+          local adapter = GitAdapter({
+            toplevel = repo,
+            cpath = repo,
+            path_args = {},
+          })
 
-        local left = GitRev(RevType.STAGE, 0)
-        local right = GitRev(RevType.LOCAL)
-        local args = adapter:rev_to_args(left, right)
+          local left = GitRev(RevType.STAGE, 0)
+          local right = GitRev(RevType.LOCAL)
+          local args = adapter:rev_to_args(left, right)
 
-        local tracked_err, _, conflicts = async.await(adapter:tracked_files(
-          left,
-          right,
-          args,
-          "working",
-          { default_layout = Diff2, merge_layout = Diff4 }
-        ))
+          local tracked_err, _, conflicts = async.await(
+            adapter:tracked_files(
+              left,
+              right,
+              args,
+              "working",
+              { default_layout = Diff2, merge_layout = Diff4 }
+            )
+          )
 
-        assert.is_nil(tracked_err)
-        assert.is_true(#conflicts > 0)
+          assert.is_nil(tracked_err)
+          assert.is_true(#conflicts > 0)
 
-        local target
-        for _, entry in ipairs(conflicts) do
-          if entry.path == conflict_path then
-            target = entry
-            break
+          local target
+          for _, entry in ipairs(conflicts) do
+            if entry.path == conflict_path then
+              target = entry
+              break
+            end
           end
-        end
 
-        assert.is_not_nil(target)
+          assert.is_not_nil(target)
 
-        -- Ensure all merge panes can be materialized without crashing,
-        -- including missing stages for modify/delete style conflicts.
-        for _, sym in ipairs({ "a", "b", "c", "d" }) do
-          local file = target.layout[sym].file
-          local bufnr = async.await(file:create_buffer())
-          assert.is_true(type(bufnr) == "number")
+          -- Ensure all merge panes can be materialized without crashing,
+          -- including missing stages for modify/delete style conflicts.
+          for _, sym in ipairs({ "a", "b", "c", "d" }) do
+            local file = target.layout[sym].file
+            local bufnr = async.await(file:create_buffer())
+            assert.is_true(type(bufnr) == "number")
+          end
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
         end
       end)
-
-      vim.schedule(function()
-        pcall(vim.fn.delete, repo, "rf")
-      end)
-      async.await(async.scheduler())
-
-      if not ok then error(err) end
-    end))
+    )
   end
 end)

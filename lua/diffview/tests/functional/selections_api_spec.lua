@@ -8,7 +8,17 @@ describe("diffview.api.selections", function()
 
   it("is accessible via the public api entrypoint", function()
     -- The public entrypoint is a lazy proxy; verify it exposes the same functions.
-    for _, name in ipairs({ "get", "get_paths", "is_selected", "select", "deselect", "set", "clear", "any", "count" }) do
+    for _, name in ipairs({
+      "get",
+      "get_paths",
+      "is_selected",
+      "select",
+      "deselect",
+      "set",
+      "clear",
+      "any",
+      "count",
+    }) do
       eq("function", type(selections[name]), "missing function: " .. name)
     end
   end)
@@ -183,7 +193,9 @@ describe("diffview.api.selections", function()
       local b = make_entry("b.lua")
       local view = make_view({ a, b })
       local called = 0
-      view.panel.on_selection_changed = function() called = called + 1 end
+      view.panel.on_selection_changed = function()
+        called = called + 1
+      end
 
       selections.select({ "a.lua", "b.lua" }, { view = view })
       eq(1, called)
@@ -265,7 +277,9 @@ describe("diffview.api.selections", function()
       local view = make_view({ a, b })
       view.panel:select_file(a)
       local called = 0
-      view.panel.on_selection_changed = function() called = called + 1 end
+      view.panel.on_selection_changed = function()
+        called = called + 1
+      end
 
       selections.set({ "b.lua" }, { view = view })
       eq(1, called)

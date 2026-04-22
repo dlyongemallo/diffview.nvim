@@ -1,6 +1,6 @@
 local oop = require("diffview.oop")
-local Rev = require('diffview.vcs.rev').Rev
-local RevType = require('diffview.vcs.rev').RevType
+local Rev = require("diffview.vcs.rev").Rev
+local RevType = require("diffview.vcs.rev").RevType
 
 local M = {}
 
@@ -52,14 +52,14 @@ function P4Rev.from_name(name, adapter)
   -- Attempt to resolve the revision specifier using p4 changes
   local rev_spec = name
   if tonumber(name) then
-      rev_spec = "@" .. name -- Ensure it's in @CL format if just a number
+    rev_spec = "@" .. name -- Ensure it's in @CL format if just a number
   end
 
   -- Use 'p4 changes -m1' to verify the revision exists.
   -- #head, #none, @client are usually implicitly valid if p4 client is set up.
   if rev_spec == "#head" or rev_spec == "#none" or rev_spec == "@" then
-      -- Assume these are valid in a working client context
-      return P4Rev(RevType.COMMIT, rev_spec) -- Treat #head etc. as COMMIT type for simplicity
+    -- Assume these are valid in a working client context
+    return P4Rev(RevType.COMMIT, rev_spec) -- Treat #head etc. as COMMIT type for simplicity
   end
 
   local out, code = adapter:exec_sync({ "changes", "-m1", rev_spec }, adapter.ctx.toplevel)
@@ -105,9 +105,9 @@ end
 ---@return string
 function P4Rev:object_name(abbrev_len)
   if self.type == RevType.COMMIT then
-      return self.commit -- e.g., @12345, #head, @labelname
+    return self.commit -- e.g., @12345, #head, @labelname
   elseif self.type == RevType.LOCAL then
-      return "@" -- Perforce often uses '@' to denote workspace files implicitly in diffs
+    return "@" -- Perforce often uses '@' to denote workspace files implicitly in diffs
   end
   return "UNKNOWN"
 end

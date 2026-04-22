@@ -160,8 +160,10 @@ describe("diffview.events", function()
       view:close()
 
       -- The on_any listener should have seen "view_closed".
-      assert(vim.tbl_contains(any_events, "view_closed"),
-        "on_any listener should see view_closed event")
+      assert(
+        vim.tbl_contains(any_events, "view_closed"),
+        "on_any listener should see view_closed event"
+      )
 
       -- No listeners should remain on the global emitter.
       eq(0, #(DiffviewGlobal.emitter:get("view_closed") or {}))
@@ -246,25 +248,28 @@ describe("diffview.events", function()
       eq(false, view_closed)
     end)
 
-    it("sub-panel listener registered BEFORE view listener does NOT stop propagation in time", function()
-      local emitter = EventEmitter()
-      local view_closed = false
+    it(
+      "sub-panel listener registered BEFORE view listener does NOT stop propagation in time",
+      function()
+        local emitter = EventEmitter()
+        local view_closed = false
 
-      -- Simulate the buggy ordering: sub-panel registered first (pushed to
-      -- position 2), view listener registered second (inserted at position 1).
-      emitter:on("close", function(e)
-        e:stop_propagation()
-      end)
+        -- Simulate the buggy ordering: sub-panel registered first (pushed to
+        -- position 2), view listener registered second (inserted at position 1).
+        emitter:on("close", function(e)
+          e:stop_propagation()
+        end)
 
-      emitter:on("close", function()
-        view_closed = true
-      end)
+        emitter:on("close", function()
+          view_closed = true
+        end)
 
-      emitter:emit("close")
+        emitter:emit("close")
 
-      -- The view listener ran first because it was at position 1; stop_propagation
-      -- came too late. This is the original bug.
-      eq(true, view_closed)
-    end)
+        -- The view listener ran first because it was at position 1; stop_propagation
+        -- came too late. This is the original bug.
+        eq(true, view_closed)
+      end
+    )
   end)
 end)

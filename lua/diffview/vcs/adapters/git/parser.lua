@@ -81,9 +81,8 @@ function M.structure_fh_data(stat_data, keep_diff)
   end
 
   -- Soft validate the data.
-  ret.valid = #namestat == #numstat and pcall(
-    vim.validate,
-    {
+  ret.valid = #namestat == #numstat
+    and pcall(vim.validate, {
       left_hash = { ret.left_hash, "string", true },
       right_hash = { ret.right_hash, "string" },
       merge_hash = { ret.merge_hash, "string", true },
@@ -94,8 +93,7 @@ function M.structure_fh_data(stat_data, keep_diff)
       ref_names = { ret.ref_names, "string" },
       reflog_selector = { ret.reflog_selector, "string" },
       subject = { ret.subject, "string" },
-    }
-  )
+    })
 
   return ret
 end
@@ -126,8 +124,12 @@ function M.parse_namestat_entry(namestat_line, numstat_line)
   end
 
   if not namestat_fields then
-    error(("Malformed namestat line: insufficient fields (expected %d whitespace-separated groups): %s")
-      :format(offset - 1, namestat_line))
+    error(
+      ("Malformed namestat line: insufficient fields (expected %d whitespace-separated groups): %s"):format(
+        offset - 1,
+        namestat_line
+      )
+    )
   end
 
   local status = namestat_fields[1]:match("^%a%a?")
