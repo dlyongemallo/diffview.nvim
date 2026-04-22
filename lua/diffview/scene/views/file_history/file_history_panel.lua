@@ -147,9 +147,13 @@ end)
 function FileHistoryPanel:setup_buffer()
   local conf = self:apply_keymaps("file_history_panel", { nowait = true })
   local option_keymap = config.find_option_keymap(conf.keymaps.file_history_panel)
-  if option_keymap then self.option_mapping = option_keymap[2] end
+  if option_keymap then
+    self.option_mapping = option_keymap[2]
+  end
   local help_keymap = config.find_help_keymap(conf.keymaps.file_history_panel)
-  if help_keymap then self.help_mapping = help_keymap[2] end
+  if help_keymap then
+    self.help_mapping = help_keymap[2]
+  end
 end
 
 function FileHistoryPanel:update_components()
@@ -210,20 +214,19 @@ FileHistoryPanel.update_entries = async.wrap(function(self, callback)
 
   self:sync()
 
-  local render = debounce.throttle_render(
-    15,
-    function()
-      if self.shutdown:check() then return end
-      if not self:cur_file() then
-        self:update_components()
-        self.parent:next_item()
-      else
-        self:sync()
-      end
-
-      vim.cmd("redraw")
+  local render = debounce.throttle_render(15, function()
+    if self.shutdown:check() then
+      return
     end
-  )
+    if not self:cur_file() then
+      self:update_components()
+      self.parent:next_item()
+    else
+      self:sync()
+    end
+
+    vim.cmd("redraw")
+  end)
 
   local ret = {}
 
@@ -252,7 +255,7 @@ FileHistoryPanel.update_entries = async.wrap(function(self, callback)
     elseif status == JobStatus.PROGRESS then
       ---@cast entry -?
       local was_empty = #self.entries == 0
-      self.entries[#self.entries+1] = entry
+      self.entries[#self.entries + 1] = entry
 
       if was_empty then
         self.single_file = self.entries[1].single_file
@@ -318,7 +321,9 @@ end
 ---Get the log or file entry under the cursor.
 ---@return (LogEntry|FileEntry)?
 function FileHistoryPanel:get_item_at_cursor()
-  if not (self:is_open() and self:buf_loaded()) then return end
+  if not (self:is_open() and self:buf_loaded()) then
+    return
+  end
 
   local cursor = api.nvim_win_get_cursor(self.winid)
   local line = cursor[1]
@@ -339,7 +344,9 @@ end
 ---@return LogEntry?
 function FileHistoryPanel:get_log_entry_at_cursor()
   local item = self:get_item_at_cursor()
-  if not item then return end
+  if not item then
+    return
+  end
 
   if item:instanceof(LogEntry.__get()) then
     return item --[[@as LogEntry ]]
@@ -430,7 +437,9 @@ function FileHistoryPanel:_get_entry_by_file_offset(entry_idx, file_idx, offset,
 end
 
 function FileHistoryPanel:set_file_by_offset(offset)
-  if self:num_items() == 0 then return end
+  if self:num_items() == 0 then
+    return
+  end
 
   local entry, file = self.cur_item[1], self.cur_item[2]
 
@@ -445,9 +454,12 @@ function FileHistoryPanel:set_file_by_offset(offset)
 
     if entry_idx ~= -1 and file_idx ~= -1 then
       local wrap = config.get_config().wrap_entries
-      local next_entry, next_file = self:_get_entry_by_file_offset(entry_idx, file_idx, offset, wrap)
+      local next_entry, next_file =
+        self:_get_entry_by_file_offset(entry_idx, file_idx, offset, wrap)
 
-      if not next_entry then return end
+      if not next_entry then
+        return
+      end
 
       self:set_cur_item({ next_entry, next_file })
 
@@ -473,7 +485,9 @@ end
 
 ---@param item LogEntry|FileEntry
 function FileHistoryPanel:highlight_item(item)
-  if not (self:is_open() and self:buf_loaded()) then return end
+  if not (self:is_open() and self:buf_loaded()) then
+    return
+  end
 
   if item:instanceof(LogEntry.__get()) then
     ---@cast item LogEntry
@@ -508,7 +522,9 @@ function FileHistoryPanel:highlight_item(item)
 end
 
 function FileHistoryPanel:highlight_prev_item()
-  if not (self:is_open() and self:buf_loaded()) or #self.entries == 0 then return end
+  if not (self:is_open() and self:buf_loaded()) or #self.entries == 0 then
+    return
+  end
 
   pcall(api.nvim_win_set_cursor, self.winid, {
     self.constrain_cursor(self.winid, -vim.v.count1),
@@ -519,7 +535,9 @@ function FileHistoryPanel:highlight_prev_item()
 end
 
 function FileHistoryPanel:highlight_next_file()
-  if not (self:is_open() and self:buf_loaded()) or #self.entries == 0 then return end
+  if not (self:is_open() and self:buf_loaded()) or #self.entries == 0 then
+    return
+  end
 
   pcall(api.nvim_win_set_cursor, self.winid, {
     self.constrain_cursor(self.winid, vim.v.count1),
@@ -556,7 +574,9 @@ end
 
 ---@override
 function FileHistoryPanel:get_autosize_components()
-  if not self.components then return nil end
+  if not self.components then
+    return nil
+  end
   return {
     self.components.log.comp,
   }

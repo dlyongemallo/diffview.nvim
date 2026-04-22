@@ -126,44 +126,62 @@ describe("diffview.api.CDiffView", function()
   -- -----------------------------------------------------------------------
 
   describe("construction", function()
-    it("creates a valid view with pre-populated files", test_utils.async_test(function()
-      local repo = make_repo()
-      local ok, err = pcall(function()
-        local view = CDiffView({
-          git_root = repo,
-          left = Rev(RevType.STAGE),
-          right = Rev(RevType.LOCAL),
-          files = make_files({ make_file_data("init.txt") }),
-          update_files = function() return make_files() end,
-          get_file_data = function() return {} end,
-        })
+    it(
+      "creates a valid view with pre-populated files",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local ok, err = pcall(function()
+          local view = CDiffView({
+            git_root = repo,
+            left = Rev(RevType.STAGE),
+            right = Rev(RevType.LOCAL),
+            files = make_files({ make_file_data("init.txt") }),
+            update_files = function()
+              return make_files()
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
 
-        assert.is_true(view:is_valid())
-        eq(1, view.files:len())
+          assert.is_true(view:is_valid())
+          eq(1, view.files:len())
+        end)
+
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
+        end
       end)
+    )
 
-      cleanup_repo(repo)
-      if not ok then error(err) end
-    end))
+    it(
+      "defaults malformed revs to STAGE",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local ok, err = pcall(function()
+          local view = CDiffView({
+            git_root = repo,
+            files = make_files(),
+            update_files = function()
+              return make_files()
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
 
-    it("defaults malformed revs to STAGE", test_utils.async_test(function()
-      local repo = make_repo()
-      local ok, err = pcall(function()
-        local view = CDiffView({
-          git_root = repo,
-          files = make_files(),
-          update_files = function() return make_files() end,
-          get_file_data = function() return {} end,
-        })
+          assert.is_true(view:is_valid())
+          eq(RevType.STAGE, view.left.type)
+          eq(RevType.STAGE, view.right.type)
+        end)
 
-        assert.is_true(view:is_valid())
-        eq(RevType.STAGE, view.left.type)
-        eq(RevType.STAGE, view.right.type)
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
+        end
       end)
-
-      cleanup_repo(repo)
-      if not ok then error(err) end
-    end))
+    )
   end)
 
   -- -----------------------------------------------------------------------
@@ -171,64 +189,86 @@ describe("diffview.api.CDiffView", function()
   -- -----------------------------------------------------------------------
 
   describe("loading state", function()
-    it("clears is_loading after open when files are pre-populated", test_utils.async_test(function()
-      local repo = make_repo()
-      local view
+    it(
+      "clears is_loading after open when files are pre-populated",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local view
 
-      local ok, err = pcall(function()
-        view = CDiffView({
-          git_root = repo,
-          left = Rev(RevType.STAGE),
-          right = Rev(RevType.LOCAL),
-          files = make_files({ make_file_data("init.txt") }),
-          update_files = function() return make_files({ make_file_data("init.txt") }) end,
-          get_file_data = function() return {} end,
-        })
+        local ok, err = pcall(function()
+          view = CDiffView({
+            git_root = repo,
+            left = Rev(RevType.STAGE),
+            right = Rev(RevType.LOCAL),
+            files = make_files({ make_file_data("init.txt") }),
+            update_files = function()
+              return make_files({ make_file_data("init.txt") })
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
 
-        -- Before open, is_loading should be true (set in DiffView:init).
-        assert.is_true(view.is_loading)
-        assert.is_true(view.panel.is_loading)
+          -- Before open, is_loading should be true (set in DiffView:init).
+          assert.is_true(view.is_loading)
+          assert.is_true(view.panel.is_loading)
 
-        view:open()
+          view:open()
 
-        -- post_open uses vim.schedule; pump the event loop to flush it.
-        vim.wait(1000, function() return not view.is_loading end, 10)
+          -- post_open uses vim.schedule; pump the event loop to flush it.
+          vim.wait(1000, function()
+            return not view.is_loading
+          end, 10)
 
-        eq(false, view.is_loading)
-        eq(false, view.panel.is_loading)
+          eq(false, view.is_loading)
+          eq(false, view.panel.is_loading)
+        end)
+
+        close_view(view)
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
+        end
       end)
+    )
 
-      close_view(view)
-      cleanup_repo(repo)
-      if not ok then error(err) end
-    end))
+    it(
+      "sets initialized to true after open with pre-populated files",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local view
 
-    it("sets initialized to true after open with pre-populated files", test_utils.async_test(function()
-      local repo = make_repo()
-      local view
+        local ok, err = pcall(function()
+          view = CDiffView({
+            git_root = repo,
+            left = Rev(RevType.STAGE),
+            right = Rev(RevType.LOCAL),
+            files = make_files({ make_file_data("init.txt") }),
+            update_files = function()
+              return make_files({ make_file_data("init.txt") })
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
 
-      local ok, err = pcall(function()
-        view = CDiffView({
-          git_root = repo,
-          left = Rev(RevType.STAGE),
-          right = Rev(RevType.LOCAL),
-          files = make_files({ make_file_data("init.txt") }),
-          update_files = function() return make_files({ make_file_data("init.txt") }) end,
-          get_file_data = function() return {} end,
-        })
+          view:open()
+          -- The files_updated event (which sets initialized) fires from the
+          -- vim.schedule callback in post_open.
+          vim.wait(1000, function()
+            return view.initialized
+          end, 10)
 
-        view:open()
-        -- The files_updated event (which sets initialized) fires from the
-        -- vim.schedule callback in post_open.
-        vim.wait(1000, function() return view.initialized end, 10)
+          eq(true, view.initialized)
+        end)
 
-        eq(true, view.initialized)
+        close_view(view)
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
+        end
       end)
-
-      close_view(view)
-      cleanup_repo(repo)
-      if not ok then error(err) end
-    end))
+    )
   end)
 
   -- -----------------------------------------------------------------------
@@ -236,46 +276,58 @@ describe("diffview.api.CDiffView", function()
   -- -----------------------------------------------------------------------
 
   describe("panel rendering with file_panel.show = false", function()
-    it("renders file list (not loading message) when panel is toggled open", test_utils.async_test(function()
-      local repo = make_repo()
-      local view
+    it(
+      "renders file list (not loading message) when panel is toggled open",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local view
 
-      local ok, err = pcall(function()
-        config.get_config().file_panel.show = false
+        local ok, err = pcall(function()
+          config.get_config().file_panel.show = false
 
-        view = CDiffView({
-          git_root = repo,
-          left = Rev(RevType.STAGE),
-          right = Rev(RevType.LOCAL),
-          files = make_files({ make_file_data("init.txt") }),
-          update_files = function() return make_files({ make_file_data("init.txt") }) end,
-          get_file_data = function() return {} end,
-        })
+          view = CDiffView({
+            git_root = repo,
+            left = Rev(RevType.STAGE),
+            right = Rev(RevType.LOCAL),
+            files = make_files({ make_file_data("init.txt") }),
+            update_files = function()
+              return make_files({ make_file_data("init.txt") })
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
 
-        view:open()
-        vim.wait(1000, function() return not view.is_loading end, 10)
+          view:open()
+          vim.wait(1000, function()
+            return not view.is_loading
+          end, 10)
 
-        -- Panel should not be open yet.
-        assert.falsy(view.panel:is_open())
+          -- Panel should not be open yet.
+          assert.falsy(view.panel:is_open())
 
-        -- Toggle the panel open (simulates :DiffviewToggleFiles).
-        view.panel:toggle(true)
-        assert.is_true(view.panel:is_open())
+          -- Toggle the panel open (simulates :DiffviewToggleFiles).
+          view.panel:toggle(true)
+          assert.is_true(view.panel:is_open())
 
-        -- Read the rendered panel buffer.
-        local lines = api.nvim_buf_get_lines(view.panel.bufid, 0, -1, false)
-        local joined = table.concat(lines, "\n")
+          -- Read the rendered panel buffer.
+          local lines = api.nvim_buf_get_lines(view.panel.bufid, 0, -1, false)
+          local joined = table.concat(lines, "\n")
 
-        assert.falsy(joined:find("Fetching changes"),
-          "panel should not show loading message after open with pre-populated files")
-        assert.truthy(joined:find("Changes"),
-          "panel should show the Changes section header")
+          assert.falsy(
+            joined:find("Fetching changes"),
+            "panel should not show loading message after open with pre-populated files"
+          )
+          assert.truthy(joined:find("Changes"), "panel should show the Changes section header")
+        end)
+
+        close_view(view)
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
+        end
       end)
-
-      close_view(view)
-      cleanup_repo(repo)
-      if not ok then error(err) end
-    end))
+    )
   end)
 
   -- -----------------------------------------------------------------------
@@ -283,72 +335,94 @@ describe("diffview.api.CDiffView", function()
   -- -----------------------------------------------------------------------
 
   describe("auto-registration", function()
-    it("registers view in lib.views on open", test_utils.async_test(function()
-      local repo = make_repo()
-      local view
-      local lib = require("diffview.lib")
+    it(
+      "registers view in lib.views on open",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local view
+        local lib = require("diffview.lib")
 
-      local ok, err = pcall(function()
-        view = CDiffView({
-          git_root = repo,
-          left = Rev(RevType.STAGE),
-          right = Rev(RevType.LOCAL),
-          files = make_files(),
-          update_files = function() return make_files() end,
-          get_file_data = function() return {} end,
-        })
+        local ok, err = pcall(function()
+          view = CDiffView({
+            git_root = repo,
+            left = Rev(RevType.STAGE),
+            right = Rev(RevType.LOCAL),
+            files = make_files(),
+            update_files = function()
+              return make_files()
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
 
-        -- Not registered before open.
-        assert.is_false(vim.tbl_contains(lib.views, view))
+          -- Not registered before open.
+          assert.is_false(vim.tbl_contains(lib.views, view))
 
-        view:open()
+          view:open()
 
-        -- Registered after open.
-        assert.is_true(vim.tbl_contains(lib.views, view))
-      end)
+          -- Registered after open.
+          assert.is_true(vim.tbl_contains(lib.views, view))
+        end)
 
-      close_view(view)
-      cleanup_repo(repo)
-      if not ok then error(err) end
-    end))
-
-    it("does not double-register when add_view is called before open", test_utils.async_test(function()
-      local repo = make_repo()
-      local view
-      local lib = require("diffview.lib")
-
-      local ok, err = pcall(function()
-        view = CDiffView({
-          git_root = repo,
-          left = Rev(RevType.STAGE),
-          right = Rev(RevType.LOCAL),
-          files = make_files(),
-          update_files = function() return make_files() end,
-          get_file_data = function() return {} end,
-        })
-
-        -- Simulate old-style manual registration before open.
-        lib.add_view(view)
-        local count_before = 0
-        for _, v in ipairs(lib.views) do
-          if v == view then count_before = count_before + 1 end
+        close_view(view)
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
         end
-        eq(1, count_before)
-
-        view:open()
-
-        -- Should still only appear once.
-        local count_after = 0
-        for _, v in ipairs(lib.views) do
-          if v == view then count_after = count_after + 1 end
-        end
-        eq(1, count_after)
       end)
+    )
 
-      close_view(view)
-      cleanup_repo(repo)
-      if not ok then error(err) end
-    end))
+    it(
+      "does not double-register when add_view is called before open",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local view
+        local lib = require("diffview.lib")
+
+        local ok, err = pcall(function()
+          view = CDiffView({
+            git_root = repo,
+            left = Rev(RevType.STAGE),
+            right = Rev(RevType.LOCAL),
+            files = make_files(),
+            update_files = function()
+              return make_files()
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
+
+          -- Simulate old-style manual registration before open.
+          lib.add_view(view)
+          local count_before = 0
+          for _, v in ipairs(lib.views) do
+            if v == view then
+              count_before = count_before + 1
+            end
+          end
+          eq(1, count_before)
+
+          view:open()
+
+          -- Should still only appear once.
+          local count_after = 0
+          for _, v in ipairs(lib.views) do
+            if v == view then
+              count_after = count_after + 1
+            end
+          end
+          eq(1, count_after)
+        end)
+
+        close_view(view)
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
+        end
+      end)
+    )
   end)
 
   -- -----------------------------------------------------------------------
@@ -356,57 +430,73 @@ describe("diffview.api.CDiffView", function()
   -- -----------------------------------------------------------------------
 
   describe("get_updated_files", function()
-    it("calls fetch_files and returns entries", test_utils.async_test(function()
-      local repo = make_repo()
-      local view
-      local fetch_called = false
+    it(
+      "calls fetch_files and returns entries",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local view
+        local fetch_called = false
 
-      local ok, err = pcall(function()
-        view = CDiffView({
-          git_root = repo,
-          left = Rev(RevType.STAGE),
-          right = Rev(RevType.LOCAL),
-          files = make_files(),
-          update_files = function()
-            fetch_called = true
-            return make_files({ make_file_data("new.txt", "A") })
-          end,
-          get_file_data = function() return {} end,
-        })
+        local ok, err = pcall(function()
+          view = CDiffView({
+            git_root = repo,
+            left = Rev(RevType.STAGE),
+            right = Rev(RevType.LOCAL),
+            files = make_files(),
+            update_files = function()
+              fetch_called = true
+              return make_files({ make_file_data("new.txt", "A") })
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
 
-        local file_err, entries = async.await(view:get_updated_files())
-        assert.is_nil(file_err)
-        assert.is_true(fetch_called)
-        assert.is_table(entries)
-        assert.is_table(entries.working)
-        eq(1, #entries.working)
+          local file_err, entries = async.await(view:get_updated_files())
+          assert.is_nil(file_err)
+          assert.is_true(fetch_called)
+          assert.is_table(entries)
+          assert.is_table(entries.working)
+          eq(1, #entries.working)
+        end)
+
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
+        end
       end)
+    )
 
-      cleanup_repo(repo)
-      if not ok then error(err) end
-    end))
+    it(
+      "handles fetch_files returning malformed data",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local view
 
-    it("handles fetch_files returning malformed data", test_utils.async_test(function()
-      local repo = make_repo()
-      local view
+        local ok, err = pcall(function()
+          view = CDiffView({
+            git_root = repo,
+            left = Rev(RevType.STAGE),
+            right = Rev(RevType.LOCAL),
+            files = make_files(),
+            update_files = function()
+              return "not a table"
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
 
-      local ok, err = pcall(function()
-        view = CDiffView({
-          git_root = repo,
-          left = Rev(RevType.STAGE),
-          right = Rev(RevType.LOCAL),
-          files = make_files(),
-          update_files = function() return "not a table" end,
-          get_file_data = function() return {} end,
-        })
+          local file_err, entries = async.await(view:get_updated_files())
+          assert.is_not_nil(file_err)
+          assert.is_nil(entries)
+        end)
 
-        local file_err, entries = async.await(view:get_updated_files())
-        assert.is_not_nil(file_err)
-        assert.is_nil(entries)
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
+        end
       end)
-
-      cleanup_repo(repo)
-      if not ok then error(err) end
-    end))
+    )
   end)
 end)

@@ -159,7 +159,9 @@ describe("diffview.ui.panel", function()
 
       -- Mock a component covering only lines 1-2 (0-indexed: lstart=1, lend=3).
       local mock_comp = { lstart = 1, lend = 3 }
-      panel.get_autosize_components = function() return { mock_comp } end
+      panel.get_autosize_components = function()
+        return { mock_comp }
+      end
 
       local width = panel:compute_content_width()
       -- Should measure only "short file entry" (17 chars) + textoff(2) + 1 = 20.
@@ -169,26 +171,31 @@ describe("diffview.ui.panel", function()
       api.nvim_buf_delete(bufid, { force = true })
     end)
 
-    it("compute_content_width falls back to all lines when autosize components are empty", function()
-      local panel = make_panel("auto")
-      local bufid = api.nvim_create_buf(false, true)
-      panel.bufid = bufid
-      api.nvim_buf_set_lines(bufid, 0, -1, false, {
-        "header line",
-        "another line here!",
-      })
+    it(
+      "compute_content_width falls back to all lines when autosize components are empty",
+      function()
+        local panel = make_panel("auto")
+        local bufid = api.nvim_create_buf(false, true)
+        panel.bufid = bufid
+        api.nvim_buf_set_lines(bufid, 0, -1, false, {
+          "header line",
+          "another line here!",
+        })
 
-      -- Mock zero-height components (lend <= lstart), as during loading.
-      local mock_comp = { lstart = 0, lend = 0 }
-      panel.get_autosize_components = function() return { mock_comp } end
+        -- Mock zero-height components (lend <= lstart), as during loading.
+        local mock_comp = { lstart = 0, lend = 0 }
+        panel.get_autosize_components = function()
+          return { mock_comp }
+        end
 
-      local width = panel:compute_content_width()
-      -- Should fall back to measuring all lines.
-      local expected = api.nvim_strwidth("another line here!") + 2 + 1
-      eq(expected, width)
+        local width = panel:compute_content_width()
+        -- Should fall back to measuring all lines.
+        local expected = api.nvim_strwidth("another line here!") + 2 + 1
+        eq(expected, width)
 
-      api.nvim_buf_delete(bufid, { force = true })
-    end)
+        api.nvim_buf_delete(bufid, { force = true })
+      end
+    )
 
     it("compute_content_width clamps to half the editor width", function()
       local panel = make_panel("auto")
@@ -274,7 +281,9 @@ describe("diffview.ui.panel", function()
     it("stops treesitter on the panel buffer during init_buffer", function()
       local saved = vim.treesitter.stop
       local calls = {}
-      vim.treesitter.stop = function(buf) table.insert(calls, buf) end
+      vim.treesitter.stop = function(buf)
+        table.insert(calls, buf)
+      end
 
       local panel = make_panel()
       panel.update_components = function() end
@@ -321,7 +330,8 @@ describe("diffview.ui.panel", function()
     end
 
     local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
-    local FileHistoryPanel = require("diffview.scene.views.file_history.file_history_panel").FileHistoryPanel
+    local FileHistoryPanel =
+      require("diffview.scene.views.file_history.file_history_panel").FileHistoryPanel
 
     assert_panel_interface(FilePanel, "FilePanel")
     assert_panel_interface(FileHistoryPanel, "FileHistoryPanel")
@@ -478,8 +488,12 @@ describe("diffview.ui.panel", function()
     local function make_panel()
       local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
       local files = {}
-      function files:iter() return function() end end
-      function files:len() return 0 end
+      function files:iter()
+        return function() end
+      end
+      function files:len()
+        return 0
+      end
       return FilePanel(adapter, files, {})
     end
 
@@ -638,19 +652,30 @@ describe("diffview.ui.panel", function()
 
     ---Build a mock FileDict with named sub-lists.
     local function make_files(conflicting, working, staged)
-      local files = { conflicting = conflicting or {}, working = working or {}, staged = staged or {} }
+      local files =
+        { conflicting = conflicting or {}, working = working or {}, staged = staged or {} }
       function files:iter()
         local all = {}
-        for _, f in ipairs(self.conflicting) do all[#all + 1] = f end
-        for _, f in ipairs(self.working) do all[#all + 1] = f end
-        for _, f in ipairs(self.staged) do all[#all + 1] = f end
+        for _, f in ipairs(self.conflicting) do
+          all[#all + 1] = f
+        end
+        for _, f in ipairs(self.working) do
+          all[#all + 1] = f
+        end
+        for _, f in ipairs(self.staged) do
+          all[#all + 1] = f
+        end
         local i = 0
         return function()
           i = i + 1
-          if i <= #all then return i, all[i] end
+          if i <= #all then
+            return i, all[i]
+          end
         end
       end
-      function files:len() return #self.conflicting + #self.working + #self.staged end
+      function files:len()
+        return #self.conflicting + #self.working + #self.staged
+      end
       return files
     end
 
@@ -676,7 +701,9 @@ describe("diffview.ui.panel", function()
           }
         end,
       }
-      renderer.create_cursor_constraint = function() return function() end end
+      renderer.create_cursor_constraint = function()
+        return function() end
+      end
 
       local ok, err = pcall(function()
         panel:update_components()
@@ -692,7 +719,9 @@ describe("diffview.ui.panel", function()
       end)
 
       renderer.create_cursor_constraint = orig_create_cursor_constraint
-      if not ok then error(err) end
+      if not ok then
+        error(err)
+      end
     end)
 
     it("tree mode calls update_statuses and create_comp_schema on each tree", function()
@@ -704,7 +733,9 @@ describe("diffview.ui.panel", function()
 
       local function mock_tree(name)
         return {
-          update_statuses = function() statuses_updated[#statuses_updated + 1] = name end,
+          update_statuses = function()
+            statuses_updated[#statuses_updated + 1] = name
+          end,
           create_comp_schema = function(_, opts)
             schemas_created[#schemas_created + 1] = { name = name, opts = opts }
             return { { name = "directory", context = {} } }
@@ -713,16 +744,22 @@ describe("diffview.ui.panel", function()
       end
 
       local files = {
-        conflicting = {}, working = {}, staged = {},
+        conflicting = {},
+        working = {},
+        staged = {},
         conflicting_tree = mock_tree("conflicting"),
         working_tree = mock_tree("working"),
         staged_tree = mock_tree("staged"),
       }
       function files:iter()
         local i = 0
-        return function() i = i + 1 end
+        return function()
+          i = i + 1
+        end
       end
-      function files:len() return 0 end
+      function files:len()
+        return 0
+      end
 
       local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
       local panel = FilePanel(adapter, files, {})
@@ -737,7 +774,9 @@ describe("diffview.ui.panel", function()
           }
         end,
       }
-      renderer.create_cursor_constraint = function() return function() end end
+      renderer.create_cursor_constraint = function()
+        return function() end
+      end
 
       local ok, err = pcall(function()
         panel:update_components()
@@ -754,7 +793,9 @@ describe("diffview.ui.panel", function()
       end)
 
       renderer.create_cursor_constraint = orig_create_cursor_constraint
-      if not ok then error(err) end
+      if not ok then
+        error(err)
+      end
     end)
   end)
 
@@ -809,7 +850,9 @@ describe("diffview.ui.panel", function()
       pcall(vim.api.nvim_buf_delete, panel.bufid, { force = true })
       vim.keymap.set = orig_keymap_set
       config.get_config = orig_get_config
-      if not ok then error(err) end
+      if not ok then
+        error(err)
+      end
     end)
 
     it("apply_keymaps without extra_defaults omits nowait", function()
@@ -848,7 +891,9 @@ describe("diffview.ui.panel", function()
       pcall(vim.api.nvim_buf_delete, panel.bufid, { force = true })
       vim.keymap.set = orig_keymap_set
       config.get_config = orig_get_config
-      if not ok then error(err) end
+      if not ok then
+        error(err)
+      end
     end)
   end)
 
@@ -857,24 +902,37 @@ describe("diffview.ui.panel", function()
 
     ---Build a mock FileDict with named sub-lists and an iter method.
     local function make_files(conflicting, working, staged)
-      local files = { conflicting = conflicting or {}, working = working or {}, staged = staged or {} }
+      local files =
+        { conflicting = conflicting or {}, working = working or {}, staged = staged or {} }
       function files:iter()
         local all = {}
-        for _, f in ipairs(self.conflicting) do all[#all + 1] = f end
-        for _, f in ipairs(self.working) do all[#all + 1] = f end
-        for _, f in ipairs(self.staged) do all[#all + 1] = f end
+        for _, f in ipairs(self.conflicting) do
+          all[#all + 1] = f
+        end
+        for _, f in ipairs(self.working) do
+          all[#all + 1] = f
+        end
+        for _, f in ipairs(self.staged) do
+          all[#all + 1] = f
+        end
         local i = 0
         return function()
           i = i + 1
-          if i <= #all then return i, all[i] end
+          if i <= #all then
+            return i, all[i]
+          end
         end
       end
-      function files:len() return #self.conflicting + #self.working + #self.staged end
+      function files:len()
+        return #self.conflicting + #self.working + #self.staged
+      end
       function files:update_file_trees() end
       return files
     end
 
-    local function make_entry(path) return { path = path, set_active = function() end } end
+    local function make_entry(path)
+      return { path = path, set_active = function() end }
+    end
 
     local function make_panel(entries)
       local adapter = { ctx = { toplevel = "/tmp", dir = "/tmp/.git" } }
@@ -890,26 +948,34 @@ describe("diffview.ui.panel", function()
     it("update_components is safe when render_data is nil", function()
       local panel = make_panel()
       eq(nil, panel.render_data)
-      assert.has_no.errors(function() panel:update_components() end)
+      assert.has_no.errors(function()
+        panel:update_components()
+      end)
       eq(nil, panel.components)
     end)
 
     it("render is safe when render_data is nil", function()
       local panel = make_panel()
       eq(nil, panel.render_data)
-      assert.has_no.errors(function() panel:render() end)
+      assert.has_no.errors(function()
+        panel:render()
+      end)
     end)
 
     it("redraw is safe when render_data is nil", function()
       local panel = make_panel()
       eq(nil, panel.render_data)
-      assert.has_no.errors(function() panel:redraw() end)
+      assert.has_no.errors(function()
+        panel:redraw()
+      end)
     end)
 
     it("reconstrain_cursor is safe when panel is not open", function()
       local panel = make_panel({ make_entry("a.lua") })
       assert.falsy(panel:is_open())
-      assert.has_no.errors(function() panel:reconstrain_cursor() end)
+      assert.has_no.errors(function()
+        panel:reconstrain_cursor()
+      end)
     end)
 
     it("ordered_file_list works without components", function()
@@ -937,7 +1003,9 @@ describe("diffview.ui.panel", function()
       local f = make_entry("a.lua")
       local panel = make_panel({ f })
       assert.falsy(panel:is_open())
-      assert.has_no.errors(function() panel:highlight_file(f) end)
+      assert.has_no.errors(function()
+        panel:highlight_file(f)
+      end)
     end)
 
     it("toggling on after show=false initialises the panel fully", function()

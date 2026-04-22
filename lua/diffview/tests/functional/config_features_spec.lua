@@ -230,7 +230,8 @@ describe("commit_format", function()
 
   it("has the expected default list of formatter names", function()
     local conf = setup_with({})
-    local expected = { "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date" }
+    local expected =
+      { "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date" }
     assert.same(expected, conf.file_history_panel.commit_format)
   end)
 

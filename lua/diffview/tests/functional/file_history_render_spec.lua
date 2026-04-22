@@ -8,7 +8,6 @@ local render_stat_bar = render._test.render_stat_bar
 local render_file_stats = render._test.render_file_stats
 local formatters = render._test.formatters
 
-
 -- ---------------------------------------------------------------------------
 -- Mock RenderComponent
 -- ---------------------------------------------------------------------------
@@ -69,7 +68,9 @@ local function make_file(name)
   return {
     name = name,
     active = false,
-    set_active = function(self, v) self.active = v end,
+    set_active = function(self, v)
+      self.active = v
+    end,
   }
 end
 
@@ -90,9 +91,8 @@ end
 ---@param file_idx integer
 ---@return table
 local function make_panel(entries, entry_idx, file_idx)
-  local FileHistoryPanel = require(
-    "diffview.scene.views.file_history.file_history_panel"
-  ).FileHistoryPanel
+  local FileHistoryPanel =
+    require("diffview.scene.views.file_history.file_history_panel").FileHistoryPanel
 
   local panel = {
     entries = entries,

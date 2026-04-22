@@ -15,8 +15,11 @@ local selection_signs_ns = api.nvim_create_namespace("diffview_selection_signs")
 local function has_wide_sign(conf)
   local signs = conf.signs
   for _, s in ipairs({
-    signs.selected_file, signs.unselected_file,
-    signs.selected_dir, signs.partially_selected_dir, signs.unselected_dir,
+    signs.selected_file,
+    signs.unselected_file,
+    signs.selected_dir,
+    signs.partially_selected_dir,
+    signs.unselected_dir,
   }) do
     if vim.fn.strdisplaywidth(s) >= 2 then
       return true
@@ -38,7 +41,9 @@ end
 ---@param node table  Tree node whose leaves() will be counted.
 ---@param tree_options table  Config tree_options table.
 local function render_folder_count(comp, node, tree_options)
-  if tree_options.folder_count_style == "none" then return end
+  if tree_options.folder_count_style == "none" then
+    return
+  end
 
   if tree_options.folder_count_style == "grouped" then
     local leaves = node:leaves()
@@ -79,7 +84,9 @@ local function render_file(conf, panel, comp, show_path, depth, sign_pad)
   local show_marks = conf.file_panel.mark_placement ~= "sign_column"
     and (conf.file_panel.always_show_marks or panel:has_any_selections())
 
-  if sign_pad then comp:add_text(" ") end
+  if sign_pad then
+    comp:add_text(" ")
+  end
   comp:add_text(hl.get_status_icon(file.status) .. " ", hl.get_git_hl(file.status))
 
   if show_marks then
@@ -172,7 +179,9 @@ local function render_file_tree_recurse(conf, panel, depth, comp, sign_pad)
     return
   end
 
-  if comp.name ~= "directory" then return end
+  if comp.name ~= "directory" then
+    return
+  end
 
   -- Directory component structure:
   -- {
@@ -220,7 +229,9 @@ local function render_file_tree_recurse(conf, panel, depth, comp, sign_pad)
     end
     dir:add_text(sel_mark, sel_mark_hl)
   else
-    if sign_pad then dir:add_text(" ") end
+    if sign_pad then
+      dir:add_text(" ")
+    end
     dir:add_text(
       hl.get_status_icon(get_dir_status_text(ctx, conf.file_panel.tree_options)) .. " ",
       hl.get_git_hl(ctx.status)
@@ -344,19 +355,27 @@ end
 ---component lstart/lend values are available.
 ---@param panel FilePanel
 local function place_selection_signs(panel)
-  if not panel:buf_loaded() then return end
+  if not panel:buf_loaded() then
+    return
+  end
 
   -- Always clear existing signs so that switching from sign_column to inline
   -- does not leave stale extmarks behind.
   api.nvim_buf_clear_namespace(panel.bufid, selection_signs_ns, 0, -1)
 
   local conf = config.get_config()
-  if conf.file_panel.mark_placement ~= "sign_column" then return end
-  if not panel.components then return end
+  if conf.file_panel.mark_placement ~= "sign_column" then
+    return
+  end
+  if not panel.components then
+    return
+  end
 
   local show_marks = conf.file_panel.always_show_marks or panel:has_any_selections()
 
-  if not show_marks then return end
+  if not show_marks then
+    return
+  end
 
   for _, section in ipairs({ "conflicting", "working", "staged" }) do
     local files_comp = panel.components[section].files.comp
@@ -457,12 +476,17 @@ local function render_panel(panel)
     -- Truncate the revision name from the tail so the start of the hash
     -- stays visible.
     if panel.rev_pretty_name then
-      comp:add_line(utils.str_trunc(panel.rev_pretty_name, math.max(width - 5, 1)), "DiffviewFilePanelPath")
+      comp:add_line(
+        utils.str_trunc(panel.rev_pretty_name, math.max(width - 5, 1)),
+        "DiffviewFilePanelPath"
+      )
     end
 
     for _, arg in ipairs(panel.path_args or {}) do
       local relpath = pl:relative(arg, panel.adapter.ctx.toplevel)
-      if relpath == "" then relpath = "." end
+      if relpath == "" then
+        relpath = "."
+      end
       comp:add_line(pl:truncate(relpath, width - 5), "DiffviewFilePanelPath")
     end
   end
@@ -479,5 +503,7 @@ return setmetatable({
     selection_signs_ns = selection_signs_ns,
   },
 }, {
-  __call = function(_, panel) render_panel(panel) end,
+  __call = function(_, panel)
+    render_panel(panel)
+  end,
 })

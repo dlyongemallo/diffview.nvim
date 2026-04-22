@@ -18,14 +18,21 @@ local M = {}
 
 -- Boolean diffopt flags that can be toggled.
 local diffopt_bool_flags = {
-  "indent-heuristic", "iwhite", "iwhiteall", "iwhiteeol", "iblank", "icase",
+  "indent-heuristic",
+  "iwhite",
+  "iwhiteall",
+  "iwhiteeol",
+  "iblank",
+  "icase",
 }
 
 ---Apply configured diffopt overrides, saving the original value on the view.
 ---@param view View
 local function apply_diffopt(view)
   local conf = config.get_config().diffopt
-  if not conf or vim.tbl_isempty(conf) then return end
+  if not conf or vim.tbl_isempty(conf) then
+    return
+  end
 
   if not view._saved_diffopt then
     view._saved_diffopt = vim.opt.diffopt:get()
@@ -33,23 +40,23 @@ local function apply_diffopt(view)
 
   if conf.algorithm then
     -- Remove any existing algorithm:* entry and add the new one.
-    vim.opt.diffopt:remove(
-      vim.tbl_filter(function(v) return v:match("^algorithm:") end, vim.opt.diffopt:get())
-    )
+    vim.opt.diffopt:remove(vim.tbl_filter(function(v)
+      return v:match("^algorithm:")
+    end, vim.opt.diffopt:get()))
     vim.opt.diffopt:append({ "algorithm:" .. conf.algorithm })
   end
 
   if conf.context ~= nil then
-    vim.opt.diffopt:remove(
-      vim.tbl_filter(function(v) return v:match("^context:") end, vim.opt.diffopt:get())
-    )
+    vim.opt.diffopt:remove(vim.tbl_filter(function(v)
+      return v:match("^context:")
+    end, vim.opt.diffopt:get()))
     vim.opt.diffopt:append({ "context:" .. conf.context })
   end
 
   if conf.linematch ~= nil then
-    vim.opt.diffopt:remove(
-      vim.tbl_filter(function(v) return v:match("^linematch:") end, vim.opt.diffopt:get())
-    )
+    vim.opt.diffopt:remove(vim.tbl_filter(function(v)
+      return v:match("^linematch:")
+    end, vim.opt.diffopt:get()))
     vim.opt.diffopt:append({ "linematch:" .. conf.linematch })
   end
 
@@ -94,10 +101,14 @@ local View = oop.create_class("View")
 ---@diagnostic disable unused-local
 
 ---@abstract
-function View:init_layout() oop.abstract_stub() end
+function View:init_layout()
+  oop.abstract_stub()
+end
 
 ---@abstract
-function View:post_open() oop.abstract_stub() end
+function View:post_open()
+  oop.abstract_stub()
+end
 
 ---@diagnostic enable unused-local
 

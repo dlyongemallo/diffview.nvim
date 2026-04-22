@@ -30,7 +30,9 @@ local function utf8_iter(s)
   local len = #s
   local pos = 1
   return function()
-    if pos > len then return nil end
+    if pos > len then
+      return nil
+    end
     local b = s:byte(pos)
     local char_len
     if b < 0x80 then
@@ -49,7 +51,9 @@ local function utf8_iter(s)
       char_len = 1
     end
     local remaining = len - pos + 1
-    if char_len > remaining then char_len = remaining end
+    if char_len > remaining then
+      char_len = remaining
+    end
     local ch = s:sub(pos, pos + char_len - 1)
     local start = pos - 1
     pos = pos + char_len
@@ -75,8 +79,12 @@ end
 ---@param ch string
 ---@return boolean
 local function is_word_char(ch)
-  if ch == "" then return false end
-  if #ch > 1 then return true end
+  if ch == "" then
+    return false
+  end
+  if #ch > 1 then
+    return true
+  end
   return is_word_byte(ch:byte(1))
 end
 
@@ -85,7 +93,9 @@ end
 -- non-word char, so the first byte determines the class.
 ---@param s string
 ---@return boolean
-local function is_word_token(s) return s ~= "" and is_word_byte(s:byte(1)) end
+local function is_word_token(s)
+  return s ~= "" and is_word_byte(s:byte(1))
+end
 
 -- Tokenize `s` for word-level intraline diffing. Each maximal run of word
 -- characters forms one token; each non-word character becomes its own
@@ -122,7 +132,9 @@ local function tokenize(s)
       byte_map[#byte_map + 1] = { byte = byte_pos, byte_len = char_len }
     end
   end
-  if word_start then byte_map[#byte_map + 1] = { byte = word_start, byte_len = word_bytes } end
+  if word_start then
+    byte_map[#byte_map + 1] = { byte = word_start, byte_len = word_bytes }
+  end
   return tokens, byte_map
 end
 
@@ -167,7 +179,9 @@ end
 ---@param b_units string[]
 ---@return integer[][]
 local function diff_units(a_units, b_units)
-  if #a_units == 0 or #b_units == 0 then return {} end
+  if #a_units == 0 or #b_units == 0 then
+    return {}
+  end
   local a = table.concat(a_units, "\n") .. "\n"
   local b = table.concat(b_units, "\n") .. "\n"
   return vim.diff(a, b, {
@@ -200,14 +214,20 @@ local INTRALINE_MAX_HUNKS = 3
 ---@param n_hunks integer
 ---@return boolean
 local function refinement_safe(old_chars, new_chars, n_hunks)
-  if n_hunks == 0 or n_hunks > INTRALINE_MAX_HUNKS then return false end
-  if n_hunks == 1 then return true end
+  if n_hunks == 0 or n_hunks > INTRALINE_MAX_HUNKS then
+    return false
+  end
+  if n_hunks == 1 then
+    return true
+  end
 
   local pre = 0
   while pre < #old_chars and pre < #new_chars and old_chars[pre + 1] == new_chars[pre + 1] do
     pre = pre + 1
   end
-  if pre >= 2 then return true end
+  if pre >= 2 then
+    return true
+  end
 
   local suf = 0
   while
@@ -314,17 +334,25 @@ end
 ---@param inline_del boolean Render deleted units as inline virt_text.
 ---@return "ok"|"noop"|"skipped" # `ok`: rendered; `noop`: identical (nothing to do); `skipped`: fragmented, caller may want to fall back.
 local function render_char_highlights(bufnr, new_row, old_line, new_line, inline_del)
-  if old_line == new_line then return "noop" end
+  if old_line == new_line then
+    return "noop"
+  end
   -- Blank-to-nonblank (or vice versa) has no meaningful char-level diff, but
   -- the lines differ: signal `skipped` so the caller's fallback path still
   -- renders a line highlight / echoes the old line in overleaf style.
-  if old_line == "" or new_line == "" then return "skipped" end
+  if old_line == "" or new_line == "" then
+    return "skipped"
+  end
 
   local old_tokens = tokenize(old_line)
   local new_tokens, new_map = tokenize(new_line)
   local hunks = diff_units(old_tokens, new_tokens)
-  if #hunks == 0 then return "noop" end
-  if #hunks > INTRALINE_MAX_HUNKS then return "skipped" end
+  if #hunks == 0 then
+    return "noop"
+  end
+  if #hunks > INTRALINE_MAX_HUNKS then
+    return "skipped"
+  end
 
   local new_line_len = #new_line
 
@@ -447,17 +475,27 @@ local function render_deleted_block(
     }
   end
 
-  if #virt_lines == 0 then return end
+  if #virt_lines == 0 then
+    return
+  end
 
   local row = anchor_row
-  if row == nil then row = new_start == 0 and 0 or new_start - 1 end
+  if row == nil then
+    row = new_start == 0 and 0 or new_start - 1
+  end
 
-  if above == nil then above = new_start == 0 end
+  if above == nil then
+    above = new_start == 0
+  end
 
   local line_count = api.nvim_buf_line_count(bufnr)
-  if line_count == 0 then return end
+  if line_count == 0 then
+    return
+  end
 
-  if row >= line_count then row = line_count - 1 end
+  if row >= line_count then
+    row = line_count - 1
+  end
 
   api.nvim_buf_set_extmark(bufnr, M.ns, row, 0, {
     virt_lines = virt_lines,
@@ -489,7 +527,9 @@ local scroll_adjuster_augroup =
 
 ---@param bufnr integer
 local function register_cache_cleanup(bufnr)
-  if cache_cleanup_registered[bufnr] or not api.nvim_buf_is_valid(bufnr) then return end
+  if cache_cleanup_registered[bufnr] or not api.nvim_buf_is_valid(bufnr) then
+    return
+  end
 
   cache_cleanup_registered[bufnr] = true
   api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
@@ -535,15 +575,25 @@ end
 ---@param bufnr integer
 ---@param winid integer
 function M.ensure_eof_virt_lines_visible(bufnr, winid)
-  if not (api.nvim_buf_is_valid(bufnr) and api.nvim_win_is_valid(winid)) then return end
-  if api.nvim_win_get_buf(winid) ~= bufnr then return end
+  if not (api.nvim_buf_is_valid(bufnr) and api.nvim_win_is_valid(winid)) then
+    return
+  end
+  if api.nvim_win_get_buf(winid) ~= bufnr then
+    return
+  end
 
   local last_row = api.nvim_buf_line_count(bufnr)
-  if last_row == 0 then return end
-  if api.nvim_win_get_cursor(winid)[1] ~= last_row then return end
+  if last_row == 0 then
+    return
+  end
+  if api.nvim_win_get_cursor(winid)[1] ~= last_row then
+    return
+  end
 
   local below = count_edge_virt_lines(bufnr, last_row - 1, false)
-  if below == 0 then return end
+  if below == 0 then
+    return
+  end
 
   local height = api.nvim_win_get_height(winid)
   -- Clamp `below` so we never ask for a topline past `last_row`: we can't
@@ -578,15 +628,25 @@ end
 ---@param bufnr integer
 ---@param winid integer
 function M.ensure_bof_virt_lines_visible(bufnr, winid)
-  if not (api.nvim_buf_is_valid(bufnr) and api.nvim_win_is_valid(winid)) then return end
-  if api.nvim_win_get_buf(winid) ~= bufnr then return end
-  if M._hunks_by_buf[bufnr] == nil then return end
+  if not (api.nvim_buf_is_valid(bufnr) and api.nvim_win_is_valid(winid)) then
+    return
+  end
+  if api.nvim_win_get_buf(winid) ~= bufnr then
+    return
+  end
+  if M._hunks_by_buf[bufnr] == nil then
+    return
+  end
 
   api.nvim_win_call(winid, function()
     local view = vim.fn.winsaveview()
     local desired = 0
-    if view.topline == 1 then desired = count_edge_virt_lines(bufnr, 0, true) end
-    if (view.topfill or 0) == desired then return end
+    if view.topline == 1 then
+      desired = count_edge_virt_lines(bufnr, 0, true)
+    end
+    if (view.topfill or 0) == desired then
+      return
+    end
     view.topfill = desired
     vim.fn.winrestview(view)
   end)
@@ -594,7 +654,9 @@ end
 
 ---@param bufnr integer
 local function register_scroll_adjuster(bufnr)
-  if scroll_adjuster_registered[bufnr] or not api.nvim_buf_is_valid(bufnr) then return end
+  if scroll_adjuster_registered[bufnr] or not api.nvim_buf_is_valid(bufnr) then
+    return
+  end
 
   scroll_adjuster_registered[bufnr] = true
   api.nvim_create_autocmd("CursorMoved", {
@@ -618,7 +680,9 @@ function M.clear(bufnr)
   -- autocmd installed by `register_cache_cleanup` is still pending and will
   -- reset the flag when it fires. Clearing the flag here would cause the next
   -- render pass to register a duplicate autocmd.
-  if bufnr then M._hunks_by_buf[bufnr] = nil end
+  if bufnr then
+    M._hunks_by_buf[bufnr] = nil
+  end
 end
 
 -- Fully detach the inline diff from `bufnr`: clear extmarks and cached hunks
@@ -631,14 +695,18 @@ end
 ---@param bufnr integer
 function M.detach(bufnr)
   M.clear(bufnr)
-  if not bufnr then return end
+  if not bufnr then
+    return
+  end
   if scroll_adjuster_registered[bufnr] then
     scroll_adjuster_registered[bufnr] = nil
     if api.nvim_buf_is_valid(bufnr) then
       pcall(api.nvim_clear_autocmds, { group = scroll_adjuster_augroup, buffer = bufnr })
     end
   end
-  if not api.nvim_buf_is_valid(bufnr) then return end
+  if not api.nvim_buf_is_valid(bufnr) then
+    return
+  end
   for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
     if api.nvim_win_is_valid(winid) then
       api.nvim_win_call(winid, function()
@@ -659,7 +727,9 @@ end
 ---@return integer[]
 function M.hunk_anchor_rows(bufnr)
   local hunks = M._hunks_by_buf[bufnr]
-  if not hunks then return {} end
+  if not hunks then
+    return {}
+  end
 
   local rows = {}
   local line_count = api.nvim_buf_is_valid(bufnr) and api.nvim_buf_line_count(bufnr) or 0
@@ -674,8 +744,12 @@ function M.hunk_anchor_rows(bufnr)
       -- Pure deletion: anchor at the line that holds the virt_lines.
       row = new_start == 0 and 0 or new_start - 1
     end
-    if row < 0 then row = 0 end
-    if line_count > 0 and row >= line_count then row = line_count - 1 end
+    if row < 0 then
+      row = 0
+    end
+    if line_count > 0 and row >= line_count then
+      row = line_count - 1
+    end
 
     if not seen[row] then
       seen[row] = true
@@ -693,7 +767,9 @@ end
 ---@return integer? row
 function M.next_hunk_row(bufnr, cursor_row)
   for _, r in ipairs(M.hunk_anchor_rows(bufnr)) do
-    if r > cursor_row then return r end
+    if r > cursor_row then
+      return r
+    end
   end
 end
 
@@ -702,7 +778,9 @@ end
 -- new_count }` in 1-indexed form, as returned by `vim.diff`.
 ---@param bufnr integer
 ---@return integer[][]?
-function M.get_hunks(bufnr) return M._hunks_by_buf[bufnr] end
+function M.get_hunks(bufnr)
+  return M._hunks_by_buf[bufnr]
+end
 
 -- Find the row of the last hunk strictly before `cursor_row` (0-indexed).
 ---@param bufnr integer
@@ -769,8 +847,12 @@ function M.render(bufnr, old_lines, new_lines, opts)
   local style = STYLES[opts.style] or STYLES.unified
   M.clear(bufnr)
 
-  if not api.nvim_buf_is_valid(bufnr) then return end
-  if api.nvim_buf_line_count(bufnr) == 0 then return end
+  if not api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+  if api.nvim_buf_line_count(bufnr) == 0 then
+    return
+  end
 
   -- Terminate with a trailing newline so `vim.diff` treats the last line as a
   -- complete line. Without it, EOF additions/deletions get classified as
@@ -787,21 +869,33 @@ function M.render(bufnr, old_lines, new_lines, opts)
   -- explicitly set so vim.diff's own defaults apply otherwise. This mirrors
   -- how `'diffopt'` toggles flags/options by presence/absence rather than
   -- forcing fallback values here.
-  if opts.algorithm ~= nil then diff_opts.algorithm = opts.algorithm end
-  if opts.linematch ~= nil then diff_opts.linematch = opts.linematch end
-  if opts.indent_heuristic ~= nil then diff_opts.indent_heuristic = opts.indent_heuristic end
-  if opts.ignore_whitespace ~= nil then diff_opts.ignore_whitespace = opts.ignore_whitespace end
+  if opts.algorithm ~= nil then
+    diff_opts.algorithm = opts.algorithm
+  end
+  if opts.linematch ~= nil then
+    diff_opts.linematch = opts.linematch
+  end
+  if opts.indent_heuristic ~= nil then
+    diff_opts.indent_heuristic = opts.indent_heuristic
+  end
+  if opts.ignore_whitespace ~= nil then
+    diff_opts.ignore_whitespace = opts.ignore_whitespace
+  end
   if opts.ignore_whitespace_change ~= nil then
     diff_opts.ignore_whitespace_change = opts.ignore_whitespace_change
   end
   if opts.ignore_whitespace_change_at_eol ~= nil then
     diff_opts.ignore_whitespace_change_at_eol = opts.ignore_whitespace_change_at_eol
   end
-  if opts.ignore_blank_lines ~= nil then diff_opts.ignore_blank_lines = opts.ignore_blank_lines end
+  if opts.ignore_blank_lines ~= nil then
+    diff_opts.ignore_blank_lines = opts.ignore_blank_lines
+  end
 
   local hunks = vim.diff(old, new, diff_opts)
 
-  if not hunks then return end
+  if not hunks then
+    return
+  end
 
   M._hunks_by_buf[bufnr] = hunks
   register_cache_cleanup(bufnr)
@@ -875,7 +969,9 @@ function M.render(bufnr, old_lines, new_lines, opts)
         -- as a fallback when char-level rendering was skipped (fragmented
         -- pairing) so the reader still sees that the line was modified.
         local line_hl = style.change_line_hl
-        if not line_hl and char_result == "skipped" then line_hl = "DiffviewDiffChange" end
+        if not line_hl and char_result == "skipped" then
+          line_hl = "DiffviewDiffChange"
+        end
         if line_hl then
           api.nvim_buf_set_extmark(bufnr, M.ns, row, 0, {
             line_hl_group = line_hl,

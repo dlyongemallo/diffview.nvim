@@ -28,7 +28,9 @@ end
 ---@return table
 local function read_store(path)
   local ok, content = pcall(vim.fn.readfile, path)
-  if not ok or #content == 0 then return {} end
+  if not ok or #content == 0 then
+    return {}
+  end
   local decode_ok, data = pcall(vim.json.decode, table.concat(content, "\n"))
   if not decode_ok or type(data) ~= "table" then
     logger:warn("[SelectionStore] Corrupt store file; ignoring: " .. path)

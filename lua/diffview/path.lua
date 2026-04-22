@@ -21,9 +21,13 @@ local is_windows = uv.os_uname().version:match("Windows")
 ---@return string?
 local function uv_err_code(err, err_name)
   -- When the third value looks like a bare code, prefer it.
-  if err_name and err_name:match("^[%u%d_]+$") then return err_name end
+  if err_name and err_name:match("^[%u%d_]+$") then
+    return err_name
+  end
   -- Otherwise fall back to the leading code in the second value.
-  if err then return err:match("^([%u%d_]+)") end
+  if err then
+    return err:match("^([%u%d_]+)")
+  end
   return nil
 end
 
@@ -31,7 +35,9 @@ local function handle_uv_err(x, err, err_name)
   if not x then
     -- Pick whichever value carries the full descriptive message.
     local msg = err or err_name or "unknown uv error"
-    if err_name and #err_name > #msg then msg = err_name end
+    if err_name and #err_name > #msg then
+      msg = err_name
+    end
 
     local code = uv_err_code(err, err_name)
     if code and not msg:find(code, 1, true) then
@@ -99,7 +105,9 @@ end
 ---@param path string
 function PathLib:_split_root(path)
   local root = self:root(path)
-  if not root then return "", path end
+  if not root then
+    return "", path
+  end
   return root, path:sub(#root + 1)
 end
 
@@ -161,7 +169,9 @@ function PathLib:is_abs(path)
 
   if self._is_windows then
     for _, pat in ipairs(WINDOWS_PATH_SPECIFIER) do
-      if path:match(pat) ~= nil then return true end
+      if path:match(pat) ~= nil then
+        return true
+      end
     end
 
     return false
@@ -201,7 +211,9 @@ function PathLib:is_root(path)
     if self._is_windows then
       for _, pat in ipairs(WINDOWS_PATH_SPECIFIER) do
         local prefix = path:match(pat)
-        if prefix and #path == #prefix then return true end
+        if prefix and #path == #prefix then
+          return true
+        end
       end
 
       return false
@@ -223,7 +235,9 @@ function PathLib:root(path)
     if self._is_windows then
       for _, pat in ipairs(WINDOWS_PATH_SPECIFIER) do
         local root = path:match(pat)
-        if root then return root end
+        if root then
+          return root
+        end
       end
     else
       return self.sep
@@ -378,7 +392,7 @@ function PathLib:explode(path)
   end
 
   for part in path:gmatch(string.format("([^%s]+)%s?", self.sep, self.sep)) do
-    parts[#parts+1] = part
+    parts[#parts + 1] = part
   end
 
   return parts
@@ -391,7 +405,9 @@ function PathLib:add_trailing(path)
   local root
   root, path = self:_split_root(path)
 
-  if #path == 0 then return root .. path end
+  if #path == 0 then
+    return root .. path
+  end
   if path:sub(-1) == self.sep then
     return root .. path
   end
@@ -674,7 +690,7 @@ end)
 
 function PathLib:chain(...)
   local t = {
-    __result = utils.tbl_pack(...)
+    __result = utils.tbl_pack(...),
   }
 
   return setmetatable(t, {
@@ -683,14 +699,13 @@ function PathLib:chain(...)
         return function(_)
           return utils.tbl_unpack(t.__result)
         end
-
       else
         return function(_, ...)
           t.__result = utils.tbl_pack(self[k](self, utils.tbl_unpack(t.__result), ...))
           return chain
         end
       end
-    end
+    end,
   })
 end
 

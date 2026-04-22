@@ -10,11 +10,15 @@ local Model = oop.create_class("Model")
 ---@abstract
 ---@param data table
 ---@return CompSchema
-function Model:create_comp_schema(data) oop.abstract_stub() end
+function Model:create_comp_schema(data)
+  oop.abstract_stub()
+end
 
 ---@abstract
 ---@param render_data RenderData
-function Model:render(render_data) oop.abstract_stub() end
+function Model:render(render_data)
+  oop.abstract_stub()
+end
 
 ---@diagnostic enable unused-local
 

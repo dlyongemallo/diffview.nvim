@@ -139,20 +139,30 @@ describe("actions.open_in_new_tab (81a8d41)", function()
   end)
 
   it("returns early without error when no view is active", function()
-    stub(lib, "get_current_view", function() return nil end)
-    assert.has_no.errors(function() actions.open_in_new_tab() end)
+    stub(lib, "get_current_view", function()
+      return nil
+    end)
+    assert.has_no.errors(function()
+      actions.open_in_new_tab()
+    end)
   end)
 
   it("shows info message when called from a non-DiffView", function()
     local info_called = false
-    stub(utils, "info", function() info_called = true end)
+    stub(utils, "info", function()
+      info_called = true
+    end)
 
     -- Build a mock view that is not a DiffView instance.
     local mock_view = {
       class = {},
-      instanceof = function() return false end,
+      instanceof = function()
+        return false
+      end,
     }
-    stub(lib, "get_current_view", function() return mock_view end)
+    stub(lib, "get_current_view", function()
+      return mock_view
+    end)
 
     actions.open_in_new_tab()
     assert.True(info_called)
@@ -184,7 +194,9 @@ describe("actions.open_in_new_tab (81a8d41)", function()
       options = { show_untracked = true },
     }
 
-    stub(lib, "get_current_view", function() return mock_view end)
+    stub(lib, "get_current_view", function()
+      return mock_view
+    end)
 
     -- The real DiffView.__get():ancestorof calls other:instanceof(self)
     -- which in turn calls mock_view:instanceof(DiffView_class). Stub
@@ -203,7 +215,9 @@ describe("actions.open_in_new_tab (81a8d41)", function()
     local reached_constructor = false
     local add_view_called = false
 
-    stub(lib, "add_view", function() add_view_called = true end)
+    stub(lib, "add_view", function()
+      add_view_called = true
+    end)
 
     local ok, err = pcall(actions.open_in_new_tab)
 
@@ -355,7 +369,9 @@ describe("restore_entry directory support (0fb4d16)", function()
       local modified_paths = { ["src/dirty.lua"] = true }
 
       local function find_file_buffer(path)
-        if modified_paths[path] then return 42 end
+        if modified_paths[path] then
+          return 42
+        end
         return nil
       end
 

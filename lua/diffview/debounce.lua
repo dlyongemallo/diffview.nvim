@@ -150,7 +150,9 @@ function M.throttle_trailing(ms, rush_first, fn)
       args = utils.tbl_pack(...)
     end
 
-    if lock then return end
+    if lock then
+      return
+    end
 
     lock = true
 
@@ -191,7 +193,9 @@ function M.throttle_render(framerate, fn)
 
   throttled_fn = async.void(function(...)
     args = utils.tbl_pack(...)
-    if lock then return end
+    if lock then
+      return
+    end
 
     lock = true
     await(async.schedule_now())
@@ -273,4 +277,3 @@ function M.set_timeout(func, delay)
 end
 
 return M
-

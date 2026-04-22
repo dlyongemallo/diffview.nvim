@@ -8,7 +8,9 @@ local mock_mt = {}
 
 local function tbl_clone(t)
   local ret = {}
-  for k, v in pairs(t) do ret[k] = v end
+  for k, v in pairs(t) do
+    ret[k] = v
+  end
   return ret
 end
 

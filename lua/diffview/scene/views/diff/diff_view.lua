@@ -66,10 +66,7 @@ function DiffView:init(opt)
   self.is_loading = true
   self.options = opt.options or {}
   self.options.selected_file = self.options.selected_file
-    and pl:chain(self.options.selected_file)
-        :absolute()
-        :relative(self.adapter.ctx.toplevel)
-        :get()
+    and pl:chain(self.options.selected_file):absolute():relative(self.adapter.ctx.toplevel):get()
 
   self:super({
     panel = FilePanel(
@@ -114,9 +111,8 @@ function DiffView:post_open()
     -- to refresh the panel immediately instead of waiting for index polling.
     -- Unlike GitSignsUpdate (which fires on every buffer enter and caused
     -- spurious refreshes), GitSignsChanged only fires on actual repo changes.
-    self._gitsigns_augroup = api.nvim_create_augroup(
-      "diffview_gitsigns_" .. self.tabpage, { clear = true }
-    )
+    self._gitsigns_augroup =
+      api.nvim_create_augroup("diffview_gitsigns_" .. self.tabpage, { clear = true })
     api.nvim_create_autocmd("User", {
       group = self._gitsigns_augroup,
       pattern = "GitSignsChanged",
@@ -151,7 +147,9 @@ end
 ---@param old_entry FileEntry
 ---@diagnostic disable-next-line: unused-local
 function DiffView:file_open_post(e, new_entry, old_entry)
-  if new_entry.layout:is_nulled() then return end
+  if new_entry.layout:is_nulled() then
+    return
+  end
   if new_entry.kind == "conflicting" then
     local file = new_entry.layout:get_main_win().file
 
@@ -183,20 +181,17 @@ function DiffView:file_open_post(e, new_entry, old_entry)
         end)
       )
 
-      api.nvim_create_autocmd(
-        { "TextChanged", "TextChangedI" },
-        {
-          buffer = file.bufnr,
-          callback = function()
-            if not self.attached_bufs[file.bufnr] then
-              work:close()
-              return true
-            end
+      api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
+        buffer = file.bufnr,
+        callback = function()
+          if not self.attached_bufs[file.bufnr] then
+            work:close()
+            return true
+          end
 
-            work()
-          end,
-        }
-      )
+          work()
+        end,
+      })
     end
   end
 end
@@ -208,9 +203,7 @@ function DiffView:_init_selection_events()
 
   if persist then
     local selection_store = require("diffview.selection_store")
-    self._selection_scope_key = selection_store.scope_key(
-      self.adapter.ctx.toplevel, self.rev_arg
-    )
+    self._selection_scope_key = selection_store.scope_key(self.adapter.ctx.toplevel, self.rev_arg)
 
     -- Load previously saved selections.
     local saved = selection_store.load(self._selection_scope_key)
@@ -236,7 +229,9 @@ end
 
 ---Immediately persist current selections to disk.
 function DiffView:_save_selections_now()
-  if not self._selection_scope_key then return end
+  if not self._selection_scope_key then
+    return
+  end
   local selection_store = require("diffview.selection_store")
   local keys = vim.tbl_keys(self.panel.selected_files)
   table.sort(keys)
@@ -277,9 +272,7 @@ function DiffView:set_revs(new_rev_arg, opts)
   if self._selection_scope_key then
     local selection_store = require("diffview.selection_store")
     local old_scope = self._selection_scope_key
-    self._selection_scope_key = selection_store.scope_key(
-      self.adapter.ctx.toplevel, new_rev_arg
-    )
+    self._selection_scope_key = selection_store.scope_key(self.adapter.ctx.toplevel, new_rev_arg)
 
     -- If the new scope already has saved selections, merge them with the
     -- current in-memory set so nothing is lost.
@@ -383,7 +376,9 @@ end)
 function DiffView:next_file(highlight)
   self:ensure_layout()
 
-  if self:file_safeguard() then return end
+  if self:file_safeguard() then
+    return
+  end
 
   if self.files:len() > 1 or self.nulled then
     local cur = self.panel:next_file()
@@ -406,7 +401,9 @@ end
 function DiffView:prev_file(highlight)
   self:ensure_layout()
 
-  if self:file_safeguard() then return end
+  if self:file_safeguard() then
+    return
+  end
 
   if self.files:len() > 1 or self.nulled then
     local cur = self.panel:prev_file()
@@ -432,7 +429,9 @@ DiffView.set_file = async.void(function(self, file, focus, highlight)
   ---@diagnostic disable: invisible
   self:ensure_layout()
 
-  if self:file_safeguard() or not file then return end
+  if self:file_safeguard() or not file then
+    return
+  end
 
   for _, f in self.files:iter() do
     if f == file then
@@ -471,18 +470,10 @@ end)
 ---@param self DiffView
 ---@param callback fun(err?: string[], files: FileDict)
 DiffView.get_updated_files = async.wrap(function(self, callback)
-  vcs_utils.diff_file_list(
-    self.adapter,
-    self.left,
-    self.right,
-    self.path_args,
-    self.options,
-    {
-      default_layout = DiffView.get_default_layout(),
-      merge_layout = DiffView.get_default_merge_layout(),
-    },
-    callback
-  )
+  vcs_utils.diff_file_list(self.adapter, self.left, self.right, self.path_args, self.options, {
+    default_layout = DiffView.get_default_layout(),
+    merge_layout = DiffView.get_default_merge_layout(),
+  }, callback)
 end)
 
 ---Determine whether to focus the diff window on initial open.
@@ -493,8 +484,7 @@ function DiffView:_should_focus_diff(next_file)
     return false
   end
   local conf = config.get_config()
-  local view_conf = next_file and next_file.kind == "conflicting"
-    and conf.view.merge_tool
+  local view_conf = next_file and next_file.kind == "conflicting" and conf.view.merge_tool
     or conf.view.default
   return view_conf.focus_diff
 end
@@ -612,9 +602,18 @@ DiffView.update_files = debounce.debounce_trailing(
             if not replace_noop then
               replace_noop = not (
                 same_rev(utils.tbl_access(old_file, "revs.a"), utils.tbl_access(new_file, "revs.a"))
-                and same_rev(utils.tbl_access(old_file, "revs.b"), utils.tbl_access(new_file, "revs.b"))
-                and same_rev(utils.tbl_access(old_file, "revs.c"), utils.tbl_access(new_file, "revs.c"))
-                and same_rev(utils.tbl_access(old_file, "revs.d"), utils.tbl_access(new_file, "revs.d"))
+                and same_rev(
+                  utils.tbl_access(old_file, "revs.b"),
+                  utils.tbl_access(new_file, "revs.b")
+                )
+                and same_rev(
+                  utils.tbl_access(old_file, "revs.c"),
+                  utils.tbl_access(new_file, "revs.c")
+                )
+                and same_rev(
+                  utils.tbl_access(old_file, "revs.d"),
+                  utils.tbl_access(new_file, "revs.d")
+                )
               )
             end
 
@@ -647,7 +646,6 @@ DiffView.update_files = debounce.debounce_trailing(
 
           ai = ai + 1
           bi = bi + 1
-
         elseif opr == EditToken.DELETE then
           local cur_file = v.cur_files[ai]
           if cur_file then
@@ -663,7 +661,6 @@ DiffView.update_files = debounce.debounce_trailing(
             cur_file:destroy()
             table.remove(v.cur_files, ai)
           end
-
         elseif opr == EditToken.INSERT then
           local new_file = v.new_files[bi]
           if new_file then
@@ -671,7 +668,6 @@ DiffView.update_files = debounce.debounce_trailing(
             ai = ai + 1
           end
           bi = bi + 1
-
         elseif opr == EditToken.REPLACE then
           local cur_file = v.cur_files[ai]
           local new_file = v.new_files[bi]
@@ -821,8 +817,12 @@ function DiffView:infer_cur_file(allow_dir)
   if self.panel:is_focused() then
     ---@type any
     local item = self.panel:get_item_at_cursor()
-    if not item then return end
-    if not allow_dir and type(item.collapsed) == "boolean" then return end
+    if not item then
+      return
+    end
+    if not allow_dir and type(item.collapsed) == "boolean" then
+      return
+    end
 
     return item
   else

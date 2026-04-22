@@ -35,7 +35,9 @@ describe("diffview.toggle", function()
   end)
 
   it("calls open when no view exists", function()
-    stub(lib, "get_current_view", function() return nil end)
+    stub(lib, "get_current_view", function()
+      return nil
+    end)
 
     diffview.toggle({})
 
@@ -44,7 +46,9 @@ describe("diffview.toggle", function()
   end)
 
   it("calls close when a view exists", function()
-    stub(lib, "get_current_view", function() return { tabpage = 1 } end)
+    stub(lib, "get_current_view", function()
+      return { tabpage = 1 }
+    end)
 
     diffview.toggle({})
 
@@ -53,7 +57,9 @@ describe("diffview.toggle", function()
   end)
 
   it("passes args through to open", function()
-    stub(lib, "get_current_view", function() return nil end)
+    stub(lib, "get_current_view", function()
+      return nil
+    end)
 
     local args = { "--staged", "HEAD~2" }
     diffview.toggle(args)
@@ -64,7 +70,9 @@ describe("diffview.toggle", function()
   end)
 
   it("does not call open when a view exists", function()
-    stub(lib, "get_current_view", function() return { tabpage = 1 } end)
+    stub(lib, "get_current_view", function()
+      return { tabpage = 1 }
+    end)
 
     diffview.toggle({})
 
@@ -74,7 +82,9 @@ describe("diffview.toggle", function()
   end)
 
   it("does not call close when no view exists", function()
-    stub(lib, "get_current_view", function() return nil end)
+    stub(lib, "get_current_view", function()
+      return nil
+    end)
 
     diffview.toggle({})
 

@@ -21,7 +21,9 @@ describe("diffview.config", function()
     utils.warn = old_warn
     config.setup(original)
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
   end)
 end)
 
@@ -29,7 +31,9 @@ describe("diffview.config default keymaps", function()
   ---Search a keymap table for an entry with the given lhs binding.
   local function find_keymap(keymaps, lhs)
     for _, km in ipairs(keymaps) do
-      if km[2] == lhs then return km end
+      if km[2] == lhs then
+        return km
+      end
     end
     return nil
   end
@@ -61,7 +65,10 @@ describe("diffview.config default keymaps", function()
     -- j, <cr>, zo are common panel keymaps.
     for _, lhs in ipairs({ "j", "<cr>", "zo", "zM" }) do
       assert.truthy(find_keymap(keymaps.file_panel, lhs), "file_panel missing " .. lhs)
-      assert.truthy(find_keymap(keymaps.file_history_panel, lhs), "file_history_panel missing " .. lhs)
+      assert.truthy(
+        find_keymap(keymaps.file_history_panel, lhs),
+        "file_history_panel missing " .. lhs
+      )
     end
   end)
 

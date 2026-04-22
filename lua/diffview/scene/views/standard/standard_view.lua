@@ -32,12 +32,13 @@ function StandardView:init(opt)
   self.nulled = utils.sate(opt.nulled, false)
   self.panel = opt.panel or Panel()
   self.layouts = opt.layouts or {}
-  self.winopts = opt.winopts or {
-    diff1 = { a = {} },
-    diff2 = { a = {}, b = {} },
-    diff3 = { a = {}, b = {}, c = {} },
-    diff4 = { a = {}, b = {}, c = {}, d = {} },
-  }
+  self.winopts = opt.winopts
+    or {
+      diff1 = { a = {} },
+      diff2 = { a = {}, b = {} },
+      diff3 = { a = {}, b = {}, c = {} },
+      diff4 = { a = {}, b = {}, c = {}, d = {} },
+    }
 
   self.emitter:on("post_layout", utils.bind(self.post_layout, self))
 end
@@ -158,11 +159,8 @@ StandardView.use_entry = async.void(function(self, entry)
 
   for _, sym in ipairs({ "a", "b", "c", "d" }) do
     if entry.layout[sym] then
-      entry.layout[sym].file.winopts = vim.tbl_extend(
-        "force",
-        entry.layout[sym].file.winopts,
-        self.winopts[layout_key][sym] or {}
-      )
+      entry.layout[sym].file.winopts =
+        vim.tbl_extend("force", entry.layout[sym].file.winopts, self.winopts[layout_key][sym] or {})
     end
   end
 

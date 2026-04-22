@@ -22,7 +22,9 @@ describe("diffview.scene.inline_diff", function()
         out[#out + 1] = { row = m[2], hl = m[4].line_hl_group }
       end
     end
-    table.sort(out, function(a, b) return a.row < b.row end)
+    table.sort(out, function(a, b)
+      return a.row < b.row
+    end)
     return out
   end
 
@@ -37,7 +39,9 @@ describe("diffview.scene.inline_diff", function()
         }
       end
     end
-    table.sort(out, function(a, b) return a.row < b.row end)
+    table.sort(out, function(a, b)
+      return a.row < b.row
+    end)
     return out
   end
 
@@ -49,7 +53,9 @@ describe("diffview.scene.inline_diff", function()
       end
     end
     table.sort(out, function(a, b)
-      if a.row == b.row then return a.start < b.start end
+      if a.row == b.row then
+        return a.start < b.start
+      end
       return a.row < b.row
     end)
     return out
@@ -67,7 +73,9 @@ describe("diffview.scene.inline_diff", function()
       end
     end
     table.sort(out, function(a, b)
-      if a.row == b.row then return a.col < b.col end
+      if a.row == b.row then
+        return a.col < b.col
+      end
       return a.row < b.row
     end)
     return out
@@ -85,7 +93,9 @@ describe("diffview.scene.inline_diff", function()
     return out
   end
 
-  before_each(function() created_bufs = {} end)
+  before_each(function()
+    created_bufs = {}
+  end)
 
   after_each(function()
     for _, b in ipairs(created_bufs) do
@@ -260,7 +270,9 @@ describe("diffview.scene.inline_diff", function()
       -- The deleted run should be on the modified line and contain "brave".
       local any = false
       for _, v in ipairs(inlines) do
-        if v.text:find("brave") then any = true end
+        if v.text:find("brave") then
+          any = true
+        end
       end
       assert.is_true(any, "expected deleted text to contain 'brave'")
     end)
@@ -393,7 +405,9 @@ describe("diffview.scene.inline_diff", function()
       -- From the top, next_hunk from -1 should be the first anchor.
       assert.are.equal(rows[1], inline_diff.next_hunk_row(bufnr, -1))
       -- From row[1], next should be rows[2].
-      if #rows >= 2 then assert.are.equal(rows[2], inline_diff.next_hunk_row(bufnr, rows[1])) end
+      if #rows >= 2 then
+        assert.are.equal(rows[2], inline_diff.next_hunk_row(bufnr, rows[1]))
+      end
     end)
 
     it("next_hunk_row returns nil past the last hunk", function()
@@ -539,10 +553,9 @@ describe("diffview.scene.inline_diff", function()
       assert.are.same({}, h.diff_units({ "a" }, {}))
     end)
 
-    it(
-      "INTRALINE_MAX_HUNKS is a positive integer",
-      function() assert.is_true(h.INTRALINE_MAX_HUNKS >= 1) end
-    )
+    it("INTRALINE_MAX_HUNKS is a positive integer", function()
+      assert.is_true(h.INTRALINE_MAX_HUNKS >= 1)
+    end)
 
     it("refinement_safe admits single-hunk sub-diffs regardless of overlap", function()
       -- One hunk cannot interleave, so even unrelated words (foo/bar) are safe.
@@ -568,10 +581,9 @@ describe("diffview.scene.inline_diff", function()
       )
     end)
 
-    it(
-      "refinement_safe rejects when hunk count exceeds the limit",
-      function() assert.is_false(h.refinement_safe({ "a" }, { "b" }, h.INTRALINE_MAX_HUNKS + 1)) end
-    )
+    it("refinement_safe rejects when hunk count exceeds the limit", function()
+      assert.is_false(h.refinement_safe({ "a" }, { "b" }, h.INTRALINE_MAX_HUNKS + 1))
+    end)
   end)
 
   describe("similarity gate", function()
@@ -580,8 +592,12 @@ describe("diffview.scene.inline_diff", function()
       local out = { hl = 0, inline = 0 }
       for _, m in ipairs(marks) do
         local d = m[4]
-        if d.hl_group == "DiffviewDiffText" then out.hl = out.hl + 1 end
-        if d.virt_text and d.virt_text_pos == "inline" then out.inline = out.inline + 1 end
+        if d.hl_group == "DiffviewDiffText" then
+          out.hl = out.hl + 1
+        end
+        if d.virt_text and d.virt_text_pos == "inline" then
+          out.inline = out.inline + 1
+        end
       end
       return out
     end

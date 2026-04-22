@@ -123,7 +123,9 @@ function HelpPanel:update_components()
       utils.err(("help_panel :: Unknown keymap group '%s'!"):format(group))
     else
       maps = utils.tbl_fmap(maps, function(v)
-        if v[1] ~= "n" then return nil end
+        if v[1] ~= "n" then
+          return nil
+        end
         local desc = v[4] and v[4].desc
 
         if not desc then
@@ -141,14 +143,20 @@ function HelpPanel:update_components()
         return ret
       end)
 
-      if #maps == 0 then goto continue end
+      if #maps == 0 then
+        goto continue
+      end
 
       -- Sort mappings by description
       table.sort(maps, function(a, b)
         a, b = a[5], b[5]
         -- Ensure lua functions are sorted last
-        if a:match("^<Lua") then a = "~" .. a end
-        if b:match("^<Lua") then b = "~" .. b end
+        if a:match("^<Lua") then
+          a = "~" .. a
+        end
+        if b:match("^<Lua") then
+          b = "~" .. b
+        end
         return a < b
       end)
 
@@ -158,7 +166,7 @@ function HelpPanel:update_components()
         {
           name = "section_heading",
           context = {
-            label = group:upper():gsub("_", "-")
+            label = group:upper():gsub("_", "-"),
           },
         },
         items,
@@ -212,7 +220,8 @@ function HelpPanel:render()
     -- Section heading
     comp = section.section_heading.comp
     comp:add_line()
-    s = string.rep(" ", math.floor(self.state.width * 0.5 - #comp.context.label * 0.5)) .. comp.context.label
+    s = string.rep(" ", math.floor(self.state.width * 0.5 - #comp.context.label * 0.5))
+      .. comp.context.label
     comp:add_line(s, "Statement")
     comp:add_line(("%14s    CALLBACK"):format("KEYS"), "DiffviewFilePanelCounter")
 

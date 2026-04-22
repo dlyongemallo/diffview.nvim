@@ -194,7 +194,7 @@ function Node:next_sibling()
 
   local i = utils.vec_indexof(self.parent.children, self)
 
-  if i > -1 and  i < #self.parent.children then
+  if i > -1 and i < #self.parent.children then
     return self.parent.children[i + 1]
   end
 end

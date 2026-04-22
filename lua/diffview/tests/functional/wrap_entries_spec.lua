@@ -11,7 +11,9 @@ local function make_file(name)
   return {
     name = name,
     active = false,
-    set_active = function(self, v) self.active = v end,
+    set_active = function(self, v)
+      self.active = v
+    end,
   }
 end
 
@@ -33,9 +35,8 @@ end
 ---@param file_idx integer
 ---@return table
 local function make_panel(entries, entry_idx, file_idx)
-  local FileHistoryPanel = require(
-    "diffview.scene.views.file_history.file_history_panel"
-  ).FileHistoryPanel
+  local FileHistoryPanel =
+    require("diffview.scene.views.file_history.file_history_panel").FileHistoryPanel
 
   local panel = {
     entries = entries,
@@ -193,12 +194,16 @@ describe("diffview.wrap_entries", function()
         listing_style = "list",
         cur_file = files[cur_idx],
         files = {
-          len = function() return #files end,
+          len = function()
+            return #files
+          end,
           iter = function()
             local i = 0
             return function()
               i = i + 1
-              if i <= #files then return i, files[i] end
+              if i <= #files then
+                return i, files[i]
+              end
             end
           end,
         },

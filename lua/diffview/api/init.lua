@@ -23,8 +23,12 @@ M.selections = lazy.require("diffview.api.selections") ---@module "diffview.api.
 function M.set_revs(new_rev_arg, opts)
   opts = opts or {}
   local view = opts.view or lib.get_current_view()
-  if not view then return end
-  if not view.set_revs then return end
+  if not view then
+    return
+  end
+  if not view.set_revs then
+    return
+  end
   view:set_revs(new_rev_arg, opts)
 end
 

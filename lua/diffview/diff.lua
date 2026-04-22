@@ -11,9 +11,9 @@ local M = {}
 
 ---@enum EditToken
 local EditToken = oop.enum({
-  NOOP    = 1,
-  DELETE  = 2,
-  INSERT  = 3,
+  NOOP = 1,
+  DELETE = 2,
+  INSERT = 3,
   REPLACE = 4,
 })
 
@@ -44,7 +44,9 @@ function Diff:init(a, b, eql_fn)
   end
 
   -- Fast path: skip the full algorithm when there is nothing to diff.
-  if a == b or (#a == 0 and #b == 0) then return end
+  if a == b or (#a == 0 and #b == 0) then
+    return
+  end
 
   for i = 1, #a do
     self.moda[i] = false

@@ -50,7 +50,9 @@ describe("nil guards", function()
     end)
 
     it("does not crash when comp is nil (no component on line)", function()
-      vim.api.nvim_win_get_cursor = function() return { 1, 0 } end
+      vim.api.nvim_win_get_cursor = function()
+        return { 1, 0 }
+      end
       local panel = make_help_panel(nil)
 
       assert.has_no.errors(function()
@@ -59,7 +61,9 @@ describe("nil guards", function()
     end)
 
     it("does not crash when comp exists but has no context field", function()
-      vim.api.nvim_win_get_cursor = function() return { 1, 0 } end
+      vim.api.nvim_win_get_cursor = function()
+        return { 1, 0 }
+      end
       -- Simulate a component returned for a heading line: it has
       -- lstart/lend but no context.
       local panel = make_help_panel({ lstart = 0, lend = 1 })
@@ -70,7 +74,9 @@ describe("nil guards", function()
     end)
 
     it("does not crash when comp.context exists but mapping is nil", function()
-      vim.api.nvim_win_get_cursor = function() return { 1, 0 } end
+      vim.api.nvim_win_get_cursor = function()
+        return { 1, 0 }
+      end
       local panel = make_help_panel({ context = {} })
 
       assert.has_no.errors(function()
@@ -82,22 +88,34 @@ describe("nil guards", function()
       local feedkeys_called = false
       local close_called = false
 
-      vim.api.nvim_win_get_cursor = function() return { 3, 0 } end
-      vim.fn.win_getid = function() return 42 end
-      vim.fn.winnr = function() return 1 end
+      vim.api.nvim_win_get_cursor = function()
+        return { 3, 0 }
+      end
+      vim.fn.win_getid = function()
+        return 42
+      end
+      vim.fn.winnr = function()
+        return 1
+      end
 
       local orig_win_call = vim.api.nvim_win_call
       local orig_feedkeys = vim.api.nvim_feedkeys
 
-      vim.api.nvim_win_call = function(_winid, fn) fn() end
-      vim.api.nvim_feedkeys = function() feedkeys_called = true end
+      vim.api.nvim_win_call = function(_winid, fn)
+        fn()
+      end
+      vim.api.nvim_feedkeys = function()
+        feedkeys_called = true
+      end
 
       local panel = make_help_panel({
         context = {
           mapping = { "n", "q" },
         },
       })
-      panel.close = function() close_called = true end
+      panel.close = function()
+        close_called = true
+      end
 
       local ok, err = pcall(function()
         panel:apply_cmd()
@@ -106,7 +124,9 @@ describe("nil guards", function()
       vim.api.nvim_win_call = orig_win_call
       vim.api.nvim_feedkeys = orig_feedkeys
 
-      if not ok then error(err) end
+      if not ok then
+        error(err)
+      end
       assert.is_true(feedkeys_called)
       assert.is_true(close_called)
     end)
@@ -157,11 +177,15 @@ describe("nil guards", function()
     end
 
     it("does not crash when windows list is empty (target stays nil)", function()
-      vim.api.nvim_get_current_win = function() return 1 end
+      vim.api.nvim_get_current_win = function()
+        return 1
+      end
 
       -- get_main_win must return something with an id for the cursor read.
       local layout = make_layout({}, { id = 1 })
-      vim.api.nvim_win_get_cursor = function() return { 1, 0 } end
+      vim.api.nvim_win_get_cursor = function()
+        return { 1, 0 }
+      end
 
       assert.has_no.errors(function()
         layout:sync_scroll()
@@ -172,11 +196,21 @@ describe("nil guards", function()
       local win_a = { id = 10 }
       local win_b = { id = 20 }
 
-      vim.api.nvim_get_current_win = function() return 10 end
-      vim.api.nvim_win_get_buf = function() return 1 end
-      vim.api.nvim_buf_line_count = function() return 0 end
-      vim.api.nvim_win_get_cursor = function() return { 1, 0 } end
-      vim.api.nvim_win_call = function(_, fn) fn() end
+      vim.api.nvim_get_current_win = function()
+        return 10
+      end
+      vim.api.nvim_win_get_buf = function()
+        return 1
+      end
+      vim.api.nvim_buf_line_count = function()
+        return 0
+      end
+      vim.api.nvim_win_get_cursor = function()
+        return { 1, 0 }
+      end
+      vim.api.nvim_win_call = function(_, fn)
+        fn()
+      end
       vim.api.nvim_exec_autocmds = function() end
       vim.api.nvim_win_set_cursor = function() end
 
@@ -192,17 +226,27 @@ describe("nil guards", function()
       local win_b = { id = 20 }
       local set_cursor_calls = {}
 
-      vim.api.nvim_get_current_win = function() return 10 end
+      vim.api.nvim_get_current_win = function()
+        return 10
+      end
       vim.api.nvim_win_get_buf = function(winid)
-        if winid == 10 then return 1 end
+        if winid == 10 then
+          return 1
+        end
         return 2
       end
       vim.api.nvim_buf_line_count = function(bufnr)
-        if bufnr == 1 then return 5 end
+        if bufnr == 1 then
+          return 5
+        end
         return 100
       end
-      vim.api.nvim_win_get_cursor = function() return { 3, 0 } end
-      vim.api.nvim_win_call = function(_, fn) fn() end
+      vim.api.nvim_win_get_cursor = function()
+        return { 3, 0 }
+      end
+      vim.api.nvim_win_call = function(_, fn)
+        fn()
+      end
       vim.api.nvim_exec_autocmds = function() end
       vim.api.nvim_win_set_cursor = function(winid, cursor)
         set_cursor_calls[#set_cursor_calls + 1] = { winid = winid, cursor = cursor }
@@ -230,9 +274,15 @@ describe("nil guards", function()
     local function make_panel()
       local panel = {
         cur_file = nil,
-        set_cur_file = function(self, f) self.cur_file = f end,
-        ordered_file_list = function(self) return {} end,
-        prev_file = function(self) return nil end,
+        set_cur_file = function(self, f)
+          self.cur_file = f
+        end,
+        ordered_file_list = function(self)
+          return {}
+        end,
+        prev_file = function(self)
+          return nil
+        end,
       }
       return panel
     end
@@ -487,7 +537,9 @@ describe("nil guards", function()
       local new_files = { f2 }
 
       -- The diff algorithm produces NOOP for matching entries.
-      local diff = Diff(cur_files, new_files, function(a, b) return a.path == b.path end)
+      local diff = Diff(cur_files, new_files, function(a, b)
+        return a.path == b.path
+      end)
       local script = diff:create_edit_script()
       eq({ EditToken.NOOP }, script)
 
@@ -519,9 +571,8 @@ describe("nil guards", function()
   -- Same class of bug as #74 (FilePanel), but in FileHistoryPanel.
   -- update_components() called render_data:destroy() without a nil guard.
   describe("FileHistoryPanel update_components nil render_data", function()
-    local FileHistoryPanel = require(
-      "diffview.scene.views.file_history.file_history_panel"
-    ).FileHistoryPanel
+    local FileHistoryPanel =
+      require("diffview.scene.views.file_history.file_history_panel").FileHistoryPanel
 
     it("returns early without error when render_data is nil", function()
       -- Build a minimal panel-shaped object with the method under test.

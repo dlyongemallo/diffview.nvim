@@ -17,7 +17,9 @@ local M = {}
 ---@param view View?
 ---@return DiffView?
 local function resolve_view(view)
-  if view then return view end
+  if view then
+    return view
+  end
   return lib.get_current_view()
 end
 
@@ -26,9 +28,13 @@ end
 ---@return FilePanel?
 local function get_panel(view)
   view = resolve_view(view)
-  if not view then return nil end
+  if not view then
+    return nil
+  end
   -- Only DiffView has a file panel with selections.
-  if not view.panel or not view.panel.selected_files then return nil end
+  if not view.panel or not view.panel.selected_files then
+    return nil
+  end
   return view.panel
 end
 
@@ -39,7 +45,9 @@ end
 ---@return { path: string, kind: vcs.FileKind }[]
 function M.get(view)
   local panel = get_panel(view)
-  if not panel then return {} end
+  if not panel then
+    return {}
+  end
   local result = {}
   for _, file in ipairs(panel:get_selected_files()) do
     result[#result + 1] = { path = file.path, kind = file.kind }
@@ -52,7 +60,9 @@ end
 ---@return string[]
 function M.get_paths(view)
   local panel = get_panel(view)
-  if not panel then return {} end
+  if not panel then
+    return {}
+  end
   local result = {}
   for _, file in ipairs(panel:get_selected_files()) do
     result[#result + 1] = file.path
@@ -67,7 +77,9 @@ end
 function M.is_selected(path, opts)
   opts = opts or {}
   local panel = get_panel(opts.view)
-  if not panel then return false end
+  if not panel then
+    return false
+  end
   -- A file may appear under multiple kinds (e.g. working + staged).
   -- Return true if *any* matching entry is selected.
   for _, file in panel.files:iter() do
@@ -86,7 +98,9 @@ end
 function M.select(paths, opts)
   opts = opts or {}
   local panel = get_panel(opts.view)
-  if not panel then return end
+  if not panel then
+    return
+  end
   local path_set = {}
   for _, p in ipairs(paths) do
     path_set[p] = true
@@ -108,7 +122,9 @@ end
 function M.deselect(paths, opts)
   opts = opts or {}
   local panel = get_panel(opts.view)
-  if not panel then return end
+  if not panel then
+    return
+  end
   local path_set = {}
   for _, p in ipairs(paths) do
     path_set[p] = true
@@ -133,7 +149,9 @@ end
 function M.set(paths, opts)
   opts = opts or {}
   local panel = get_panel(opts.view)
-  if not panel then return end
+  if not panel then
+    return
+  end
   local path_set = {}
   for _, p in ipairs(paths) do
     path_set[p] = true
@@ -160,7 +178,9 @@ end
 ---@param view View? View to operate on (defaults to current view).
 function M.clear(view)
   local panel = get_panel(view)
-  if not panel then return end
+  if not panel then
+    return
+  end
   panel:clear_selections()
 end
 
@@ -169,7 +189,9 @@ end
 ---@return boolean
 function M.any(view)
   local panel = get_panel(view)
-  if not panel then return false end
+  if not panel then
+    return false
+  end
   return panel:has_any_selections()
 end
 
@@ -178,7 +200,9 @@ end
 ---@return integer
 function M.count(view)
   local panel = get_panel(view)
-  if not panel then return 0 end
+  if not panel then
+    return 0
+  end
   return #panel:get_selected_files()
 end
 

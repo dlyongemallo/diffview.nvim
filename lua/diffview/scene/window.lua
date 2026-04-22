@@ -4,7 +4,8 @@ local oop = require("diffview.oop")
 
 local EventEmitter = lazy.access("diffview.events", "EventEmitter") ---@type EventEmitter|LazyModule
 local File = lazy.access("diffview.vcs.file", "File") ---@type vcs.File|LazyModule
-local FileHistoryView = lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
+local FileHistoryView =
+  lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
 local config = lazy.require("diffview.config") ---@module "diffview.config"
 local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
@@ -82,20 +83,23 @@ function Window:is_focused()
   return self:is_valid() and api.nvim_get_current_win() == self.id
 end
 
-function Window:post_open()
-end
+function Window:post_open() end
 
 ---@param self Window
 ---@param callback fun(ok: boolean)
 Window.load_file = async.wrap(function(self, callback)
   assert(self.file)
 
-  if self.file:is_valid() then return callback(true) end
+  if self.file:is_valid() then
+    return callback(true)
+  end
 
   -- Skip loading if the file has been deactivated (e.g. user navigated
   -- away). This avoids queueing unnecessary git jobs during rapid
   -- navigation.
-  if not self.file.active then return callback(false) end
+  if not self.file.active then
+    return callback(false)
+  end
 
   local ok, err = pawait(self.file.create_buffer, self.file)
 
@@ -138,14 +142,18 @@ Window.open_file = async.void(function(self)
   ---@diagnostic disable: invisible
   assert(self.file)
 
-  if not (self:is_valid() and self.file.active) then return end
+  if not (self:is_valid() and self.file.active) then
+    return
+  end
 
   if not self.file:is_valid() then
     local ok = await(self:load_file())
     await(async.scheduler())
 
     -- Ensure validity after await
-    if not (self:is_valid() and self.file.active) then return end
+    if not (self:is_valid() and self.file.active) then
+      return
+    end
 
     if not ok then
       self:open_fallback()
@@ -163,8 +171,8 @@ Window.open_file = async.void(function(self)
     self.file._orig_context_enabled = vim.b[self.file.bufnr].context_enabled
     self.file._context_state_saved = true
   end
-  vim.b[self.file.bufnr].ts_context_disable = true  -- nvim-treesitter-context
-  vim.b[self.file.bufnr].context_enabled = false    -- context.vim
+  vim.b[self.file.bufnr].ts_context_disable = true -- nvim-treesitter-context
+  vim.b[self.file.bufnr].context_enabled = false -- context.vim
 
   local conf = config.get_config()
   local set_buf_ok, set_buf_err, recovered = utils.set_win_buf(self.id, self.file.bufnr)
@@ -172,7 +180,7 @@ Window.open_file = async.void(function(self)
     Window._set_buf_warned = true
     utils.warn(
       "An external autocommand failed while opening a Diffview buffer. "
-      .. "Diffview retried without window events.",
+        .. "Diffview retried without window events.",
       true
     )
   end
@@ -301,7 +309,9 @@ local global_only_opts = {
 }
 
 function Window:_save_winopts()
-  if Window.winopt_store[self.file.bufnr] then return end
+  if Window.winopt_store[self.file.bufnr] then
+    return
+  end
 
   Window.winopt_store[self.file.bufnr] = {}
   for option, _ in pairs(self.file.winopts) do

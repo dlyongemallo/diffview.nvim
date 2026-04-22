@@ -267,7 +267,7 @@ describe("hl.get_style multi-attribute fix (58f14a5)", function()
   it("tries multiple groups and returns the first with style attrs", function()
     hl.get_hl = function(name)
       if name == "GroupA" then
-        return { fg = 0xff0000 }  -- No style attrs.
+        return { fg = 0xff0000 } -- No style attrs.
       elseif name == "GroupB" then
         return { bold = true, reverse = true }
       end
@@ -313,8 +313,8 @@ describe("inverted panel guard conditions (58f14a5)", function()
 
   it("buggy guard misses early return when panel is closed and buffer is not loaded", function()
     -- is_open=false, buf_loaded=false -> should return early.
-    eq(false, buggy_guard(false, false))  -- Bug: incorrectly does NOT return early!
-    eq(true, fixed_guard(false, false))   -- Fix: correctly returns early.
+    eq(false, buggy_guard(false, false)) -- Bug: incorrectly does NOT return early!
+    eq(true, fixed_guard(false, false)) -- Fix: correctly returns early.
   end)
 
   it("buggy guard fails when panel is open but buffer is not loaded", function()
@@ -346,8 +346,11 @@ describe("inverted panel guard conditions (58f14a5)", function()
     }
     for _, case in ipairs(cases) do
       local is_open, buf_loaded, should_early_return = case[1], case[2], case[3]
-      eq(should_early_return, fixed_guard(is_open, buf_loaded),
-        string.format("is_open=%s, buf_loaded=%s", tostring(is_open), tostring(buf_loaded)))
+      eq(
+        should_early_return,
+        fixed_guard(is_open, buf_loaded),
+        string.format("is_open=%s, buf_loaded=%s", tostring(is_open), tostring(buf_loaded))
+      )
     end
   end)
 end)
@@ -369,7 +372,7 @@ describe("deprecated config warning loop fix (58f14a5)", function()
       if user_log_options[name] ~= nil then
         warned[#warned + 1] = name
       end
-      break  -- Bug: always breaks after first iteration.
+      break -- Bug: always breaks after first iteration.
     end
     return warned
   end
@@ -380,7 +383,7 @@ describe("deprecated config warning loop fix (58f14a5)", function()
     for _, name in ipairs(top_options) do
       if user_log_options[name] ~= nil then
         warned[#warned + 1] = name
-        break  -- Fix: only breaks when a warning is issued.
+        break -- Fix: only breaks when a warning is issued.
       end
     end
     return warned
@@ -460,7 +463,9 @@ describe("config merge_layouts typo fix (58f14a5)", function()
     require("diffview.utils").err = old_err
     config.setup(original)
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
   end)
 end)
 

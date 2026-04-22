@@ -276,7 +276,9 @@ function M.scan(cmd_line, opt)
       argidx = #args + 1
       arg_lead = arg
       lead_quote = cur_quote
-      if h < opt.cur_pos then between = true end
+      if h < opt.cur_pos then
+        between = true
+      end
     end
 
     if char == "\\" then
@@ -391,7 +393,9 @@ end
 ---@param input_cmp boolean? Completion for |input()|.
 ---@return string[]
 function M.process_candidates(candidates, ctx, input_cmp)
-  if not candidates then return {} end
+  if not candidates then
+    return {}
+  end
 
   local cmd_lead = ""
   local ex_lead = (ctx.lead_quote or "") .. ctx.arg_lead

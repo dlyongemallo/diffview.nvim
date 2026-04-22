@@ -5,8 +5,12 @@ local eq = helpers.eq
 
 describe("diffview.job_utils.resolve_fail_cond", function()
   local mock_table = {
-    non_zero = function() return true end,
-    on_empty = function() return false end,
+    non_zero = function()
+      return true
+    end,
+    on_empty = function()
+      return false
+    end,
   }
 
   it("returns the named function for a string key", function()

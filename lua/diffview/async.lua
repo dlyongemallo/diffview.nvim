@@ -20,7 +20,9 @@ M._handles = {}
 ---@alias AsyncKind "callback"|"void"
 
 local function dstring(object)
-  if not DiffviewGlobal.logger then return "" end
+  if not DiffviewGlobal.logger then
+    return ""
+  end
   dstring = DiffviewGlobal.logger.dstring
   return dstring(object)
 end
@@ -69,7 +71,9 @@ M.Waitable = Waitable
 
 ---@abstract
 ---@return any ... # Any values returned by the waitable
-function Waitable:await() oop.abstract_stub() end
+function Waitable:await()
+  oop.abstract_stub()
+end
 
 ---Schedule a callback to be invoked when this waitable has settled.
 ---@param callback function
@@ -142,17 +146,23 @@ end
 
 ---@return any ... # If the future has completed, this returns any returned values.
 function Future:get_returned()
-  if not self.return_values then return end
+  if not self.return_values then
+    return
+  end
   return unpack(self.return_values, 2, table.maxn(self.return_values))
 end
 
 ---@package
 ---@param ... any
 function Future:dprint(...)
-  if not DiffviewGlobal.logger then return end
+  if not DiffviewGlobal.logger then
+    return
+  end
   if DiffviewGlobal.debug_level >= 10 or M._watching[self] then
     local t = { self, "::", ... }
-    for i = 1, table.maxn(t) do t[i] = dstring(t[i]) end
+    for i = 1, table.maxn(t) do
+      t[i] = dstring(t[i])
+    end
     DiffviewGlobal.logger:debug(table.concat(t, " "))
   end
 end
@@ -182,7 +192,9 @@ end
 ---@package
 ---@param force? boolean
 function Future:raise(force)
-  if self.has_raised and not force then return end
+  if self.has_raised and not force then
+    return
+  end
   self.has_raised = true
   error(self.err)
 end
@@ -202,8 +214,7 @@ function Future:step(...)
     end
 
     local msg = fmt(
-      "The coroutine failed with this message: \n"
-        .. "\tcontext: cur_thread=%s co_thread=%s %s\n%s",
+      "The coroutine failed with this message: \n" .. "\tcontext: cur_thread=%s co_thread=%s %s\n%s",
       dstring(current_thread() or "main"),
       dstring(self.thread),
       func_info and fmt("co_func=%s:%d", func_info.short_src, func_info.linedefined) or "",
@@ -322,7 +333,9 @@ function Future:toplevel_await()
     end, 1)
 
     -- Respect interrupts
-    if status ~= -1 then break end
+    if status ~= -1 then
+      break
+    end
   end
 
   if not ok then
@@ -391,7 +404,9 @@ function M._run(func, opt)
     local function wrapped_cb(...)
       handle:set_done(true)
       handle.return_values = { true, ... }
-      if cur_cb then cur_cb(...) end
+      if cur_cb then
+        cur_cb(...)
+      end
 
       if handle.awaiting_cb then
         -- The thread was yielding for the callback: resume
@@ -515,10 +530,10 @@ M.join = M.void(function(tasks)
   for _, cur in ipairs(tasks) do
     if cur then
       if type(cur) == "function" then
-        futures[#futures+1] = cur()
+        futures[#futures + 1] = cur()
       else
         ---@cast cur Waitable
-        futures[#futures+1] = cur
+        futures[#futures + 1] = cur
       end
     end
   end
@@ -555,14 +570,12 @@ M.timeout = M.wrap(function(timeout, callback)
     return
   end
 
-  timer:start(
-    timeout,
-    0,
-    function()
-      if not timer:is_closing() then timer:close() end
-      callback()
+  timer:start(timeout, 0, function()
+    if not timer:is_closing() then
+      timer:close()
     end
-  )
+    callback()
+  end)
 end, 2)
 
 ---Yield until the Neovim API is available.

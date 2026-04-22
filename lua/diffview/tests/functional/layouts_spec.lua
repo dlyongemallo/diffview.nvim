@@ -43,7 +43,9 @@ describe("diffview.layout null detection", function()
 end)
 
 describe("diffview.layout symbols", function()
-  it("Diff1 declares symbols { 'b' }", function() eq({ "b" }, Diff1.symbols) end)
+  it("Diff1 declares symbols { 'b' }", function()
+    eq({ "b" }, Diff1.symbols)
+  end)
 
   it("Diff1Inline inherits Diff1 and keeps symbols { 'b' }", function()
     -- Class-level relationship check avoids relying on the constructor's
@@ -97,7 +99,9 @@ describe("diffview.layout symbols", function()
     local debounced = setmetatable({}, {
       __call = function() end,
       __index = {
-        close = function() closed = true end,
+        close = function()
+          closed = true
+        end,
         cancel = function() end,
       },
     })
@@ -127,12 +131,21 @@ describe("diffview.layout symbols", function()
 
       local inst = setmetatable({}, { __index = Diff1Inline })
       inst.b = {
-        file = { bufnr = bufnr, is_valid = function() return true end },
-        is_valid = function() return true end,
+        file = {
+          bufnr = bufnr,
+          is_valid = function()
+            return true
+          end,
+        },
+        is_valid = function()
+          return true
+        end,
         id = winid,
       }
       inst._cached_old_lines = { "old content" }
-      inst._repaint = function() repaint_count = repaint_count + 1 end
+      inst._repaint = function()
+        repaint_count = repaint_count + 1
+      end
 
       async.await(inst:_render_inline())
 
@@ -169,12 +182,21 @@ describe("diffview.layout symbols", function()
 
       local inst = setmetatable({}, { __index = Diff1Inline })
       inst.b = {
-        file = { bufnr = bufnr, is_valid = function() return true end },
-        is_valid = function() return true end,
+        file = {
+          bufnr = bufnr,
+          is_valid = function()
+            return true
+          end,
+        },
+        is_valid = function()
+          return true
+        end,
         id = winid,
       }
       inst._cached_old_lines = { "old content" }
-      inst._repaint = function() repaint_count = repaint_count + 1 end
+      inst._repaint = function()
+        repaint_count = repaint_count + 1
+      end
 
       async.await(inst:_render_inline())
 
@@ -211,8 +233,15 @@ describe("diffview.layout symbols", function()
       inline_diff.render(bufnr, old, new)
 
       local win_mock = {
-        file = { bufnr = bufnr, is_valid = function() return true end },
-        is_valid = function() return true end,
+        file = {
+          bufnr = bufnr,
+          is_valid = function()
+            return true
+          end,
+        },
+        is_valid = function()
+          return true
+        end,
       }
       local inst = setmetatable({
         b = win_mock,
@@ -328,8 +357,15 @@ describe("diffview.layout symbols", function()
 
         local inst = setmetatable({}, { __index = Diff1Inline })
         inst.b = {
-          file = { bufnr = bufnr, is_valid = function() return true end },
-          is_valid = function() return true end,
+          file = {
+            bufnr = bufnr,
+            is_valid = function()
+              return true
+            end,
+          },
+          is_valid = function()
+            return true
+          end,
           id = winid,
         }
         inst._cached_old_lines = { "one", "two", "three", "four", "five" }
@@ -352,22 +388,24 @@ describe("diffview.layout symbols", function()
         inline_diff.render = original_render
         inst:teardown_render()
         pcall(api.nvim_buf_delete, bufnr, { force = true })
-        if not ok then error(err) end
+        if not ok then
+          error(err)
+        end
       end)
     )
   end)
 
-  it("Diff2 declares symbols { 'a', 'b' }", function() eq({ "a", "b" }, Diff2.symbols) end)
+  it("Diff2 declares symbols { 'a', 'b' }", function()
+    eq({ "a", "b" }, Diff2.symbols)
+  end)
 
-  it(
-    "Diff3 declares symbols { 'a', 'b', 'c' }",
-    function() eq({ "a", "b", "c" }, Diff3.symbols) end
-  )
+  it("Diff3 declares symbols { 'a', 'b', 'c' }", function()
+    eq({ "a", "b", "c" }, Diff3.symbols)
+  end)
 
-  it(
-    "Diff4 declares symbols { 'a', 'b', 'c', 'd' }",
-    function() eq({ "a", "b", "c", "d" }, Diff4.symbols) end
-  )
+  it("Diff4 declares symbols { 'a', 'b', 'c', 'd' }", function()
+    eq({ "a", "b", "c", "d" }, Diff4.symbols)
+  end)
 end)
 
 describe("diffview.scene.layouts.diff_1_inline diffopt forwarding", function()
@@ -378,14 +416,20 @@ describe("diffview.scene.layouts.diff_1_inline diffopt forwarding", function()
 
   local orig_diffopt
 
-  before_each(function() orig_diffopt = vim.deepcopy(vim.opt.diffopt:get()) end)
+  before_each(function()
+    orig_diffopt = vim.deepcopy(vim.opt.diffopt:get())
+  end)
 
-  after_each(function() vim.opt.diffopt = vim.deepcopy(orig_diffopt) end)
+  after_each(function()
+    vim.opt.diffopt = vim.deepcopy(orig_diffopt)
+  end)
 
   ---Reset `'diffopt'` to a fixed baseline so each test starts from the same
   ---state regardless of what the Neovim default (or a prior test) left behind.
   ---@param entries string[]
-  local function set_diffopt(entries) vim.opt.diffopt = entries end
+  local function set_diffopt(entries)
+    vim.opt.diffopt = entries
+  end
 
   it("maps iwhite to ignore_whitespace_change", function()
     set_diffopt({ "iwhite" })
@@ -464,7 +508,11 @@ end)
 describe("diffview.layout.set_file_for", function()
   it("sets the file on the window and tags it with the symbol", function()
     local stored_file
-    local mock_win = { set_file = function(_, f) stored_file = f end }
+    local mock_win = {
+      set_file = function(_, f)
+        stored_file = f
+      end,
+    }
     local mock_layout = { a = mock_win, windows = {}, symbols = { "a" } }
     setmetatable(mock_layout, { __index = Layout })
 
@@ -495,14 +543,20 @@ describe("diffview.layout.create_wins", function()
     next_win_id = 100
 
     -- Execute the callback immediately (simulating nvim_win_call).
-    vim.api.nvim_win_call = function(_, fn) fn() end
+    vim.api.nvim_win_call = function(_, fn)
+      fn()
+    end
     vim.api.nvim_win_close = function() end
     vim.api.nvim_get_current_win = function()
       next_win_id = next_win_id + 1
       return next_win_id
     end
-    vim.api.nvim_win_is_valid = function() return true end
-    vim.cmd = function(c) cmds_recorded[#cmds_recorded + 1] = c end
+    vim.api.nvim_win_is_valid = function()
+      return true
+    end
+    vim.cmd = function(c)
+      cmds_recorded[#cmds_recorded + 1] = c
+    end
   end)
 
   after_each(function()
@@ -520,12 +574,22 @@ describe("diffview.layout.create_wins", function()
     local layout = {
       windows = {},
       state = {},
-      create_pre = function(self) self.state.save_equalalways = vim.o.equalalways end,
+      create_pre = function(self)
+        self.state.save_equalalways = vim.o.equalalways
+      end,
       create_post = async.void(function() end),
-      find_pivot = function() return 1 end,
+      find_pivot = function()
+        return 1
+      end,
     }
     for _, s in ipairs(syms) do
-      layout[s] = { set_id = function(self, id) self.id = id end, close = function() end, id = nil }
+      layout[s] = {
+        set_id = function(self, id)
+          self.id = id
+        end,
+        close = function() end,
+        id = nil,
+      }
     end
     setmetatable(layout, { __index = Layout })
     return layout
@@ -610,12 +674,18 @@ describe("diffview.layout.create_wins integration", function()
     }
     setmetatable(layout, { __index = Layout })
     for _, s in ipairs(syms) do
-      layout[s] = { set_id = function(self, id) self.id = id end, close = function() end, id = nil }
+      layout[s] = {
+        set_id = function(self, id)
+          self.id = id
+        end,
+        close = function() end,
+        id = nil,
+      }
     end
     -- Override create_post to skip file loading (no files to open).
-    layout.create_post = async.void(
-      function(self) vim.opt.equalalways = self.state.save_equalalways end
-    )
+    layout.create_post = async.void(function(self)
+      vim.opt.equalalways = self.state.save_equalalways
+    end)
     return layout
   end
 
@@ -646,7 +716,9 @@ describe("diffview.layout.create_wins integration", function()
       -- Clean up: close extra windows, keeping at least one.
       local wins = vim.api.nvim_tabpage_list_wins(0)
       for i = 2, #wins do
-        if vim.api.nvim_win_is_valid(wins[i]) then vim.api.nvim_win_close(wins[i], true) end
+        if vim.api.nvim_win_is_valid(wins[i]) then
+          vim.api.nvim_win_close(wins[i], true)
+        end
       end
     end)
   )
@@ -673,7 +745,9 @@ describe("diffview.layout.create_wins integration", function()
 
       local wins = vim.api.nvim_tabpage_list_wins(0)
       for i = 2, #wins do
-        if vim.api.nvim_win_is_valid(wins[i]) then vim.api.nvim_win_close(wins[i], true) end
+        if vim.api.nvim_win_is_valid(wins[i]) then
+          vim.api.nvim_win_close(wins[i], true)
+        end
       end
     end)
   )

@@ -51,14 +51,18 @@ describe("diffview.config cycle_layouts defaults", function()
     utils.warn = old_warn
     config.setup(original)
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
   end)
 
   it("falls back to defaults when cycle_layouts is not a table", function()
     local original = vim.deepcopy(config.get_config())
     local warnings = {}
     local old_warn = utils.warn
-    utils.warn = function(msg) warnings[#warnings + 1] = msg end
+    utils.warn = function(msg)
+      warnings[#warnings + 1] = msg
+    end
 
     local ok, err = pcall(function()
       config.setup({ view = { cycle_layouts = "not a table" } })
@@ -72,7 +76,9 @@ describe("diffview.config cycle_layouts defaults", function()
     utils.warn = old_warn
     config.setup(original)
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
     assert.is_true(#warnings > 0, "expected a warning about invalid cycle_layouts")
   end)
 
@@ -80,7 +86,9 @@ describe("diffview.config cycle_layouts defaults", function()
     local original = vim.deepcopy(config.get_config())
     local warnings = {}
     local old_warn = utils.warn
-    utils.warn = function(msg) warnings[#warnings + 1] = msg end
+    utils.warn = function(msg)
+      warnings[#warnings + 1] = msg
+    end
 
     local ok, err = pcall(function()
       config.setup({ view = { cycle_layouts = { default = "diff2_horizontal" } } })
@@ -92,7 +100,9 @@ describe("diffview.config cycle_layouts defaults", function()
     utils.warn = old_warn
     config.setup(original)
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
     assert.is_true(#warnings > 0, "expected a warning about invalid cycle_layouts.default")
   end)
 
@@ -100,7 +110,9 @@ describe("diffview.config cycle_layouts defaults", function()
     local original = vim.deepcopy(config.get_config())
     local warnings = {}
     local old_warn = utils.warn
-    utils.warn = function(msg) warnings[#warnings + 1] = msg end
+    utils.warn = function(msg)
+      warnings[#warnings + 1] = msg
+    end
 
     local ok, err = pcall(function()
       -- A map (not a list) is rejected because `cycle_layout()` iterates
@@ -115,7 +127,9 @@ describe("diffview.config cycle_layouts defaults", function()
     utils.warn = old_warn
     config.setup(original)
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
     assert.is_true(#warnings > 0, "expected a warning about invalid cycle_layouts.merge_tool")
   end)
 
@@ -142,7 +156,9 @@ describe("diffview.config cycle_layouts defaults", function()
     utils.warn = old_warn
     config.setup(original)
 
-    if not ok then error(err) end
+    if not ok then
+      error(err)
+    end
   end)
 end)
 
@@ -162,7 +178,9 @@ describe("diffview.actions.set_layout name resolution", function()
       err_messages[#err_messages + 1] = msg
     end)
     -- Ensure no view is active so set_layout returns early after resolving.
-    stub(lib, "get_current_view", function() return nil end)
+    stub(lib, "get_current_view", function()
+      return nil
+    end)
   end)
 
   after_each(function()
@@ -253,11 +271,17 @@ describe("diffview.actions.cycle_layout cycling logic", function()
   local function mock_diff_view(files, cur_entry)
     return {
       class = DiffView_class,
-      instanceof = function(self, other) return self.class == other end,
+      instanceof = function(self, other)
+        return self.class == other
+      end,
       cur_entry = cur_entry,
       cur_layout = {
-        get_main_win = function() return { id = 1 } end,
-        is_focused = function() return false end,
+        get_main_win = function()
+          return { id = 1 }
+        end,
+        is_focused = function()
+          return false
+        end,
         sync_scroll = function() end,
       },
       panel = {
@@ -269,7 +293,9 @@ describe("diffview.actions.cycle_layout cycling logic", function()
   end
 
   it("returns early when no view is active", function()
-    stub(lib, "get_current_view", function() return nil end)
+    stub(lib, "get_current_view", function()
+      return nil
+    end)
 
     -- Should not error.
     actions.cycle_layout()
@@ -279,7 +305,9 @@ describe("diffview.actions.cycle_layout cycling logic", function()
   it("returns early when cur_entry is nil (empty diff)", function()
     local view = mock_diff_view({}, nil)
 
-    stub(lib, "get_current_view", function() return view end)
+    stub(lib, "get_current_view", function()
+      return view
+    end)
 
     -- Should not error despite files being nil.
     actions.cycle_layout()
@@ -290,8 +318,12 @@ describe("diffview.actions.cycle_layout cycling logic", function()
     local file = mock_file_entry(Diff2Hor)
     local view = mock_diff_view({ file }, file)
 
-    stub(lib, "get_current_view", function() return view end)
-    stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+    stub(lib, "get_current_view", function()
+      return view
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
 
     actions.cycle_layout()
 
@@ -303,8 +335,12 @@ describe("diffview.actions.cycle_layout cycling logic", function()
     local file = mock_file_entry(Diff2Ver)
     local view = mock_diff_view({ file }, file)
 
-    stub(lib, "get_current_view", function() return view end)
-    stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+    stub(lib, "get_current_view", function()
+      return view
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
 
     actions.cycle_layout()
 
@@ -323,8 +359,12 @@ describe("diffview.actions.cycle_layout cycling logic", function()
       local view = mock_diff_view({}, file)
       view.files.conflicting = { file }
 
-      stub(lib, "get_current_view", function() return view end)
-      stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+      stub(lib, "get_current_view", function()
+        return view
+      end)
+      stub(vim.api, "nvim_win_get_cursor", function()
+        return { 1, 0 }
+      end)
 
       actions.cycle_layout()
 
@@ -348,8 +388,12 @@ describe("diffview.actions.cycle_layout cycling logic", function()
     local file3 = mock_file_entry(Diff2Hor)
     local view = mock_diff_view({ file1, file2, file3 }, file1)
 
-    stub(lib, "get_current_view", function() return view end)
-    stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+    stub(lib, "get_current_view", function()
+      return view
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
 
     actions.cycle_layout()
 
@@ -390,11 +434,17 @@ describe("diffview.actions.cycle_layout with custom config", function()
   local function mock_diff_view(files, cur_entry)
     return {
       class = DiffView_class,
-      instanceof = function(self, other) return self.class == other end,
+      instanceof = function(self, other)
+        return self.class == other
+      end,
       cur_entry = cur_entry,
       cur_layout = {
-        get_main_win = function() return { id = 1 } end,
-        is_focused = function() return false end,
+        get_main_win = function()
+          return { id = 1 }
+        end,
+        is_focused = function()
+          return false
+        end,
         sync_scroll = function() end,
       },
       panel = {
@@ -442,8 +492,12 @@ describe("diffview.actions.cycle_layout with custom config", function()
     local file = mock_file_entry(Diff1)
     local view = mock_diff_view({ file }, file)
 
-    stub(lib, "get_current_view", function() return view end)
-    stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+    stub(lib, "get_current_view", function()
+      return view
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
 
     actions.cycle_layout()
 
@@ -495,8 +549,12 @@ describe("diffview.actions.cycle_layout with custom config", function()
     local file = mock_file_entry(Diff3Hor) -- not in the default cycle
     local view = mock_diff_view({ file }, file)
 
-    stub(lib, "get_current_view", function() return view end)
-    stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+    stub(lib, "get_current_view", function()
+      return view
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
 
     actions.cycle_layout()
 
@@ -524,8 +582,12 @@ describe("diffview.actions.cycle_layout with custom config", function()
     local file = mock_file_entry(Diff2Hor)
     local view = mock_diff_view({ file }, file)
 
-    stub(lib, "get_current_view", function() return view end)
-    stub(vim.api, "nvim_win_get_cursor", function() return { 1, 0 } end)
+    stub(lib, "get_current_view", function()
+      return view
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
 
     actions.cycle_layout()
 

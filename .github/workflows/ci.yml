@@ -11,6 +11,26 @@ env:
   JJ_VERSION: "0.39.0"
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint (stylua)
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache stylua binary
+        id: cache-stylua
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/stylua
+          key: stylua-2.4.1-luajit-linux-x86_64
+
+      - name: Install stylua (luajit feature)
+        if: steps.cache-stylua.outputs.cache-hit != 'true'
+        run: cargo install stylua --locked --version 2.4.1 --features luajit
+
+      - name: Check formatting
+        run: stylua --check lua/
+
   test:
     runs-on: ubuntu-latest
     strategy:

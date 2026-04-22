@@ -119,12 +119,16 @@ end
 
 ---@param target_layout Layout
 function FileEntry:convert_layout(target_layout)
-  if not self.revs then return end
+  if not self.revs then
+    return
+  end
 
   -- Let the old layout drop any buffer-level render state before it's
   -- replaced; the new layout reuses the same files/buffers, so leftover
   -- visuals (e.g. inline-diff extmarks) would otherwise persist.
-  if self.layout.teardown_render then self.layout:teardown_render() end
+  if self.layout.teardown_render then
+    self.layout:teardown_render()
+  end
 
   local get_data
 
@@ -219,7 +223,9 @@ function FileEntry:update_merge_context(ctx)
     )
   end
 
-  if layout.b then layout.b.file.winbar = " LOCAL (Working tree)" end
+  if layout.b then
+    layout.b.file.winbar = " LOCAL (Working tree)"
+  end
 
   if layout.c and ctx.theirs.hash then
     layout.c.file.winbar = (" THEIRS (Incoming changes) %s %s"):format(
@@ -247,7 +253,9 @@ function FileEntry.update_index_stat(adapter, stat)
   stat = stat or pl:stat(pl:join(adapter.ctx.toplevel, "index"))
 
   if stat then
-    if not fstat_cache[adapter.ctx.toplevel] then fstat_cache[adapter.ctx.toplevel] = {} end
+    if not fstat_cache[adapter.ctx.toplevel] then
+      fstat_cache[adapter.ctx.toplevel] = {}
+    end
 
     fstat_cache[adapter.ctx.toplevel].index = {
       mtime = stat.mtime.sec,

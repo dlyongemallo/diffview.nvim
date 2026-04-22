@@ -33,7 +33,6 @@ function Event:stop_propagation()
   self.propagate = false
 end
 
-
 ---@class EventEmitter : diffview.Object
 ---@operator call : EventEmitter
 ---@field event_map table<any, Listener[]> # Registered events mapped to subscribed listeners.
@@ -127,10 +126,7 @@ function EventEmitter:off(callback, event_id)
   if event_id then
     all = { self.event_map[event_id] }
   else
-    all = utils.vec_join(
-      vim.tbl_values(self.event_map),
-      { self.any_listeners }
-    )
+    all = utils.vec_join(vim.tbl_values(self.event_map), { self.any_listeners })
   end
 
   for _, listeners in ipairs(all) do
@@ -169,14 +165,16 @@ local function filter_call(listeners, event, args)
   for i = 1, #listeners do
     local cur = listeners[i]
     local ret = cur.call(event, args)
-    local discard = (type(ret) == "boolean" and ret)
-        or cur.type == "once"
-        or cur.type == "any_once"
+    local discard = (type(ret) == "boolean" and ret) or cur.type == "once" or cur.type == "any_once"
 
-    if not discard then result[#result + 1] = cur end
+    if not discard then
+      result[#result + 1] = cur
+    end
 
     if not event.propagate then
-      for j = i + 1, #listeners do result[j] = listeners[j] end
+      for j = i + 1, #listeners do
+        result[j] = listeners[j]
+      end
       break
     end
   end

@@ -13,7 +13,9 @@ describe("diffview.scene.file_entry", function()
     local original_layout = entry.layout
 
     -- Must not error; null entries have no revs.
-    assert.has_no.errors(function() entry:convert_layout(Diff2Hor) end)
+    assert.has_no.errors(function()
+      entry:convert_layout(Diff2Hor)
+    end)
 
     assert.are.equal(original_layout, entry.layout)
   end)
@@ -23,10 +25,18 @@ describe("diffview.scene.file_entry", function()
     local rev = GitRev(RevType.STAGE, 0)
     local file_b = { bufnr = -1 }
     local old_layout = {
-      files = function() return { file_b } end,
-      owned_files = function() return { file_b } end,
-      get_file_for = function(_, sym) return sym == "b" and file_b or nil end,
-      teardown_render = function() teardown_calls = teardown_calls + 1 end,
+      files = function()
+        return { file_b }
+      end,
+      owned_files = function()
+        return { file_b }
+      end,
+      get_file_for = function(_, sym)
+        return sym == "b" and file_b or nil
+      end,
+      teardown_render = function()
+        teardown_calls = teardown_calls + 1
+      end,
     }
 
     local entry = FileEntry({
@@ -42,7 +52,13 @@ describe("diffview.scene.file_entry", function()
 
     local new_layout = {}
     setmetatable(new_layout, {
-      __call = function() return { files = function() return {} end } end,
+      __call = function()
+        return {
+          files = function()
+            return {}
+          end,
+        }
+      end,
     })
 
     entry:convert_layout(new_layout)
@@ -52,12 +68,16 @@ describe("diffview.scene.file_entry", function()
   it("does not treat should_null errors as truthy null markers", function()
     local captured
     local layout_class = setmetatable({
-      should_null = function() error("boom") end,
+      should_null = function()
+        error("boom")
+      end,
     }, {
       __call = function(_, opt)
         captured = opt
         return {
-          files = function() return { opt.b } end,
+          files = function()
+            return { opt.b }
+          end,
         }
       end,
     })
@@ -103,15 +123,13 @@ describe("diffview.scene.file_entry", function()
     it("does not error when merge context entries have nil hashes", function()
       local entry, _, file_stubs = make_entry_with_layout()
 
-      assert.has_no.errors(
-        function()
-          entry:update_merge_context({
-            ours = {},
-            theirs = {},
-            base = {},
-          })
-        end
-      )
+      assert.has_no.errors(function()
+        entry:update_merge_context({
+          ours = {},
+          theirs = {},
+          base = {},
+        })
+      end)
 
       -- Winbars for ours/theirs/base should remain unset.
       assert.is_nil(file_stubs.a.winbar)
@@ -144,15 +162,13 @@ describe("diffview.scene.file_entry", function()
     it("handles a mix of present and missing hashes", function()
       local entry, _, file_stubs = make_entry_with_layout()
 
-      assert.has_no.errors(
-        function()
-          entry:update_merge_context({
-            ours = { hash = "abc123def456" },
-            theirs = {},
-            base = { hash = "def789abc012" },
-          })
-        end
-      )
+      assert.has_no.errors(function()
+        entry:update_merge_context({
+          ours = { hash = "abc123def456" },
+          theirs = {},
+          base = { hash = "def789abc012" },
+        })
+      end)
 
       assert.truthy(file_stubs.a.winbar:find("OURS"))
       assert.is_nil(file_stubs.c.winbar)
@@ -166,16 +182,26 @@ describe("diffview.scene.file_entry", function()
 
     local files_list = {
       {
-        destroy = function(_, force) seen[#seen + 1] = force end,
+        destroy = function(_, force)
+          seen[#seen + 1] = force
+        end,
       },
       {
-        destroy = function(_, force) seen[#seen + 1] = force end,
+        destroy = function(_, force)
+          seen[#seen + 1] = force
+        end,
       },
     }
     local layout = {
-      files = function() return files_list end,
-      owned_files = function() return files_list end,
-      destroy = function() layout_destroyed = true end,
+      files = function()
+        return files_list
+      end,
+      owned_files = function()
+        return files_list
+      end,
+      destroy = function()
+        layout_destroyed = true
+      end,
     }
 
     local entry = FileEntry({

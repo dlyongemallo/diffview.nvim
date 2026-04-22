@@ -85,12 +85,16 @@ describe("diffview.selection_store", function()
     -- silently leaving a .tmp file behind.
     it("logs warning when rename fails", function()
       local target = tmpdir .. "/store.json"
-      SelectionStore.get_path = function() return target end
+      SelectionStore.get_path = function()
+        return target
+      end
 
       local warns = {}
       local orig_warn = DiffviewGlobal.logger.warn
       local orig_rename = vim.uv.fs_rename
-      DiffviewGlobal.logger.warn = function(_, msg) table.insert(warns, msg) end
+      DiffviewGlobal.logger.warn = function(_, msg)
+        table.insert(warns, msg)
+      end
       vim.uv.fs_rename = function()
         return nil, "mock fs_rename failure"
       end
@@ -138,7 +142,9 @@ describe("diffview.selection_store", function()
       local f = { path = "a.lua", kind = "working" }
       local panel = make_panel({ f })
       local called = 0
-      panel.on_selection_changed = function() called = called + 1 end
+      panel.on_selection_changed = function()
+        called = called + 1
+      end
 
       panel:toggle_selection(f)
       eq(1, called)
@@ -150,7 +156,9 @@ describe("diffview.selection_store", function()
       local f = { path = "a.lua", kind = "working" }
       local panel = make_panel({ f })
       local called = 0
-      panel.on_selection_changed = function() called = called + 1 end
+      panel.on_selection_changed = function()
+        called = called + 1
+      end
 
       panel:select_file(f)
       eq(1, called)
@@ -162,7 +170,9 @@ describe("diffview.selection_store", function()
       local f = { path = "a.lua", kind = "working" }
       local panel = make_panel({ f })
       local called = 0
-      panel.on_selection_changed = function() called = called + 1 end
+      panel.on_selection_changed = function()
+        called = called + 1
+      end
 
       -- Clear when empty: should not fire.
       panel:clear_selections()
@@ -179,7 +189,9 @@ describe("diffview.selection_store", function()
       local b = { path = "b.lua", kind = "working" }
       local panel = make_panel({ a, b })
       local called = 0
-      panel.on_selection_changed = function() called = called + 1 end
+      panel.on_selection_changed = function()
+        called = called + 1
+      end
 
       panel:batch_selection(function()
         panel:select_file(a)
@@ -192,7 +204,9 @@ describe("diffview.selection_store", function()
       local a = { path = "a.lua", kind = "working" }
       local panel = make_panel({ a })
       local called = 0
-      panel.on_selection_changed = function() called = called + 1 end
+      panel.on_selection_changed = function()
+        called = called + 1
+      end
 
       panel:batch_selection(function()
         -- No mutations inside the batch.
@@ -204,7 +218,9 @@ describe("diffview.selection_store", function()
       local a = { path = "a.lua", kind = "working" }
       local panel = make_panel({ a })
       local called = 0
-      panel.on_selection_changed = function() called = called + 1 end
+      panel.on_selection_changed = function()
+        called = called + 1
+      end
 
       -- Error inside batch: flags must be restored so future notifications work.
       pcall(function()
@@ -228,7 +244,9 @@ describe("diffview.selection_store", function()
       local b = { path = "b.lua", kind = "working" }
       local panel = make_panel({ a, b })
       local called = 0
-      panel.on_selection_changed = function() called = called + 1 end
+      panel.on_selection_changed = function()
+        called = called + 1
+      end
 
       panel:select_file(a)
       panel:select_file(b)

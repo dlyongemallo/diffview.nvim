@@ -3,19 +3,19 @@ local Commit = require("diffview.vcs.adapters.hg.commit").HgCommit
 local Diff2Hor = require("diffview.scene.layouts.diff_2_hor").Diff2Hor
 local FileEntry = require("diffview.scene.file_entry").FileEntry
 local FlagOption = require("diffview.vcs.flag_option").FlagOption
-local HgRev = require('diffview.vcs.adapters.hg.rev').HgRev
+local HgRev = require("diffview.vcs.adapters.hg.rev").HgRev
 local Job = require("diffview.job").Job
 local MultiJob = require("diffview.multi_job").MultiJob
-local JobStatus = require('diffview.vcs.utils').JobStatus
+local JobStatus = require("diffview.vcs.utils").JobStatus
 local LogEntry = require("diffview.vcs.log_entry").LogEntry
 local RevType = require("diffview.vcs.rev").RevType
-local VCSAdapter = require('diffview.vcs.adapter').VCSAdapter
+local VCSAdapter = require("diffview.vcs.adapter").VCSAdapter
 local arg_parser = require("diffview.arg_parser")
 local async = require("diffview.async")
-local config = require('diffview.config')
-local lazy = require('diffview.lazy')
-local oop = require('diffview.oop')
-local utils = require('diffview.utils')
+local config = require("diffview.config")
+local lazy = require("diffview.lazy")
+local oop = require("diffview.oop")
+local utils = require("diffview.utils")
 local vcs_utils = require("diffview.vcs.utils")
 
 local await, pawait = async.await, async.pawait
@@ -27,7 +27,7 @@ local uv = vim.uv
 local M = {}
 
 ---@class HgAdapter : VCSAdapter
-local HgAdapter = oop.create_class('HgAdapter', VCSAdapter)
+local HgAdapter = oop.create_class("HgAdapter", VCSAdapter)
 
 HgAdapter.Rev = HgRev
 HgAdapter.config_key = "hg"
@@ -39,14 +39,16 @@ HgAdapter.bootstrap = {
     major = 5,
     minor = 4,
     patch = 0,
-  }
+  },
 }
 
 function HgAdapter.run_bootstrap()
   local hg_cmd = config.get_config().hg_cmd
   local bs = HgAdapter.bootstrap
   local err = VCSAdapter.bootstrap_preamble(bs, hg_cmd, "HgAdapter", "hg_cmd")
-  if not err then return end
+  if not err then
+    return
+  end
 
   local out = utils.job(utils.flatten({ hg_cmd, "version" }))
   local line = out[1]
@@ -81,12 +83,14 @@ function HgAdapter.run_bootstrap()
   local version_ok = is_sapling or vcs_utils.check_semver(v, target)
 
   if not version_ok then
-    return err(string.format(
-      "Mercurial version is outdated! Some functionality might not work as expected, "
-        .. "or not at all! Current: %s, wanted: %s",
-      bs.version_string,
-      bs.target_version_string
-    ))
+    return err(
+      string.format(
+        "Mercurial version is outdated! Some functionality might not work as expected, "
+          .. "or not at all! Current: %s, wanted: %s",
+        bs.version_string,
+        bs.target_version_string
+      )
+    )
   end
 
   bs.ok = true
@@ -99,7 +103,7 @@ end
 ---@param path string
 ---@return string?
 local function get_toplevel(path)
-  local out, code = utils.job(utils.flatten({config.get_config().hg_cmd, {"root"}}), path)
+  local out, code = utils.job(utils.flatten({ config.get_config().hg_cmd, { "root" } }), path)
   if code ~= 0 then
     return nil
   end
@@ -154,7 +158,7 @@ function HgAdapter:get_show_args(path, rev)
 end
 
 function HgAdapter:get_log_args(args)
-  return utils.vec_join("log", "--stat", '--rev', args)
+  return utils.vec_join("log", "--stat", "--rev", args)
 end
 
 function HgAdapter:get_dir(path)
@@ -171,7 +175,7 @@ function HgAdapter:get_merge_context()
   local out, code = self:exec_sync({ "debugmergestate", "-Tjson" }, self.ctx.toplevel)
 
   if code ~= 0 then
-    return {ours = {}, theirs = {}, base = {}}
+    return { ours = {}, theirs = {}, base = {} }
   end
 
   local data = vim.json.decode(table.concat(out, ""))
@@ -181,13 +185,15 @@ function HgAdapter:get_merge_context()
   for _, commit in ipairs(data[1].commits) do
     if commit.name == "other" then
       ret.theirs = { hash = commit.node }
-      out, code = self:exec_sync({ "log", "--template={branch}", "--rev", commit.node }, self.ctx.toplevel)
+      out, code =
+        self:exec_sync({ "log", "--template={branch}", "--rev", commit.node }, self.ctx.toplevel)
       if code == 0 then
         ret.theirs.ref_names = out[1]
       end
     elseif commit.name == "local" then
       ret.ours = { hash = commit.node }
-      out, code = self:exec_sync({ "log", "--template={branch}", "--rev", commit.node }, self.ctx.toplevel)
+      out, code =
+        self:exec_sync({ "log", "--template={branch}", "--rev", commit.node }, self.ctx.toplevel)
       if code == 0 then
         ret.ours.ref_names = out[1]
       end
@@ -196,7 +202,7 @@ function HgAdapter:get_merge_context()
 
   for _, file in ipairs(data[1].files) do
     for _, extra in ipairs(file.extras) do
-      if (extra.key == 'ancestorlinknode' and extra.value ~= HgAdapter.Rev.NULL_TREE_SHA) then
+      if extra.key == "ancestorlinknode" and extra.value ~= HgAdapter.Rev.NULL_TREE_SHA then
         ret.base.hash = extra.value
         break
       end
@@ -217,7 +223,7 @@ function HgAdapter:file_history_options(range, paths, argo)
     return v == "." and "." or pl:relative(v, ".")
   end, paths) --[[@as string[] ]]
 
-  local range_arg = argo:get_flag('rev', { no_empty = true })
+  local range_arg = argo:get_flag("rev", { no_empty = true })
   -- if range_arg then
   --   -- TODO: check if range is valid
   -- end
@@ -363,7 +369,7 @@ end
 
 local function structure_fh_data(namestat_data, numstat_data)
   local right_hash, left_hash, merge_hash = unpack(utils.str_split(namestat_data[1]))
-  local time, time_offset = namestat_data[3]:match('(%d+.%d*)([-+]?%d*)')
+  local time, time_offset = namestat_data[3]:match("(%d+.%d*)([-+]?%d*)")
 
   return {
     left_hash = left_hash ~= "" and left_hash or nil,
@@ -379,7 +385,6 @@ local function structure_fh_data(namestat_data, numstat_data)
     numstat = numstat_data,
   }
 end
-
 
 ---@param state HgAdapter.FHState
 function HgAdapter:stream_fh_data(state)
@@ -412,15 +417,9 @@ function HgAdapter:stream_fh_data(state)
         local raw_entry = raw[handler_state.idx]
         raw_entry[handler_state.key] = handler_state.data
 
-        if not raw_entry.done
-            and raw_entry.namestat
-            and raw_entry.numstat
-        then
+        if not raw_entry.done and raw_entry.namestat and raw_entry.numstat then
           raw_entry.done = true
-          local log_data = structure_fh_data(
-            raw_entry.namestat,
-            raw_entry.numstat
-          )
+          local log_data = structure_fh_data(raw_entry.namestat, raw_entry.numstat)
           stream:push({ JobStatus.PROGRESS, log_data })
         end
       end
@@ -448,21 +447,25 @@ function HgAdapter:stream_fh_data(state)
       end
 
       local ok, err = mjob:is_success()
-      if mjob:is_done() and ok then on_stdout(nil, "\0") end
+      if mjob:is_done() and ok then
+        on_stdout(nil, "\0")
+      end
 
       if not ok then
         stream:push({
           JobStatus.ERROR,
           nil,
-          table.concat(utils.vec_join(err, mjob:stderr()), "\n")
+          table.concat(utils.vec_join(err, mjob:stderr()), "\n"),
         })
       else
         stream:push({ JobStatus.SUCCESS })
       end
-    end
+    end,
   })
 
-  local rev_range = state.prepared_log_opts.rev_range and '--rev=' .. state.prepared_log_opts.rev_range or nil
+  local rev_range = state.prepared_log_opts.rev_range
+      and "--rev=" .. state.prepared_log_opts.rev_range
+    or nil
   local log_opt = { label = "HgAdapter:incremental_fh_data()" }
 
   namestat_job = Job({
@@ -471,14 +474,14 @@ function HgAdapter:stream_fh_data(state)
       self:args(),
       "log",
       rev_range,
-      '--template=\\x00\n'
-      .. '{node} {p1.node} {ifeq(p2.rev, -1 ,\"\", \"{p2.node}\")}\n'
-      .. '{author|person}\n'
-      .. '{date}\n'
-      .. '{date|age}\n'
-      .. '  {separate(", ", tags, topics)}\n'
-      .. '  {desc|firstline}\n'
-      .. '{files % "{status} {file}\n"}',
+      "--template=\\x00\n"
+        .. '{node} {p1.node} {ifeq(p2.rev, -1 ,"", "{p2.node}")}\n'
+        .. "{author|person}\n"
+        .. "{date}\n"
+        .. "{date|age}\n"
+        .. '  {separate(", ", tags, topics)}\n'
+        .. "  {desc|firstline}\n"
+        .. '{files % "{status} {file}\n"}',
       state.prepared_log_opts.flags,
       "--",
       state.path_args
@@ -495,7 +498,7 @@ function HgAdapter:stream_fh_data(state)
       "log",
       rev_range,
       "--template=\\x00\n",
-      '--stat',
+      "--stat",
       state.prepared_log_opts.flags,
       "--",
       state.path_args
@@ -527,10 +530,8 @@ end
 ---@param out_stream AsyncListStream
 ---@param opt vcs.adapter.FileHistoryWorkerSpec
 HgAdapter.file_history_worker = async.void(function(self, out_stream, opt)
-  local single_file = self:is_single_file(
-    opt.log_opt.single_file.path_args,
-    opt.log_opt.single_file.L
-  )
+  local single_file =
+    self:is_single_file(opt.log_opt.single_file.path_args, opt.log_opt.single_file.L)
 
   ---@type HgLogOptions
   local log_options = config.get_log_options(
@@ -567,7 +568,9 @@ HgAdapter.file_history_worker = async.void(function(self, out_stream, opt)
 
   ---@param shutdown? SignalConsumer
   out_stream:on_close(function(shutdown)
-    if shutdown then in_stream:close(shutdown) end
+    if shutdown then
+      in_stream:close(shutdown)
+    end
   end)
 
   local last_wait = uv.hrtime()
@@ -580,7 +583,7 @@ HgAdapter.file_history_worker = async.void(function(self, out_stream, opt)
     -- Make sure to yield to the scheduler periodically to keep the editor
     -- responsive.
     local now = uv.hrtime()
-    if (now - last_wait > interval) then
+    if now - last_wait > interval then
       last_wait = now
       await(async.schedule_now())
     end
@@ -609,9 +612,9 @@ HgAdapter.file_history_worker = async.void(function(self, out_stream, opt)
     -- lists only an incomplete list of files at best. We need to use 'hg
     -- show' to get file statuses for merge commits. And merges do not always
     -- have changes.
-    if new_data.merge_hash
-      and new_data.numstat[1]
-      or (#new_data.numstat -1) ~= #new_data.namestat
+    if
+      new_data.merge_hash and new_data.numstat[1]
+      or (#new_data.numstat - 1) ~= #new_data.namestat
     then
       local job = Job({
         command = self:bin(),
@@ -648,7 +651,7 @@ HgAdapter.file_history_worker = async.void(function(self, out_stream, opt)
         out_stream:push({
           JobStatus.ERROR,
           nil,
-          fmt("Failed to get log data for merge commit '%s'!", new_data.right_hash)
+          fmt("Failed to get log data for merge commit '%s'!", new_data.right_hash),
         })
         return
       end
@@ -676,7 +679,9 @@ HgAdapter.file_history_worker = async.void(function(self, out_stream, opt)
 
     -- Some commits might not have file data. In that case we simply ignore it,
     -- as the fh panel doesn't support such entries at the moment.
-    if ok then out_stream:push({ JobStatus.PROGRESS, entry }) end
+    if ok then
+      out_stream:push({ JobStatus.PROGRESS, entry })
+    end
   end
 end)
 
@@ -690,11 +695,10 @@ function HgAdapter:parse_fh_data(data, commit, state)
 
   for i = 1, #data.numstat - 1 do
     local status = data.namestat[i]:sub(1, 1):gsub("%s", " ")
-    if status == 'R' then
+    if status == "R" then
       -- R is for Removed in mercurial
-      status = 'D'
+      status = "D"
     end
-
 
     -- TODO(zegervdv): Cannot get diffstats from mercurial reliably
     -- see https://github.com/sindrets/diffview.nvim/issues/366
@@ -703,42 +707,40 @@ function HgAdapter:parse_fh_data(data, commit, state)
     name = vim.trim(name)
 
     local oldname
-    if name:match('=>') ~= nil then
-      oldname, name = name:match('(.*) => (.*)')
+    if name:match("=>") ~= nil then
+      oldname, name = name:match("(.*) => (.*)")
       oldname = vim.trim(oldname)
       name = vim.trim(name)
       -- Mark as Renamed
-      status = 'R'
+      status = "R"
     end
 
     table.insert(
       files,
-      FileEntry.with_layout(
-        state.layout_opt.default_layout or Diff2Hor,
-        {
-          adapter = self,
-          path = name,
-          oldpath = oldname,
-          status = status,
-          stats = stats,
-          kind = "working",
-          commit = commit,
-          revs = {
-            a = data.left_hash and HgRev(RevType.COMMIT, data.left_hash) or HgRev.new_null_tree(),
-            b = state.prepared_log_opts.base or HgRev(RevType.COMMIT, data.right_hash),
-          }
-        }
-      )
+      FileEntry.with_layout(state.layout_opt.default_layout or Diff2Hor, {
+        adapter = self,
+        path = name,
+        oldpath = oldname,
+        status = status,
+        stats = stats,
+        kind = "working",
+        commit = commit,
+        revs = {
+          a = data.left_hash and HgRev(RevType.COMMIT, data.left_hash) or HgRev.new_null_tree(),
+          b = state.prepared_log_opts.base or HgRev(RevType.COMMIT, data.right_hash),
+        },
+      })
     )
   end
 
   if files[1] then
-    return true, LogEntry({
-      path_args = state.path_args,
-      commit = commit,
-      files = files,
-      single_file = state.single_file,
-    })
+    return true,
+      LogEntry({
+        path_args = state.path_args,
+        commit = commit,
+        files = files,
+        single_file = state.single_file,
+      })
   end
 
   if state.path_args[1] then
@@ -748,13 +750,14 @@ function HgAdapter:parse_fh_data(data, commit, state)
   end
 
   -- Commit is likely identical to it's parent. Return an empty log entry.
-  return true, LogEntry({
-    path_args = state.path_args,
-    commit = commit,
-    single_file = state.single_file,
-    nulled = true,
-    files = { FileEntry.new_null_entry(self) },
-  })
+  return true,
+    LogEntry({
+      path_args = state.path_args,
+      commit = commit,
+      single_file = state.single_file,
+      nulled = true,
+      files = { FileEntry.new_null_entry(self) },
+    })
 end
 
 ---@param argo ArgObject
@@ -774,12 +777,12 @@ function HgAdapter:diffview_options(argo)
       { "no", "false" }
     ),
     selected_file = argo:get_flag("selected-file", { no_empty = true, expand = true })
-        or (vim.bo.buftype == "" and pl:vim_expand("%:p"))
-        or nil,
+      or (vim.bo.buftype == "" and pl:vim_expand("%:p"))
+      or nil,
     selected_row = tonumber(argo:get_flag("selected-row", { no_empty = true })),
   }
 
-  return {left = left, right = right, options = options}
+  return { left = left, right = right, options = options }
 end
 
 function HgAdapter:rev_to_pretty_string(left, right)
@@ -812,10 +815,7 @@ end
 ---Get the current branch name.
 ---@return string? branch_name The branch name, or nil if not available.
 function HgAdapter:get_branch_name()
-  local out, code = self:exec_sync(
-    { "branch" },
-    { cwd = self.ctx.toplevel, silent = true }
-  )
+  local out, code = self:exec_sync({ "branch" }, { cwd = self.ctx.toplevel, silent = true })
 
   if code == 0 and out[1] then
     return vim.trim(out[1])
@@ -837,14 +837,13 @@ function HgAdapter:rev_to_args(left, right)
     "Can't diff LOCAL against LOCAL!"
   )
   if left.type == RevType.COMMIT and right.type == RevType.COMMIT then
-    return { '--rev=' .. left.commit .. '::' .. right.commit}
+    return { "--rev=" .. left.commit .. "::" .. right.commit }
   elseif left.type == RevType.STAGE and right.type == RevType.LOCAL then
     return {}
   else
-    return { '--rev=' .. left.commit }
+    return { "--rev=" .. left.commit }
   end
 end
-
 
 ---Determine whether a rev arg is a range.
 ---@param rev_arg string
@@ -876,7 +875,7 @@ function HgAdapter:parse_revs(rev_arg, opt)
   else
     local from, to = rev_arg:match("([^:]*)%:%:?(.*)$")
 
-    if from and from ~= ""  and to and to ~= "" then
+    if from and from ~= "" and to and to ~= "" then
       left = HgRev(RevType.COMMIT, from)
       right = HgRev(RevType.COMMIT, to)
     elseif from and from ~= "" then
@@ -886,23 +885,41 @@ function HgAdapter:parse_revs(rev_arg, opt)
       left = HgRev.new_null_tree()
       right = HgRev(RevType.COMMIT, to)
     else
-      local node, code, stderr = self:exec_sync({"log", "--limit=1", "--template={node}",  "--rev=" .. rev_arg}, self.ctx.toplevel)
+      local node, code, stderr = self:exec_sync(
+        { "log", "--limit=1", "--template={node}", "--rev=" .. rev_arg },
+        self.ctx.toplevel
+      )
       if not code or code ~= 0 then
-        utils.err(fmt("Failed to parse rev %s: %s", utils.str_quote(rev_arg), table.concat(stderr or {}, "\n")))
+        utils.err(
+          fmt(
+            "Failed to parse rev %s: %s",
+            utils.str_quote(rev_arg),
+            table.concat(stderr or {}, "\n")
+          )
+        )
         return
       end
       left = HgRev(RevType.COMMIT, node[1])
 
-      node, code, stderr = self:exec_sync({"log", "--limit=1", "--template={node}",  "--rev=reverse(" .. rev_arg .. ")"}, self.ctx.toplevel)
+      node, code, stderr = self:exec_sync(
+        { "log", "--limit=1", "--template={node}", "--rev=reverse(" .. rev_arg .. ")" },
+        self.ctx.toplevel
+      )
       if not code or code ~= 0 then
-        utils.err(fmt("Failed to parse rev %s: %s", utils.str_quote(rev_arg), table.concat(stderr or {}, "\n")))
+        utils.err(
+          fmt(
+            "Failed to parse rev %s: %s",
+            utils.str_quote(rev_arg),
+            table.concat(stderr or {}, "\n")
+          )
+        )
         return
       end
 
       right = HgRev(RevType.COMMIT, node[1])
       -- If we refer to a single revision, show diff with working directory
       if node[1] == left.commit then
-        right = HgRev(RevType.LOCAL )
+        right = HgRev(RevType.LOCAL)
       end
     end
   end
@@ -919,7 +936,7 @@ HgAdapter.file_restore = async.wrap(function(self, path, kind, commit, callback)
   local _, code
   local abs_path = pl:join(self.ctx.toplevel, path)
 
-  _, code = self:exec_sync({"cat", "--", path}, self.ctx.toplevel)
+  _, code = self:exec_sync({ "cat", "--", path }, self.ctx.toplevel)
 
   local exists_hg = code == 0
   local undo
@@ -932,7 +949,7 @@ HgAdapter.file_restore = async.wrap(function(self, path, kind, commit, callback)
       if not ok then
         utils.err({
           fmt("Failed to delete buffer '%d'! Aborting file restoration. Error message:", bn),
-          err
+          err,
         }, true)
         callback(false)
         return
@@ -945,17 +962,14 @@ HgAdapter.file_restore = async.wrap(function(self, path, kind, commit, callback)
       if not ok then
         utils.err({
           fmt("Failed to delete file '%s'! Aborting file restoration. Error message:", abs_path),
-          err
+          err,
         }, true)
         callback(false)
         return
       end
     else
       -- File only exists in index
-      _, code = self:exec_sync(
-        { "rm", "-f", "--", path },
-        self.ctx.toplevel
-      )
+      _, code = self:exec_sync({ "rm", "-f", "--", path }, self.ctx.toplevel)
     end
   else
     -- File exists in history: revert
@@ -1000,10 +1014,18 @@ function HgAdapter:show_untracked(opt)
 end
 
 function HgAdapter:get_files_args(args)
-  return utils.vec_join(self:args(), "status", "--print0", "--unknown", "--no-status", "--template={path}\\n", args)
+  return utils.vec_join(
+    self:args(),
+    "status",
+    "--print0",
+    "--unknown",
+    "--no-status",
+    "--template={path}\\n",
+    args
+  )
 end
 
-HgAdapter.tracked_files = async.wrap(function (self, left, right, args, kind, opt, callback)
+HgAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, opt, callback)
   ---@type FileEntry[]
   local files = {}
   ---@type FileEntry[]
@@ -1067,15 +1089,15 @@ HgAdapter.tracked_files = async.wrap(function (self, left, right, args, kind, op
     end
   end
 
-  local mergestate = vim.json.decode(table.concat(mergestate_out, ''))
+  local mergestate = vim.json.decode(table.concat(mergestate_out, ""))
   for _, file in ipairs(mergestate[1].files) do
     local base = nil
     for _, extra in ipairs(file.extras) do
-      if extra.key == 'ancestorlinknode' then
+      if extra.key == "ancestorlinknode" then
         base = extra.value
       end
     end
-    if file.state == 'u' then
+    if file.state == "u" then
       -- Ensure file_info entry exists before accessing it
       if not file_info[file.path] then
         file_info[file.path] = {
@@ -1084,7 +1106,7 @@ HgAdapter.tracked_files = async.wrap(function (self, left, right, args, kind, op
           stats = {},
         }
       end
-      file_info[file.path].status = 'U'
+      file_info[file.path].status = "U"
       file_info[file.path].base = base
       if file.other_path ~= file.path then
         file_info[file.path].oldname = file.other_path
@@ -1106,35 +1128,41 @@ HgAdapter.tracked_files = async.wrap(function (self, left, right, args, kind, op
 
   if kind == "working" and next(conflict_map) then
     for _, v in pairs(conflict_map) do
-      table.insert(conflicts, FileEntry.with_layout(opt.merge_layout, {
-        adapter = self,
-        path = v.name,
-        oldpath = v.oldname,
-        status = "U",
-        kind = "conflicting",
-        revs = {
-          a = self.Rev(RevType.COMMIT, nodes['local']),
-          b = self.Rev(RevType.LOCAL),
-          c = self.Rev(RevType.COMMIT, nodes.other),
-          d = self.Rev(RevType.COMMIT, v.base),
-        }
-      }))
+      table.insert(
+        conflicts,
+        FileEntry.with_layout(opt.merge_layout, {
+          adapter = self,
+          path = v.name,
+          oldpath = v.oldname,
+          status = "U",
+          kind = "conflicting",
+          revs = {
+            a = self.Rev(RevType.COMMIT, nodes["local"]),
+            b = self.Rev(RevType.LOCAL),
+            c = self.Rev(RevType.COMMIT, nodes.other),
+            d = self.Rev(RevType.COMMIT, v.base),
+          },
+        })
+      )
     end
   end
 
   for _, v in ipairs(data) do
-    table.insert(files, FileEntry.with_layout(opt.default_layout, {
-      adapter = self,
-      path = v.name,
-      oldpath = v.oldname,
-      status = v.status,
-      stats = v.stats,
-      kind = kind,
-      revs = {
-        a = left,
-        b = right,
-      }
-    }))
+    table.insert(
+      files,
+      FileEntry.with_layout(opt.default_layout, {
+        adapter = self,
+        path = v.name,
+        oldpath = v.oldname,
+        status = v.status,
+        stats = v.stats,
+        kind = kind,
+        revs = {
+          a = left,
+          b = right,
+        },
+      })
+    )
   end
 
   callback(nil, files, conflicts)
@@ -1152,7 +1180,7 @@ HgAdapter.untracked_files = async.wrap(function(self, left, right, opt, callback
       "--template={path}\\n"
     ),
     cwd = self.ctx.toplevel,
-    log_opt = { label = "HgAdapter:untracked_files()" }
+    log_opt = { label = "HgAdapter:untracked_files()" },
   })
 
   await(job)
@@ -1174,7 +1202,7 @@ HgAdapter.untracked_files = async.wrap(function(self, left, right, opt, callback
         revs = {
           a = left,
           b = right,
-        }
+        },
       })
     )
   end
@@ -1188,7 +1216,7 @@ end)
 ---@param callback fun(stderr: string[]?, stdout: string[]?)
 HgAdapter.show = async.wrap(function(self, path, rev, callback)
   -- File did not exist, need to return an empty buffer
-  if not(rev) or (rev:object_name() == self.Rev.NULL_TREE_SHA) then
+  if not rev or (rev:object_name() == self.Rev.NULL_TREE_SHA) then
     callback(nil, {})
     return
   end
@@ -1204,8 +1232,8 @@ HgAdapter.show = async.wrap(function(self, path, rev, callback)
     on_exit = async.void(function(_, ok, err)
       if not ok or job.code ~= 0 then
         -- Non zero exit code might mean the file was removed
-        local out = job.stderr and job.stderr[1] or ''
-        if out:match('no such file in rev') then
+        local out = job.stderr and job.stderr[1] or ""
+        if out:match("no such file in rev") then
           callback(nil, {})
         else
           callback(utils.vec_join(err, job.stderr), nil)
@@ -1225,19 +1253,19 @@ end)
 HgAdapter.flags = {
   ---@type FlagOption[]
   switches = {
-    FlagOption('-f', '--follow', 'Follow renames'),
-    FlagOption('-M', '--no-merges', 'List no merge changesets'),
+    FlagOption("-f", "--follow", "Follow renames"),
+    FlagOption("-M", "--no-merges", "List no merge changesets"),
   },
   ---@type FlagOption[]
   options = {
-    FlagOption('=r', '--rev=', 'Revspec', {prompt_label = "(Revspec)"}),
-    FlagOption('=l', '--limit=', 'Limit the number of changesets'),
-    FlagOption('=u', '--user=', 'Filter on user'),
-    FlagOption('=k', '--keyword=', 'Filter by keyword'),
-    FlagOption('=b', '--branch=', 'Filter by branch'),
-    FlagOption('=B', '--bookmark=', 'Filter by bookmark'),
-    FlagOption('=I', '--include=', 'Include files'),
-    FlagOption('=E', '--exclude=', 'Exclude files'),
+    FlagOption("=r", "--rev=", "Revspec", { prompt_label = "(Revspec)" }),
+    FlagOption("=l", "--limit=", "Limit the number of changesets"),
+    FlagOption("=u", "--user=", "Filter on user"),
+    FlagOption("=k", "--keyword=", "Filter by keyword"),
+    FlagOption("=b", "--branch=", "Filter by branch"),
+    FlagOption("=B", "--bookmark=", "Filter by bookmark"),
+    FlagOption("=I", "--include=", "Include files"),
+    FlagOption("=E", "--exclude=", "Exclude files"),
   },
 }
 
@@ -1291,7 +1319,7 @@ function HgAdapter:rev_candidates(arg_lead, opt)
 end
 
 function HgAdapter:init_completion()
-  self.comp.file_history:put({"--rev", "-r"}, function(_, arg_lead)
+  self.comp.file_history:put({ "--rev", "-r" }, function(_, arg_lead)
     return self:rev_candidates(arg_lead, { accept_range = true })
   end)
 
@@ -1305,13 +1333,12 @@ function HgAdapter:init_completion()
   self.comp.file_history:put({ "--branch", "-b" }, {}) -- TODO: completion
   self.comp.file_history:put({ "--bookmark", "-B" }, {}) -- TODO: completion
 
-  self.comp.file_history:put({"--include", "-I"}, function (_, arg_lead)
+  self.comp.file_history:put({ "--include", "-I" }, function(_, arg_lead)
     return vim.fn.getcompletion(arg_lead, "dir")
   end)
-  self.comp.file_history:put({"--exclude", "-X"}, function (_, arg_lead)
+  self.comp.file_history:put({ "--exclude", "-X" }, function(_, arg_lead)
     return vim.fn.getcompletion(arg_lead, "dir")
   end)
-
 end
 
 M.HgAdapter = HgAdapter

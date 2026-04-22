@@ -18,7 +18,9 @@ local function mock_adapter(overrides)
       toplevel = vim.uv.cwd(),
       dir = vim.uv.cwd(),
     },
-    is_binary = function() return false end,
+    is_binary = function()
+      return false
+    end,
   }, overrides or {})
 end
 
@@ -43,24 +45,27 @@ local function make_window(adapter, file_opts)
 end
 
 describe("diffview.scene.window", function()
-  it("load_file bails out if the file is inactive", helpers.async_test(function()
-    local show_called = false
-    local adapter = mock_adapter({
-      show = async.wrap(function(_, _, _, callback)
-        show_called = true
-        callback(nil, { "data" })
-      end),
-    })
+  it(
+    "load_file bails out if the file is inactive",
+    helpers.async_test(function()
+      local show_called = false
+      local adapter = mock_adapter({
+        show = async.wrap(function(_, _, _, callback)
+          show_called = true
+          callback(nil, { "data" })
+        end),
+      })
 
-    local win, file = make_window(adapter)
-    file.active = false
+      local win, file = make_window(adapter)
+      file.active = false
 
-    local ok = async.await(win:load_file())
+      local ok = async.await(win:load_file())
 
-    assert.False(ok)
-    -- show should never have been called since we bailed before create_buffer.
-    assert.False(show_called)
-  end))
+      assert.False(ok)
+      -- show should never have been called since we bailed before create_buffer.
+      assert.False(show_called)
+    end)
+  )
 
   describe("_save_winopts global-only options", function()
     -- The global_only_opts set (e.g., "scrollopt") must be read via vim.o
@@ -203,34 +208,40 @@ describe("diffview.scene.window", function()
     local function stub_parent()
       return {
         name = "test",
-        instanceof = function() return false end,
+        instanceof = function()
+          return false
+        end,
       }
     end
 
-    it("propagates the configured value to the window", helpers.async_test(function()
-      config.setup({ view = { foldlevel = 77 } })
+    it(
+      "propagates the configured value to the window",
+      helpers.async_test(function()
+        config.setup({ view = { foldlevel = 77 } })
 
-      local adapter = mock_adapter()
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      local win, file = make_window(adapter)
-      file.bufnr = bufnr
-      win.parent = stub_parent()
+        local adapter = mock_adapter()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local win, file = make_window(adapter)
+        file.bufnr = bufnr
+        win.parent = stub_parent()
 
-      async.await(win:open_file())
+        async.await(win:open_file())
 
-      assert.equals(77, vim.wo[win.id].foldlevel)
+        assert.equals(77, vim.wo[win.id].foldlevel)
 
-      -- Close the dedicated window before deleting the buffer it displays,
-      -- so buffer deletion does not force an unrelated window onto `bufnr`.
-      if vim.api.nvim_win_is_valid(test_winid) then
-        vim.api.nvim_win_close(test_winid, true)
-      end
-      test_winid = nil
-      Window.winopt_store[bufnr] = nil
-      vim.api.nvim_buf_delete(bufnr, { force = true })
-    end))
+        -- Close the dedicated window before deleting the buffer it displays,
+        -- so buffer deletion does not force an unrelated window onto `bufnr`.
+        if vim.api.nvim_win_is_valid(test_winid) then
+          vim.api.nvim_win_close(test_winid, true)
+        end
+        test_winid = nil
+        Window.winopt_store[bufnr] = nil
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end)
+    )
 
-    it("applies the configured value even when `file.winopts` omits `foldlevel`",
+    it(
+      "applies the configured value even when `file.winopts` omits `foldlevel`",
       helpers.async_test(function()
         config.setup({ view = { foldlevel = 77 } })
 
@@ -253,42 +264,46 @@ describe("diffview.scene.window", function()
         test_winid = nil
         Window.winopt_store[bufnr] = nil
         vim.api.nvim_buf_delete(bufnr, { force = true })
-      end))
+      end)
+    )
   end)
 
-  it("load_file suppresses error when create_buffer is cancelled mid-async", helpers.async_test(function()
-    local yield_signal = Signal("yield")
-    local produce_data_started = Signal("produce_data_started")
+  it(
+    "load_file suppresses error when create_buffer is cancelled mid-async",
+    helpers.async_test(function()
+      local yield_signal = Signal("yield")
+      local produce_data_started = Signal("produce_data_started")
 
-    local adapter = mock_adapter({
-      show = async.wrap(function(_, _, _, callback)
-        produce_data_started:send()
-        async.await(yield_signal)
-        callback(nil, { "data" })
-      end),
-    })
+      local adapter = mock_adapter({
+        show = async.wrap(function(_, _, _, callback)
+          produce_data_started:send()
+          async.await(yield_signal)
+          callback(nil, { "data" })
+        end),
+      })
 
-    local win, file = make_window(adapter)
+      local win, file = make_window(adapter)
 
-    -- Start load_file in a separate thread so we can deactivate mid-flight.
-    local load_ok
+      -- Start load_file in a separate thread so we can deactivate mid-flight.
+      local load_ok
 
-    local load_thread = async.void(function()
-      load_ok = async.await(win:load_file())
+      local load_thread = async.void(function()
+        load_ok = async.await(win:load_file())
+      end)
+
+      load_thread()
+
+      -- Wait until we're inside produce_data (the show mock).
+      async.await(produce_data_started)
+
+      -- Deactivate and let the show mock finish.
+      file.active = false
+      yield_signal:send()
+      async.await(async.scheduler())
+
+      -- load_file should report failure without a user-visible error.
+      assert.False(load_ok)
+      assert.is_nil(file.bufnr)
     end)
-
-    load_thread()
-
-    -- Wait until we're inside produce_data (the show mock).
-    async.await(produce_data_started)
-
-    -- Deactivate and let the show mock finish.
-    file.active = false
-    yield_signal:send()
-    async.await(async.scheduler())
-
-    -- load_file should report failure without a user-visible error.
-    assert.False(load_ok)
-    assert.is_nil(file.bufnr)
-  end))
+  )
 end)

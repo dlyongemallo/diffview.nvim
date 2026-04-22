@@ -186,21 +186,17 @@ end
 ---Create a temporary adapter to get relevant completions
 ---@return VCSAdapter?
 function M.get_adapter()
-    local cfile = pl:vim_expand("%")
-    local top_indicators = utils.vec_join(
-      vim.bo.buftype == ""
-          and pl:absolute(cfile)
-          or nil,
-      pl:realpath(".")
-    )
+  local cfile = pl:vim_expand("%")
+  local top_indicators =
+    utils.vec_join(vim.bo.buftype == "" and pl:absolute(cfile) or nil, pl:realpath("."))
 
-    local err, adapter = vcs.get_adapter({ top_indicators = top_indicators })
+  local err, adapter = vcs.get_adapter({ top_indicators = top_indicators })
 
-    if err then
-      logger:warn("[completion] Failed to create adapter: " .. err)
-    end
+  if err then
+    logger:warn("[completion] Failed to create adapter: " .. err)
+  end
 
-    return adapter
+  return adapter
 end
 
 M.completers = {
@@ -227,13 +223,16 @@ M.completers = {
     elseif adapter then
       if not has_rev_arg and ctx.arg_lead:sub(1, 1) ~= "-" then
         utils.vec_extend(candidates, adapter.comp.open:get_all_names())
-        utils.vec_extend(candidates, adapter:rev_candidates(ctx.arg_lead, {
-          accept_range = true,
-        }))
+        utils.vec_extend(
+          candidates,
+          adapter:rev_candidates(ctx.arg_lead, {
+            accept_range = true,
+          })
+        )
       else
-        utils.vec_extend(candidates,
-          adapter.comp.open:get_completion(ctx.arg_lead)
-          or adapter.comp.open:get_all_names()
+        utils.vec_extend(
+          candidates,
+          adapter.comp.open:get_completion(ctx.arg_lead) or adapter.comp.open:get_all_names()
         )
       end
     end
@@ -250,9 +249,10 @@ M.completers = {
     local candidates = {}
 
     if adapter then
-      utils.vec_extend(candidates,
+      utils.vec_extend(
+        candidates,
         adapter.comp.file_history:get_completion(ctx.arg_lead)
-        or adapter.comp.file_history:get_all_names()
+          or adapter.comp.file_history:get_all_names()
       )
       utils.vec_extend(candidates, adapter:path_candidates(ctx.arg_lead))
     else

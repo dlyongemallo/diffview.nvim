@@ -104,7 +104,6 @@ describe("DiffView._should_focus_diff", function()
     local view = { initialized = true }
     assert.is_false(DiffView._should_focus_diff(view, { kind = "working" }))
   end)
-
 end)
 
 describe("DiffView selected_row focuses main window", function()
@@ -132,11 +131,21 @@ describe("DiffView selected_row focuses main window", function()
     local cursor_set = nil
     local main_win_id = 77
 
-    vim.api.nvim_win_is_valid = function() return true end
-    vim.api.nvim_set_current_win = function(id) focused_win = id end
-    vim.api.nvim_win_get_buf = function() return 1 end
-    vim.api.nvim_buf_line_count = function() return 100 end
-    vim.api.nvim_win_set_cursor = function(id, pos) cursor_set = { id = id, pos = pos } end
+    vim.api.nvim_win_is_valid = function()
+      return true
+    end
+    vim.api.nvim_set_current_win = function(id)
+      focused_win = id
+    end
+    vim.api.nvim_win_get_buf = function()
+      return 1
+    end
+    vim.api.nvim_buf_line_count = function()
+      return 100
+    end
+    vim.api.nvim_win_set_cursor = function(id, pos)
+      cursor_set = { id = id, pos = pos }
+    end
 
     -- Simulate the selected_row block from update_files.
     local initialized = false
@@ -166,16 +175,26 @@ describe("DiffView selected_row focuses main window", function()
   it("clamps row to buffer line count", function()
     local cursor_set = nil
 
-    vim.api.nvim_win_is_valid = function() return true end
+    vim.api.nvim_win_is_valid = function()
+      return true
+    end
     vim.api.nvim_set_current_win = function() end
-    vim.api.nvim_win_get_buf = function() return 1 end
-    vim.api.nvim_buf_line_count = function() return 10 end
-    vim.api.nvim_win_set_cursor = function(id, pos) cursor_set = { id = id, pos = pos } end
+    vim.api.nvim_win_get_buf = function()
+      return 1
+    end
+    vim.api.nvim_buf_line_count = function()
+      return 10
+    end
+    vim.api.nvim_win_set_cursor = function(id, pos)
+      cursor_set = { id = id, pos = pos }
+    end
 
     local initialized = false
     local selected_row = 999
     local cur_layout = {
-      get_main_win = function() return { id = 1 } end,
+      get_main_win = function()
+        return { id = 1 }
+      end,
     }
 
     if not initialized and selected_row then

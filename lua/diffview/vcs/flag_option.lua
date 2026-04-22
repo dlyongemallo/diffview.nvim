@@ -50,10 +50,13 @@ function FlagOption:init(keymap, flag_name, desc, opt)
   self.keymap = keymap
   self.flag_name = flag_name
   self.desc = desc
-  self.key = opt.key or utils.str_match(flag_name, {
-    "^%-%-?([^=]+)=?",
-    "^%+%+?([^=]+)=?",
-  }):gsub("%-", "_")
+  self.key = opt.key
+    or utils
+      .str_match(flag_name, {
+        "^%-%-?([^=]+)=?",
+        "^%+%+?([^=]+)=?",
+      })
+      :gsub("%-", "_")
   self.select = opt.select
   self.completion = opt.completion
   self.expect_list = utils.sate(opt.expect_list, false)
@@ -85,16 +88,20 @@ end
 function FlagOption:transform(values)
   return utils.tbl_fmap(self:prepare_values(values), function(v)
     v = utils.str_match(v, { "^" .. vim.pesc(self.flag_name) .. "(.*)", ".*" })
-    if v == "" then return nil end
+    if v == "" then
+      return nil
+    end
     return v
   end)
 end
 
 function FlagOption:render_prompt()
-  return utils.str_template(self.prompt_fmt, {
-    label = self.prompt_label and self.prompt_label .. " " or "",
-    flag_name = self.flag_name .. " ",
-  }):sub(1, -2)
+  return utils
+    .str_template(self.prompt_fmt, {
+      label = self.prompt_label and self.prompt_label .. " " or "",
+      flag_name = self.flag_name .. " ",
+    })
+    :sub(1, -2)
 end
 
 ---Render a single option value
@@ -117,14 +124,18 @@ function FlagOption:render_display(values)
     return true, self.flag_name
   end
 
-  local quoted = table.concat(vim.tbl_map(function(v)
-    return self:render_value(v)
-  end, values), " ")
+  local quoted = table.concat(
+    vim.tbl_map(function(v)
+      return self:render_value(v)
+    end, values),
+    " "
+  )
 
-  return false, utils.str_template(self.display_fmt, {
-    flag_name = self.flag_name,
-    values = quoted,
-  })
+  return false,
+    utils.str_template(self.display_fmt, {
+      flag_name = self.flag_name,
+      values = quoted,
+    })
 end
 
 ---Render the default text for |input()|.

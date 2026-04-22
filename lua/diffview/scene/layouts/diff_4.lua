@@ -72,14 +72,12 @@ function Diff4.should_null(rev, status, sym)
 
   if rev.type == RevType.LOCAL then
     return status == "D"
-
   elseif rev.type == RevType.COMMIT then
     if sym == "a" then
       return vim.tbl_contains({ "?", "A" }, status)
     end
 
     return status == "D"
-
   elseif rev.type == RevType.STAGE then
     if rev.stage == 0 then
       if sym == "a" then

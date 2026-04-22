@@ -26,7 +26,9 @@ function Condvar:notify_all()
   local len = #self.handles
 
   for i, cb in ipairs(self.handles) do
-    if i > len then break end
+    if i > len then
+      break
+    end
     cb()
   end
 
@@ -36,7 +38,6 @@ function Condvar:notify_all()
     self.handles = {}
   end
 end
-
 
 ---@class SignalConsumer : Waitable
 ---@operator call : SignalConsumer
@@ -72,7 +73,6 @@ function SignalConsumer:get_name()
   return self.parent:get_name()
 end
 
-
 ---@class Signal : SignalConsumer
 ---@operator call : Signal
 ---@field package name string
@@ -92,13 +92,17 @@ end
 ---@override
 ---@param self Signal
 Signal.await = async.sync_void(function(self)
-  if self.emitted then return end
+  if self.emitted then
+    return
+  end
   await(self.cond)
 end)
 
 ---Send the signal.
 function Signal:send()
-  if self.emitted then return end
+  if self.emitted then
+    return
+  end
   self.emitted = true
 
   for _, listener in ipairs(self.listeners) do
@@ -115,7 +119,9 @@ end
 ---@param callback fun(signal: Signal)
 function Signal:listen(callback)
   self.listeners[#self.listeners + 1] = callback
-  if self.emitted then callback(self) end
+  if self.emitted then
+    callback(self)
+  end
 end
 
 ---@return SignalConsumer
@@ -137,7 +143,6 @@ end
 function Signal:get_name()
   return self.name
 end
-
 
 ---@class WorkPool : Waitable
 ---@operator call : WorkPool
@@ -180,7 +185,6 @@ WorkPool.await = async.sync_void(function(self)
   end
 end)
 
-
 ---@class Permit : diffview.Object
 ---@operator call : Permit
 ---@field parent Semaphore
@@ -203,7 +207,6 @@ function Permit:forget()
   end
 end
 
-
 ---@class Semaphore : diffview.Object
 ---@operator call : Semaphore
 ---@field initial_count integer
@@ -220,7 +223,9 @@ function Semaphore:init(permit_count)
 end
 
 function Semaphore:forget_one()
-  if self.permit_count == self.initial_count then return end
+  if self.permit_count == self.initial_count then
+    return
+  end
 
   if next(self.queue) then
     local next_contractee = table.remove(self.queue, 1)
@@ -242,7 +247,6 @@ Semaphore.acquire = async.wrap(function(self, callback)
 
   return callback(Permit({ parent = self }))
 end)
-
 
 ---@class CountDownLatch : Waitable
 ---@operator call : CountDownLatch
@@ -280,7 +284,9 @@ end
 
 ---@override
 function CountDownLatch:await()
-  if self.counter == 0 then return end
+  if self.counter == 0 then
+    return
+  end
   await(self.condvar)
 end
 

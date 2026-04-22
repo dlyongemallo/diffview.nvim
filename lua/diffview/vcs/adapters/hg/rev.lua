@@ -1,6 +1,6 @@
 local oop = require("diffview.oop")
-local Rev = require('diffview.vcs.rev').Rev
-local RevType = require('diffview.vcs.rev').RevType
+local Rev = require("diffview.vcs.rev").Rev
+local RevType = require("diffview.vcs.rev").RevType
 
 local M = {}
 

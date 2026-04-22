@@ -9,7 +9,9 @@ describe("diffview.vcs.adapters.null", function()
   describe("NullAdapter", function()
     local adapter
 
-    before_each(function() adapter = NullAdapter.create({ toplevel = "/tmp/test" }) end)
+    before_each(function()
+      adapter = NullAdapter.create({ toplevel = "/tmp/test" })
+    end)
 
     it("sets ctx fields from toplevel", function()
       eq("/tmp/test", adapter.ctx.toplevel)
@@ -22,7 +24,9 @@ describe("diffview.vcs.adapters.null", function()
       assert.False(adapter:is_binary("any/file.txt", rev))
     end)
 
-    it("head_rev returns nil", function() assert.is_nil(adapter:head_rev()) end)
+    it("head_rev returns nil", function()
+      assert.is_nil(adapter:head_rev())
+    end)
 
     it("file_blob_hash returns nil", function()
       assert.is_nil(adapter:file_blob_hash("any/file.txt"))
@@ -47,18 +51,25 @@ describe("diffview.vcs.adapters.null", function()
       eq({}, adapter:rev_to_args(left, right))
     end)
 
-    it("get_merge_context returns nil", function() assert.is_nil(adapter:get_merge_context()) end)
+    it("get_merge_context returns nil", function()
+      assert.is_nil(adapter:get_merge_context())
+    end)
 
-    it("show_untracked returns false", function() assert.False(adapter:show_untracked()) end)
+    it("show_untracked returns false", function()
+      assert.False(adapter:show_untracked())
+    end)
 
-    it("stage_index_file returns false", function() assert.False(adapter:stage_index_file({})) end)
+    it("stage_index_file returns false", function()
+      assert.False(adapter:stage_index_file({}))
+    end)
 
-    it("add_files returns false", function() assert.False(adapter:add_files({ "file.txt" })) end)
+    it("add_files returns false", function()
+      assert.False(adapter:add_files({ "file.txt" }))
+    end)
 
-    it(
-      "reset_files returns false",
-      function() assert.False(adapter:reset_files({ "file.txt" })) end
-    )
+    it("reset_files returns false", function()
+      assert.False(adapter:reset_files({ "file.txt" }))
+    end)
 
     it("force_entry_refresh_on_noop returns false", function()
       local left = NullRev(RevType.LOCAL)
@@ -66,14 +77,17 @@ describe("diffview.vcs.adapters.null", function()
       assert.False(adapter:force_entry_refresh_on_noop(left, right))
     end)
 
-    it("rev_candidates returns empty table", function() eq({}, adapter:rev_candidates("")) end)
+    it("rev_candidates returns empty table", function()
+      eq({}, adapter:rev_candidates(""))
+    end)
 
-    it(
-      "get_show_args returns empty table",
-      function() eq({}, adapter:get_show_args("file.txt", NullRev(RevType.LOCAL))) end
-    )
+    it("get_show_args returns empty table", function()
+      eq({}, adapter:get_show_args("file.txt", NullRev(RevType.LOCAL)))
+    end)
 
-    it("get_log_args returns empty table", function() eq({}, adapter:get_log_args({})) end)
+    it("get_log_args returns empty table", function()
+      eq({}, adapter:get_log_args({}))
+    end)
 
     it("bootstrap succeeds", function()
       NullAdapter.run_bootstrap()
@@ -94,9 +108,13 @@ describe("diffview.vcs.adapters.null", function()
       assert.is_nil(NullRev.to_range(rev))
     end)
 
-    it("from_name returns nil", function() assert.is_nil(NullRev.from_name("HEAD")) end)
+    it("from_name returns nil", function()
+      assert.is_nil(NullRev.from_name("HEAD"))
+    end)
 
-    it("earliest_commit returns nil", function() assert.is_nil(NullRev.earliest_commit({})) end)
+    it("earliest_commit returns nil", function()
+      assert.is_nil(NullRev.earliest_commit({}))
+    end)
 
     it("new_null_tree returns a LOCAL rev", function()
       local rev = NullRev.new_null_tree()

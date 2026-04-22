@@ -91,7 +91,9 @@ end
 ---@param cpath string? # Cwd path given by the `-C` flag option
 ---@return string[] path_args # Resolved path args
 ---@return string[] top_indicators # Top-level indicators
-function VCSAdapter.get_repo_paths(path_args, cpath) oop.abstract_stub() end
+function VCSAdapter.get_repo_paths(path_args, cpath)
+  oop.abstract_stub()
+end
 
 ---Try to find the top-level of a working tree by using the given indicative
 ---paths.
@@ -99,7 +101,9 @@ function VCSAdapter.get_repo_paths(path_args, cpath) oop.abstract_stub() end
 ---@param top_indicators string[] A list of paths that might indicate what working tree we are in.
 ---@return string? err
 ---@return string toplevel # Absolute path
-function VCSAdapter.find_toplevel(top_indicators) oop.abstract_stub() end
+function VCSAdapter.find_toplevel(top_indicators)
+  oop.abstract_stub()
+end
 
 ---@diagnostic enable: unused-local, missing-return
 
@@ -115,7 +119,9 @@ function VCSAdapter.build_top_indicators(path_args, cpath)
   local top_indicators = {}
 
   for _, path_arg in ipairs(path_args) do
-    for _, path in ipairs(pl:vim_expand(path_arg, false, true) --[[@as string[] ]]) do
+    for _, path in
+      ipairs(pl:vim_expand(path_arg, false, true) --[[@as string[] ]])
+    do
       path = pl:readlink(path) or path
       table.insert(paths, path)
     end
@@ -129,11 +135,10 @@ function VCSAdapter.build_top_indicators(path_args, cpath)
     break
   end
 
-  table.insert(top_indicators, cpath and pl:realpath(cpath) or (
-    vim.bo.buftype == ""
-    and pl:absolute(cfile)
-    or nil
-  ))
+  table.insert(
+    top_indicators,
+    cpath and pl:realpath(cpath) or (vim.bo.buftype == "" and pl:absolute(cfile) or nil)
+  )
 
   if not cpath then
     table.insert(top_indicators, pl:realpath("."))
@@ -241,7 +246,6 @@ function VCSAdapter:args()
   return utils.vec_slice(self:get_command(), 2)
 end
 
-
 ---Execute a VCS command synchronously.
 ---@param args string[]
 ---@param cwd_or_opt? string|utils.job.Opt
@@ -251,21 +255,23 @@ end
 ---@overload fun(self: VCSAdapter, args: string[], cwd?: string)
 ---@overload fun(self: VCSAdapter, args: string[], opt?: utils.job.Opt)
 function VCSAdapter:exec_sync(args, cwd_or_opt)
-  if not self.class.bootstrap.done then self.class.run_bootstrap() end
+  if not self.class.bootstrap.done then
+    self.class.run_bootstrap()
+  end
 
   local cmd = utils.flatten({ self:get_command(), args })
 
   if not self.class.bootstrap.ok then
     logger:error(
-      ("[VCSAdapter] Can't exec adapter command because bootstrap failed! Cmd: %s")
-      :format(table.concat(cmd, " "))
+      ("[VCSAdapter] Can't exec adapter command because bootstrap failed! Cmd: %s"):format(
+        table.concat(cmd, " ")
+      )
     )
     return
   end
 
   return utils.job(cmd, cwd_or_opt)
 end
-
 
 ---@param thread thread
 ---@param ok boolean
@@ -274,10 +280,7 @@ end
 ---@return any result
 function VCSAdapter:handle_co(thread, ok, result)
   if not ok then
-    local err_msg = utils.vec_join(
-      "Coroutine failed!",
-      debug.traceback(thread, result, 1)
-    )
+    local err_msg = utils.vec_join("Coroutine failed!", debug.traceback(thread, result, 1))
     utils.err(err_msg, true)
     logger:error(table.concat(err_msg, "\n"))
   end

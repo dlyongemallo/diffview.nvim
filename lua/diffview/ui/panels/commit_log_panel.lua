@@ -61,7 +61,7 @@ function CommitLogPanel:init(parent, adapter, opt)
   self.adapter = adapter
   self.args = opt.args or { "-n256" }
 
-  self:on_autocmd("BufWinEnter" , {
+  self:on_autocmd("BufWinEnter", {
     callback = function()
       vim.bo[self.bufid].bufhidden = "wipe"
     end,
@@ -126,8 +126,7 @@ CommitLogPanel.update = async.void(function(self, args)
   vim.cmd("norm! gg")
 end)
 
-function CommitLogPanel:update_components()
-end
+function CommitLogPanel:update_components() end
 
 function CommitLogPanel:render()
   self.render_data:clear()

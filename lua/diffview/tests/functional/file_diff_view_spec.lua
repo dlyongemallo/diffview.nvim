@@ -161,7 +161,9 @@ describe("diffview.scene.views.diff.file_diff_view", function()
       })
 
       -- Calling update_files should not error and should not change the file list.
-      assert.has_no.errors(function() view:update_files() end)
+      assert.has_no.errors(function()
+        view:update_files()
+      end)
       eq(1, view.files:len())
 
       os.remove(left)

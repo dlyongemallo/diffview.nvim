@@ -34,7 +34,9 @@ function JjAdapter.run_bootstrap()
   local jj_cmd = config.get_config().jj_cmd
   local bs = JjAdapter.bootstrap
   local err = VCSAdapter.bootstrap_preamble(bs, jj_cmd, "JjAdapter", "jj_cmd")
-  if not err then return end
+  if not err then
+    return
+  end
 
   local out = utils.job(utils.flatten({ jj_cmd, "--version" }))
   bs.version_string = out[1] and out[1]:match("jj (%S+)") or nil
@@ -122,7 +124,15 @@ end
 ---@param rev Rev?
 ---@return string[]
 function JjAdapter:get_show_args(path, rev)
-  return utils.vec_join(self:args(), "file", "show", "-r", rev and rev:object_name() or "@", "--", path)
+  return utils.vec_join(
+    self:args(),
+    "file",
+    "show",
+    "-r",
+    rev and rev:object_name() or "@",
+    "--",
+    path
+  )
 end
 
 ---@param args string[]
@@ -194,22 +204,21 @@ end
 function JjAdapter:resolve_rev_arg(rev_arg)
   rev_arg = self:normalize_rev_arg(rev_arg)
 
-  local out, code, stderr = self:exec_sync(
-    { "show", "-T", "commit_id", rev_arg, "--no-patch" },
-    {
-      cwd = self.ctx.toplevel,
-      retry = 2,
-      fail_on_empty = true,
-      log_opt = { label = "JjAdapter:resolve_rev_arg()" },
-    }
-  )
+  local out, code, stderr = self:exec_sync({ "show", "-T", "commit_id", rev_arg, "--no-patch" }, {
+    cwd = self.ctx.toplevel,
+    retry = 2,
+    fail_on_empty = true,
+    log_opt = { label = "JjAdapter:resolve_rev_arg()" },
+  })
 
   if code ~= 0 or not out[1] then
-    utils.err(utils.vec_join(
-      fmt("Failed to parse rev %s!", utils.str_quote(rev_arg)),
-      "Jujutsu output: ",
-      stderr
-    ))
+    utils.err(
+      utils.vec_join(
+        fmt("Failed to parse rev %s!", utils.str_quote(rev_arg)),
+        "Jujutsu output: ",
+        stderr
+      )
+    )
     return
   end
 
@@ -246,18 +255,21 @@ function JjAdapter:symmetric_diff_revs(rev_arg)
   local out, code, stderr = self:exec_sync(
     { "log", "-r", revset, "-T", [[commit_id ++ "\n"]], "--no-graph" },
     {
-    cwd = self.ctx.toplevel,
-    retry = 2,
-    fail_on_empty = true,
-    log_opt = { label = "JjAdapter:symmetric_diff_revs()" },
-  })
+      cwd = self.ctx.toplevel,
+      retry = 2,
+      fail_on_empty = true,
+      log_opt = { label = "JjAdapter:symmetric_diff_revs()" },
+    }
+  )
 
   if code ~= 0 or not out[1] then
-    utils.err(utils.vec_join(
-      fmt("Failed to compute merge-base for rev range %s!", utils.str_quote(rev_arg)),
-      "Jujutsu output: ",
-      stderr
-    ))
+    utils.err(
+      utils.vec_join(
+        fmt("Failed to compute merge-base for rev range %s!", utils.str_quote(rev_arg)),
+        "Jujutsu output: ",
+        stderr
+      )
+    )
     return
   end
 
@@ -305,8 +317,12 @@ function JjAdapter:parse_revs(rev_arg, opt)
     local r1 = self:normalize_rev_arg(rev_arg:match("^(.-)%.%.") or "@")
     local r2 = self:normalize_rev_arg(rev_arg:match("%.%.(.-)$") or "@")
 
-    if r1 == "" then r1 = "@" end
-    if r2 == "" then r2 = "@" end
+    if r1 == "" then
+      r1 = "@"
+    end
+    if r2 == "" then
+      r2 = "@"
+    end
 
     local h1 = self:resolve_rev_arg(r1)
     local h2 = self:resolve_rev_arg(r2)
@@ -352,7 +368,8 @@ function JjAdapter:refresh_revs(rev_arg, left, right)
     return nil, nil
   end
 
-  if new_left.type == left.type
+  if
+    new_left.type == left.type
     and new_right.type == right.type
     and new_left:object_name() == left:object_name()
     and new_right:object_name() == right:object_name()
@@ -396,10 +413,8 @@ function JjAdapter:rev_to_args(left, right)
 
   if left.type == RevType.COMMIT and right.type == RevType.COMMIT then
     return { "--from", left.commit, "--to", right.commit }
-
   elseif right.type == RevType.LOCAL and left.type == RevType.COMMIT then
     return { "--from", left.commit }
-
   elseif left.type == RevType.LOCAL and right.type == RevType.COMMIT then
     return { "--to", right.commit }
   end
@@ -463,12 +478,7 @@ end
 JjAdapter.tracked_files = async.wrap(function(self, left, right, args, kind, opt, callback)
   local job = Job({
     command = self:bin(),
-    args = utils.vec_join(
-      self:args(),
-      "diff",
-      "--summary",
-      args
-    ),
+    args = utils.vec_join(self:args(), "diff", "--summary", args),
     cwd = self.ctx.toplevel,
     retry = 2,
     log_opt = { label = "JjAdapter:tracked_files()" },

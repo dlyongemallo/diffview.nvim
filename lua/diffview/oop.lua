@@ -78,17 +78,14 @@ end
 function M.create_class(name, super_class)
   super_class = super_class or M.Object
 
-  return setmetatable(
-    {
-      __name = name,
-      super_class = super_class,
-    },
-    {
-      __index = super_class,
-      __call = new_instance,
-      __tostring = tostring,
-    }
-  )
+  return setmetatable({
+    __name = name,
+    super_class = super_class,
+  }, {
+    __index = super_class,
+    __call = new_instance,
+    __tostring = tostring,
+  })
 end
 
 local function classm_safeguard(x)
@@ -125,7 +122,9 @@ end
 ---@return boolean
 function Object:ancestorof(other)
   classm_safeguard(self)
-  if not M.is_instance(other) then return false end
+  if not M.is_instance(other) then
+    return false
+  end
 
   return other:instanceof(self)
 end
@@ -163,7 +162,9 @@ function Object:super(...)
     next_super = self.super_class
   end
 
-  if not next_super then return end
+  if not next_super then
+    return
+  end
 
   self.__init_caller = next_super
   next_super.init(self, ...)
@@ -177,7 +178,9 @@ function Object:instanceof(other)
   local cur = self.class
 
   while cur do
-    if cur == other then return true end
+    if cur == other then
+      return true
+    end
     cur = cur.super_class
   end
 
@@ -187,14 +190,18 @@ end
 ---@param x any
 ---@return boolean
 function M.is_class(x)
-  if type(x) ~= "table" then return false end
+  if type(x) ~= "table" then
+    return false
+  end
   return type(rawget(x, "__name")) == "string" and x.instanceof == Object.instanceof
 end
 
 ---@param x any
 ---@return boolean
 function M.is_instance(x)
-  if type(x) ~= "table" then return false end
+  if type(x) ~= "table" then
+    return false
+  end
   return M.is_class(x.class)
 end
 

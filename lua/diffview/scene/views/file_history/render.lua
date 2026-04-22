@@ -18,7 +18,9 @@ local MAX_BAR_WIDTH = 20
 ---@param deletions integer
 local function render_stat_bar(comp, additions, deletions)
   local total = additions + deletions
-  if total == 0 then return end
+  if total == 0 then
+    return
+  end
 
   local bar_width = math.min(total, MAX_BAR_WIDTH)
   local add_width = math.floor(additions / total * bar_width + 0.5)
@@ -81,7 +83,10 @@ local function render_files(comp, files)
         comp:add_text(file.parent_path .. "/", "DiffviewFilePanelPath")
       end
 
-      comp:add_text(file.basename, file.active and "DiffviewFilePanelSelected" or "DiffviewFilePanelFileName")
+      comp:add_text(
+        file.basename,
+        file.active and "DiffviewFilePanelSelected" or "DiffviewFilePanelFileName"
+      )
 
       if file.stats then
         render_file_stats(comp, file.stats, stat_style)
@@ -112,7 +117,9 @@ local formatters = {
   end,
 
   files = function(comp, entry, ctx)
-    if entry.single_file then return end
+    if entry.single_file then
+      return
+    end
     local s_num_files = tostring(ctx.max_num_files)
 
     if entry.nulled then
@@ -130,7 +137,9 @@ local formatters = {
   end,
 
   stats = function(comp, entry, ctx)
-    if ctx.max_len_stats == -1 then return end
+    if ctx.max_len_stats == -1 then
+      return
+    end
     local adds = { "-", "DiffviewNonText" }
     local dels = { "-", "DiffviewNonText" }
 
@@ -156,8 +165,13 @@ local formatters = {
   end,
 
   reflog = function(comp, entry, _ctx)
-    if (entry.commit --[[@as GitCommit ]]).reflog_selector then
-      comp:add_text((" %s"):format((entry.commit --[[@as GitCommit ]]).reflog_selector), "DiffviewReflogSelector")
+    if
+      (entry.commit --[[@as GitCommit ]]).reflog_selector
+    then
+      comp:add_text(
+        (" %s"):format((entry.commit --[[@as GitCommit ]]).reflog_selector),
+        "DiffviewReflogSelector"
+      )
     end
   end,
 
@@ -168,10 +182,8 @@ local formatters = {
   end,
 
   subject = function(comp, entry, ctx)
-    local subject = utils.str_trunc(
-      entry.commit.subject,
-      ctx.conf.file_history_panel.commit_subject_max_length
-    )
+    local subject =
+      utils.str_trunc(entry.commit.subject, ctx.conf.file_history_panel.commit_subject_max_length)
 
     if subject == "" then
       subject = "[empty message]"
@@ -180,7 +192,9 @@ local formatters = {
     local subject_hl
     if ctx.panel.cur_item[1] == entry then
       subject_hl = "DiffviewFilePanelSelected"
-    elseif ctx.conf.file_history_panel.subject_highlight == "ref_aware" and entry.has_remote_ref then
+    elseif
+      ctx.conf.file_history_panel.subject_highlight == "ref_aware" and entry.has_remote_ref
+    then
       subject_hl = "DiffviewCommitRemoteRef"
     elseif ctx.conf.file_history_panel.subject_highlight == "ref_aware" then
       subject_hl = "DiffviewCommitLocalOnly"
@@ -198,7 +212,9 @@ local formatters = {
   end,
 
   date = function(comp, entry, ctx)
-    if not entry.commit then return end
+    if not entry.commit then
+      return
+    end
     local date_format = ctx.conf.file_history_panel.date_format
     local date
     if date_format == "relative" then
@@ -210,7 +226,7 @@ local formatters = {
       date = (
         os.difftime(os.time(), entry.commit.time) > 60 * 60 * 24 * 30 * 3
           and entry.commit.iso_date
-          or entry.commit.rel_date
+        or entry.commit.rel_date
       )
     end
     comp:add_text(", " .. date, "DiffviewFilePanelPath")
@@ -261,7 +277,10 @@ local function render_entries(panel, parent, entries, updating)
     local comp = entry_struct.commit.comp
 
     if not entry.single_file then
-      comp:add_text((entry.folded and c.signs.fold_closed or c.signs.fold_open) .. " ", "DiffviewFolderSign")
+      comp:add_text(
+        (entry.folded and c.signs.fold_closed or c.signs.fold_open) .. " ",
+        "DiffviewFolderSign"
+      )
     end
 
     for _, part in ipairs(commit_format) do
