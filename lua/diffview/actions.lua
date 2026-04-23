@@ -29,6 +29,75 @@ local api = vim.api
 local await = async.await
 local pl = lazy.access(utils, "path") ---@type PathLib
 
+---@class DiffviewActionsCompat
+---@field fold_cmds DiffviewKeymapEntry[]
+
+---Covers both the emit-stub actions registered dynamically by the
+---`action_names` loop at the bottom of this file (which LuaLS can't infer from
+---the `M[name] = ...` assignment) and the directly-defined actions below
+---(listed here so the `@as DiffviewActions` cast on `M` doesn't exclude them).
+---@class DiffviewActions
+---@field compat DiffviewActionsCompat Internal.
+---@field close fun()
+---@field close_all_folds fun()
+---@field close_fold fun()
+---@field copy_hash fun()
+---@field diff_against_head fun()
+---@field focus_entry fun()
+---@field focus_files fun()
+---@field listing_style fun()
+---@field next_entry fun()
+---@field next_entry_in_commit fun()
+---@field open_all_folds fun()
+---@field open_commit_in_browser fun()
+---@field open_commit_log fun()
+---@field open_fold fun()
+---@field open_in_diffview fun()
+---@field options fun()
+---@field prev_entry fun()
+---@field prev_entry_in_commit fun()
+---@field refresh_files fun()
+---@field restore_entry fun()
+---@field select_entry fun()
+---@field select_next_entry fun()
+---@field select_prev_entry fun()
+---@field select_first_entry fun()
+---@field select_last_entry fun()
+---@field select_next_commit fun()
+---@field select_prev_commit fun()
+---@field stage_all fun()
+---@field toggle_files fun()
+---@field toggle_flatten_dirs fun()
+---@field toggle_fold fun()
+---@field toggle_select_entry fun()
+---@field clear_select_entries fun()
+---@field toggle_stage_entry fun()
+---@field toggle_untracked fun()
+---@field unstage_all fun()
+---@field conflict_choose fun(target: DiffviewConflictTarget): fun()
+---@field conflict_choose_all fun(target: DiffviewConflictTarget): AsyncFunc
+---@field cycle_layout fun()
+---@field diff_against_default_branch fun()
+---@field diffget fun(target: DiffviewDiffgetTarget): fun()
+---@field diffget_inline fun()
+---@field diffput fun(target: DiffviewDiffgetTarget): fun()
+---@field goto_file fun()
+---@field goto_file_edit fun()
+---@field goto_file_edit_close fun()
+---@field goto_file_split fun()
+---@field goto_file_tab fun()
+---@field help fun(keymap_groups: string|string[]): fun()
+---@field jump_to_first_change fun(view: StandardView)
+---@field jumpto_conflict fun(num: integer, use_delta?: boolean): diffview.ConflictCount?
+---@field next_conflict fun(): diffview.ConflictCount?
+---@field next_inline_hunk fun()
+---@field open_file_external fun()
+---@field open_in_new_tab fun()
+---@field prev_conflict fun(): diffview.ConflictCount?
+---@field prev_inline_hunk fun()
+---@field scroll_view fun(distance: number): fun()
+---@field set_layout fun(layout_name: LayoutName): fun()
+---@field view_windo fun(cmd: string|fun(layout_name: string, symbol: string)): fun()
 local M = setmetatable({}, {
   __index = function(_, k)
     utils.err(
@@ -38,7 +107,7 @@ local M = setmetatable({}, {
       ):format(k)
     )
   end,
-})
+}) --[[@as DiffviewActions ]]
 
 M.compat = {}
 
@@ -386,8 +455,8 @@ end
 
 ---Execute `cmd` for each target window in the current view. If no targets
 ---are given, all windows are targeted.
----@param cmd string|function The vim cmd to execute, or a function.
----@return function action
+---@param cmd string|fun(layout_name: string, symbol: string) The vim cmd to execute, or a function.
+---@return fun()
 function M.view_windo(cmd)
   local fun
 
@@ -419,7 +488,7 @@ function M.view_windo(cmd)
 end
 
 ---@param distance number Either an exact number of lines, or a fraction of the window height.
----@return function
+---@return fun()
 function M.scroll_view(distance)
   local scroll_opr = distance < 0 and [[\<c-y>]] or [[\<c-e>]]
   local scroll_cmd
@@ -546,7 +615,8 @@ local function resolve_all_conflicts(view, target)
   end
 end
 
----@param target "ours"|"theirs"|"base"|"all"|"none"
+---@param target DiffviewConflictTarget
+---@return AsyncFunc
 function M.conflict_choose_all(target)
   return async.void(function()
     local view = lib.get_current_view() --[[@as DiffView ]]
@@ -571,7 +641,8 @@ function M.conflict_choose_all(target)
   end)
 end
 
----@param target "ours"|"theirs"|"base"|"all"|"none"
+---@param target DiffviewConflictTarget
+---@return fun()
 function M.conflict_choose(target)
   return function()
     local view = lib.get_current_view()
@@ -612,7 +683,8 @@ function M.conflict_choose(target)
   end
 end
 
----@param target "ours"|"theirs"|"base"|"local"
+---@param target DiffviewDiffgetTarget
+---@return fun()
 function M.diffget(target)
   return function()
     local bufnr = diff_copy_target(target)
@@ -680,7 +752,8 @@ function M.diffget_inline()
   end
 end
 
----@param target "ours"|"theirs"|"base"|"local"
+---@param target DiffviewDiffgetTarget
+---@return fun()
 function M.diffput(target)
   return function()
     local bufnr = diff_copy_target(target)
@@ -794,7 +867,8 @@ function M.cycle_layout()
 end
 
 ---Set a specific layout for the current view.
----@param layout_name string One of: diff1_plain, diff1_inline, diff2_horizontal, diff2_vertical, diff3_horizontal, diff3_vertical, diff3_mixed, diff4_mixed
+---@param layout_name LayoutName
+---@return fun()
 function M.set_layout(layout_name)
   return function()
     local layout_class = layout_name_map[layout_name]
@@ -862,6 +936,7 @@ function M.set_layout(layout_name)
 end
 
 ---@param keymap_groups string|string[]
+---@return fun()
 function M.help(keymap_groups)
   keymap_groups = type(keymap_groups) == "table" and keymap_groups or { keymap_groups }
 
@@ -942,6 +1017,9 @@ do
   end
 end
 
+-- Keep in sync with the emit-stub subset of the `DiffviewActions` class above.
+-- Directly-defined actions in this file (also listed in `DiffviewActions`) are
+-- not registered here.
 local action_names = {
   "close",
   "close_all_folds",
