@@ -4,9 +4,10 @@ local helpers = require("diffview.tests.helpers")
 local eq = helpers.eq
 
 describe("diffview.actions goto_file API", function()
-  it("exports all four goto_file functions", function()
+  it("exports all five goto_file functions", function()
     assert.is_function(actions.goto_file)
     assert.is_function(actions.goto_file_edit)
+    assert.is_function(actions.goto_file_edit_close)
     assert.is_function(actions.goto_file_split)
     assert.is_function(actions.goto_file_tab)
   end)
@@ -25,6 +26,12 @@ describe("diffview.actions goto_file API", function()
   it("goto_file_edit errors without an active view (expected guard)", function()
     assert.has_error(function()
       actions.goto_file_edit()
+    end)
+  end)
+
+  it("goto_file_edit_close errors without an active view (expected guard)", function()
+    assert.has_error(function()
+      actions.goto_file_edit_close()
     end)
   end)
 
@@ -48,6 +55,9 @@ describe("diffview.actions goto_file command routing", function()
 
   local stubs = {}
   local cmds_issued
+  local close_calls
+  local disposed_views
+  local mock_view
 
   --- Replace tbl[key] with val, automatically restored in after_each.
   local function stub(tbl, key, val)
@@ -57,6 +67,8 @@ describe("diffview.actions goto_file command routing", function()
 
   before_each(function()
     cmds_issued = {}
+    close_calls = 0
+    disposed_views = {}
 
     local mock_file = {
       absolute_path = "/tmp/test.lua",
@@ -68,7 +80,7 @@ describe("diffview.actions goto_file command routing", function()
       },
       active = true,
     }
-    local mock_view = {
+    mock_view = {
       class = DiffView_class,
       instanceof = function(self, other)
         return self.class == other
@@ -82,6 +94,9 @@ describe("diffview.actions goto_file command routing", function()
           return { id = 1 }
         end,
       },
+      close = function()
+        close_calls = close_calls + 1
+      end,
     }
 
     stub(lib, "get_current_view", function()
@@ -89,6 +104,9 @@ describe("diffview.actions goto_file command routing", function()
     end)
     stub(lib, "get_prev_non_view_tabpage", function()
       return nil
+    end)
+    stub(lib, "dispose_view", function(v)
+      disposed_views[#disposed_views + 1] = v
     end)
     stub(utils, "set_cursor", function() end)
     stub(utils.path, "readable", function()
@@ -155,5 +173,47 @@ describe("diffview.actions goto_file command routing", function()
     actions.goto_file_tab()
     eq("tabnew", cmds_issued[1])
     assert.truthy(cmds_issued[2]:find("^keepalt edit"))
+  end)
+
+  it("goto_file_edit_close issues 'tabnew' then 'keepalt edit' when no previous tab", function()
+    actions.goto_file_edit_close()
+    eq("tabnew", cmds_issued[1])
+    assert.truthy(cmds_issued[2]:find("^keepalt edit"))
+  end)
+
+  it("goto_file_edit_close issues 'edit <file>' when a previous tab exists", function()
+    lib.get_prev_non_view_tabpage = function()
+      return 1
+    end
+    actions.goto_file_edit_close()
+    eq(1, #cmds_issued)
+    assert.truthy(cmds_issued[1]:find("^edit "))
+  end)
+
+  it("goto_file_edit_close closes and disposes the view after navigating", function()
+    actions.goto_file_edit_close()
+    eq(1, close_calls)
+    eq(1, #disposed_views)
+    eq(mock_view, disposed_views[1])
+  end)
+
+  it("goto_file_edit_close closes and disposes the view when a previous tab exists", function()
+    lib.get_prev_non_view_tabpage = function()
+      return 1
+    end
+    actions.goto_file_edit_close()
+    eq(1, close_calls)
+    eq(1, #disposed_views)
+    eq(mock_view, disposed_views[1])
+  end)
+
+  it("goto_file_edit_close does not close or dispose when no file is inferred", function()
+    mock_view.infer_cur_file = function()
+      return nil
+    end
+    actions.goto_file_edit_close()
+    eq(0, #cmds_issued)
+    eq(0, close_calls)
+    eq(0, #disposed_views)
   end)
 end)

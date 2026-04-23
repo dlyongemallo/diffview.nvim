@@ -92,10 +92,11 @@ local function prepare_goto_file()
 end
 
 ---@param opts { cmd: string, target_tab?: boolean, target_tab_cmd?: string }
+---@return boolean ok
 local function open_goto_file(opts)
   local file, cursor = prepare_goto_file()
   if not file then
-    return
+    return false
   end
 
   local fpath = vim.fn.fnameescape(file.absolute_path)
@@ -109,7 +110,7 @@ local function open_goto_file(opts)
       if cursor then
         utils.set_cursor(0, unpack(cursor))
       end
-      return
+      return true
     end
   end
 
@@ -125,6 +126,8 @@ local function open_goto_file(opts)
   if cursor then
     utils.set_cursor(0, unpack(cursor))
   end
+
+  return true
 end
 
 function M.goto_file()
@@ -133,6 +136,22 @@ end
 
 function M.goto_file_edit()
   open_goto_file({ target_tab = true, target_tab_cmd = "edit", cmd = "tabnew" })
+end
+
+---Like |diffview-actions-goto_file_edit|, but also closes the current diffview
+---after navigating. If there is no previous non-view tabpage, the file is
+---opened in a new tabpage (same fallback as |diffview-actions-goto_file_edit|),
+---and closing the diffview tab leaves you on that new tabpage.
+function M.goto_file_edit_close()
+  local view = lib.get_current_view()
+  if not open_goto_file({ target_tab = true, target_tab_cmd = "edit", cmd = "tabnew" }) then
+    return
+  end
+
+  if view then
+    view:close()
+    lib.dispose_view(view)
+  end
 end
 
 function M.goto_file_split()

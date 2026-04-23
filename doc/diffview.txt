@@ -1459,6 +1459,15 @@ goto_file_edit                                  *diffview-actions-goto_file_edit
         instead of creating a new split, it will just open the file in the
         last accessed window.
 
+goto_file_edit_close                      *diffview-actions-goto_file_edit_close*
+        Contexts: `view`, `panel`
+
+        Like |diffview-actions-goto_file_edit|, but also closes the current
+        diffview after navigating. If there is no previous non-view tabpage,
+        the file opens in a new tabpage (same fallback as
+        |diffview-actions-goto_file_edit|), and closing the diffview leaves
+        you on that new tabpage.
+
 goto_file_split                                 *diffview-actions-goto_file_split*
         Contexts: `view`, `panel`
 
@@ -1725,6 +1734,7 @@ actions:
 
         • |diffview-actions-focus_entry|
         • |diffview-actions-goto_file_edit|
+        • |diffview-actions-goto_file_edit_close|
         • |diffview-actions-jumpto_conflict|
         • |diffview-actions-view_windo|
 
