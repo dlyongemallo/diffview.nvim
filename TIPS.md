@@ -334,5 +334,19 @@ known issues and workarounds:
       view = { foldlevel = 99 },
     })
     ```
+  - To raise the fold level only for markdown diff buffers (leaving the
+    default of 0 in place for other filetypes), use the `diff_buf_win_enter`
+    hook instead:
+    ```lua
+    require("diffview").setup({
+      hooks = {
+        diff_buf_win_enter = function(bufnr, winid)
+          if vim.bo[bufnr].filetype == "markdown" then
+            vim.wo[winid].foldlevel = 99
+          end
+        end,
+      },
+    })
+    ```
 
 <!-- vim: set tw=80 -->
