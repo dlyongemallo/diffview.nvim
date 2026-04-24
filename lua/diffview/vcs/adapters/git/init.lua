@@ -164,15 +164,16 @@ function GitAdapter.get_repo_paths(path_args, cpath)
   return paths, top_indicators
 end
 
+local has_cygpath ---@type boolean?
+---@type table<string, string>
+local cygpath_cache = {}
+
 ---Convert MSYS2/Cygwin Unix-style paths to Windows paths when running on
 ---native Windows with a Cygwin-based git. Without this, paths like
 ---`/c/Users/...` returned by Cygwin git are unusable by Neovim.
 ---See: https://www.msys2.org/docs/git/
 ---@param path string?
 ---@return string?
-local has_cygpath ---@type boolean?
----@type table<string, string>
-local cygpath_cache = {}
 local function normalize_cygwin_path(path)
   if not path or vim.fn.has("win32") ~= 1 or path:sub(1, 1) ~= "/" then
     return path
@@ -2177,7 +2178,7 @@ function GitAdapter:path_candidates(arg_lead)
 
   return vim.tbl_map(function(v)
     return magic .. v
-  end, vim.fn.getcompletion(pattern, "file", 0))
+  end, vim.fn.getcompletion(pattern, "file", false))
 end
 
 ---Get completion candidates for git revisions.

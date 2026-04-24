@@ -27,6 +27,28 @@ local diffopt_bool_flags = {
 }
 
 ---Apply configured diffopt overrides, saving the original value on the view.
+---Split the current global diffopt into its comma-separated flags.
+---@return string[]
+local function get_diffopt_parts()
+  return vim.split(vim.o.diffopt, ",", { trimempty = true })
+end
+
+---Write parts back to the global diffopt option.
+---@param parts string[]
+local function set_diffopt_parts(parts)
+  vim.o.diffopt = table.concat(parts, ",")
+end
+
+---@param parts string[]
+---@param prefix string # Remove entries beginning with this prefix (e.g., "algorithm:").
+local function strip_prefix(parts, prefix)
+  for i = #parts, 1, -1 do
+    if parts[i]:sub(1, #prefix) == prefix then
+      table.remove(parts, i)
+    end
+  end
+end
+
 ---@param view View
 local function apply_diffopt(view)
   local conf = config.get_config().diffopt
@@ -35,49 +57,45 @@ local function apply_diffopt(view)
   end
 
   if not view._saved_diffopt then
-    view._saved_diffopt = vim.opt.diffopt:get()
+    view._saved_diffopt = get_diffopt_parts()
   end
 
+  local parts = get_diffopt_parts()
+
   if conf.algorithm then
-    -- Remove any existing algorithm:* entry and add the new one.
-    vim.opt.diffopt:remove(vim.tbl_filter(function(v)
-      return v:match("^algorithm:")
-    end, vim.opt.diffopt:get()))
-    vim.opt.diffopt:append({ "algorithm:" .. conf.algorithm })
+    strip_prefix(parts, "algorithm:")
+    parts[#parts + 1] = "algorithm:" .. conf.algorithm
   end
 
   if conf.context ~= nil then
-    vim.opt.diffopt:remove(vim.tbl_filter(function(v)
-      return v:match("^context:")
-    end, vim.opt.diffopt:get()))
-    vim.opt.diffopt:append({ "context:" .. conf.context })
+    strip_prefix(parts, "context:")
+    parts[#parts + 1] = "context:" .. conf.context
   end
 
   if conf.linematch ~= nil then
-    vim.opt.diffopt:remove(vim.tbl_filter(function(v)
-      return v:match("^linematch:")
-    end, vim.opt.diffopt:get()))
-    vim.opt.diffopt:append({ "linematch:" .. conf.linematch })
+    strip_prefix(parts, "linematch:")
+    parts[#parts + 1] = "linematch:" .. conf.linematch
   end
 
   for _, flag in ipairs(diffopt_bool_flags) do
     -- Convert config key (underscore-separated) to diffopt flag (hyphenated).
     local key = flag:gsub("-", "_")
     if conf[key] ~= nil then
+      strip_prefix(parts, flag)
       if conf[key] then
-        vim.opt.diffopt:append({ flag })
-      else
-        vim.opt.diffopt:remove({ flag })
+        parts[#parts + 1] = flag
       end
     end
   end
+
+  set_diffopt_parts(parts)
 end
 
 ---Restore the original diffopt value from the view.
 ---@param view View
 local function restore_diffopt(view)
   if view._saved_diffopt then
-    vim.opt.diffopt = view._saved_diffopt
+    set_diffopt_parts(view._saved_diffopt)
     view._saved_diffopt = nil
   end
 end
@@ -171,7 +189,7 @@ function View:close()
     end
 
     local pagenr = api.nvim_tabpage_get_number(self.tabpage)
-    local ok, err = pcall(vim.cmd, "tabclose " .. pagenr)
+    local ok, err = pcall(api.nvim_command, "tabclose " .. pagenr)
     if not ok and type(err) == "string" and err:match("E445") then
       vim.cmd("tabclose! " .. pagenr)
     end
@@ -194,7 +212,8 @@ end
 
 ---@return boolean
 local function prefer_horizontal()
-  return vim.tbl_contains(vim.opt.diffopt:get(), "vertical")
+  local diffopt = vim.opt.diffopt --[[@as vim.Option]]
+  return vim.tbl_contains(diffopt:get() --[[@as string[] ]], "vertical")
 end
 
 ---@return Diff1

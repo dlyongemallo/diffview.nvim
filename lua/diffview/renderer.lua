@@ -512,13 +512,12 @@ function M.render(bufid, data)
   api.nvim_buf_clear_namespace(bufid, data.namespace, 0, -1)
   for _, t in ipairs(hl_data) do
     for _, hl in ipairs(t) do
-      api.nvim_buf_add_highlight(
+      api.nvim_buf_set_extmark(
         bufid,
         data.namespace,
-        hl.group,
         hl.line_idx + (t.offset or 0),
         hl.first,
-        hl.last
+        { end_col = hl.last, hl_group = hl.group }
       )
     end
   end

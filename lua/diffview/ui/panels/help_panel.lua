@@ -211,7 +211,7 @@ function HelpPanel:render()
   -- Heading
   local comp = self.components.heading.comp
   s = "Keymap Overview — <CR> To Use"
-  s = string.rep(" ", math.floor(self.state.width * 0.5 - vim.str_utfindex(s) * 0.5)) .. s
+  s = string.rep(" ", math.floor(self.state.width * 0.5 - vim.str_utfindex(s, "utf-8") * 0.5)) .. s
   comp:add_line(s, "DiffviewFilePanelTitle")
 
   for _, section in ipairs(self.components.sections) do

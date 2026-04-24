@@ -130,6 +130,7 @@ function P4Adapter.find_toplevel(top_indicators)
   local client_root
 
   for _, p in ipairs(top_indicators) do
+    ---@type string?
     local target_dir = p
     if not pl:is_dir(p) then
       target_dir = pl:parent(p)
@@ -312,7 +313,7 @@ end
 ---@return boolean ok, string description
 function P4Adapter:file_history_dry_run(log_opt)
   local single_file = #log_opt.path_args == 1 -- Basic check, doesn't verify if path is file/dir
-  local log_options = config.get_log_options(single_file, log_opt, self.config_key)
+  local log_options = config.get_log_options(single_file, log_opt, self.config_key) --[[@as HgLogOptions]]
   local prepared_opts = self:prepare_fh_options(log_options, single_file)
 
   local description_parts = {

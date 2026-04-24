@@ -34,7 +34,8 @@ local M = {}
 ---@return InlineDiffOpts
 local function effective_diffopt()
   local out = { indent_heuristic = false }
-  for _, v in ipairs(vim.opt.diffopt:get()) do
+  local diffopt = vim.opt.diffopt --[[@as vim.Option]]
+  for _, v in ipairs(diffopt:get() --[[@as string[] ]]) do
     local key, val = v:match("^([%w_-]+):(.+)$")
     if key == "algorithm" then
       out.algorithm = val
@@ -117,6 +118,7 @@ end)
 Diff1Inline.use_entry = async.void(function(self, entry)
   local src = entry.layout
   assert(src:instanceof(self.class))
+  ---@cast src Diff1Inline
 
   self:set_file_for("b", src.b.file)
   self:_set_a_file(src.a_file)
@@ -143,6 +145,7 @@ Diff1Inline._load_old_lines = async.wrap(function(self, callback)
     return
   end
 
+  ---@diagnostic disable-next-line: invisible -- `produce_data` is internal to `vcs.File`, but the inline renderer needs to pre-fetch the old side without creating a buffer.
   local ok, err, data = pawait(self.a_file.produce_data, self.a_file)
   if not ok or err or not data then
     callback({})

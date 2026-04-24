@@ -56,7 +56,12 @@ function GitRev.to_range(rev_from, rev_to)
     return nil
   end
 
-  local name_from = type(rev_from) == "string" and rev_from or rev_from:object_name()
+  local name_from
+  if type(rev_from) == "string" then
+    name_from = rev_from
+  else
+    name_from = rev_from:object_name()
+  end
   local name_to
 
   if rev_to then

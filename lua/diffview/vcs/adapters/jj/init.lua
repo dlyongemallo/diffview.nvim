@@ -398,7 +398,7 @@ function JjAdapter:on_local_buffer_reused(bufnr)
   end
 
   if not vim.bo[bufnr].modified then
-    pcall(vim.cmd, ("checktime %d"):format(bufnr))
+    pcall(vim.api.nvim_command, ("checktime %d"):format(bufnr))
   end
 end
 

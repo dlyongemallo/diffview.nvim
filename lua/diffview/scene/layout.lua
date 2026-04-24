@@ -17,6 +17,7 @@ local M = {}
 ---@field pivot_producer fun(): integer?
 ---@field name string
 ---@field state table
+---@field symbols string[] # Set on subclasses: ordered window-slot keys (e.g. {"a","b"}).
 local Layout = oop.create_class("Layout")
 
 function Layout:init(opt)

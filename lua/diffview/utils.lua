@@ -72,12 +72,12 @@ end
 ---@return any result Return value
 function M.no_win_event_call(f)
   local last = vim.o.eventignore
-  ---@diagnostic disable-next-line: param-type-mismatch
+  ---@diagnostic disable-next-line: undefined-field -- `vim.opt.X` is magic; LuaLS doesn't see it as `vim.Option`.
   vim.opt.eventignore:prepend(
     "WinEnter,WinLeave,WinNew,WinClosed,BufWinEnter,BufWinLeave,BufEnter,BufLeave"
   )
   local ok, err = pcall(f)
-  vim.opt.eventignore = last
+  vim.o.eventignore = last
   return ok, err
 end
 

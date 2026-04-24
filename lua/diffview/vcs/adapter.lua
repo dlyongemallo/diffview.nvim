@@ -205,6 +205,37 @@ function VCSAdapter:init_completion()
   oop.abstract_stub()
 end
 
+---Return the adapter's default branch name (e.g., "main", "master"), or nil
+---if the concept does not apply or cannot be determined.
+---@return string?
+function VCSAdapter:get_default_branch()
+  return nil
+end
+
+---Return the adapter's current branch (or analogous) name, or nil if the
+---concept does not apply or the state can't be determined.
+---@return string?
+function VCSAdapter:get_branch_name()
+  return nil
+end
+
+---Return a URL for viewing the given commit in the VCS's web UI, or nil if
+---the adapter does not support it.
+---@param commit_hash string
+---@return string?
+function VCSAdapter:get_commit_url(commit_hash)
+  return nil
+end
+
+---Parse a revision argument (e.g. "HEAD^..HEAD") into left/right revisions.
+---@param rev_arg string
+---@param opt table
+---@return Rev? left
+---@return Rev? right
+function VCSAdapter:parse_revs(rev_arg, opt)
+  oop.abstract_stub()
+end
+
 ---@class RevCompletionSpec
 ---@field accept_range boolean
 
@@ -406,7 +437,7 @@ function VCSAdapter:reset_files(paths)
 end
 
 ---@param argo ArgObject
----@return {left: string, right: string, options: string[]}
+---@return { left: Rev, right: Rev, options: DiffViewOptions }?
 function VCSAdapter:diffview_options(argo)
   oop.abstract_stub()
 end
@@ -523,7 +554,7 @@ VCSAdapter.flags = {
 ---@param arg_lead string
 ---@return string[]
 function VCSAdapter:path_candidates(arg_lead)
-  return vim.fn.getcompletion(arg_lead, "file", 0)
+  return vim.fn.getcompletion(arg_lead, "file", false)
 end
 
 M.VCSAdapter = VCSAdapter

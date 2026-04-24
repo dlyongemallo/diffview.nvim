@@ -175,7 +175,9 @@ end, 7)
 ---@param opt table
 ---@param callback? fun(err?: string[], files?: FileEntry[])
 NullAdapter.untracked_files = async.wrap(function(self, left, right, opt, callback)
-  callback(nil, {})
+  if callback then
+    callback(nil, {})
+  end
 end, 5)
 
 ---@param path_args string[]

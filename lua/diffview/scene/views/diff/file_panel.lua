@@ -6,12 +6,6 @@ local Panel = require("diffview.ui.panel").Panel
 local api = vim.api
 local M = {}
 
----@class TreeOptions
----@field flatten_dirs boolean
----@field folder_statuses "never"|"only_folded"|"always"
----@field folder_count_style "grouped"|"simple"|"none"
----@field folder_trailing_slash boolean
-
 ---@class FilePanel : Panel
 ---@field adapter VCSAdapter
 ---@field files FileDict
@@ -19,7 +13,7 @@ local M = {}
 ---@field rev_pretty_name string|nil
 ---@field cur_file FileEntry
 ---@field listing_style "list"|"tree"
----@field tree_options TreeOptions
+---@field tree_options DiffviewTreeOptions
 ---@field render_data RenderData
 ---@field components CompStruct
 ---@field constrain_cursor function

@@ -37,6 +37,9 @@ local M = {}
 ---@field ready boolean
 ---@field winbar string?
 ---@field winopts WindowOptions
+---@field _orig_ts_context_disable? boolean # Saved `ts_context_disable` before diffview overrode it.
+---@field _orig_context_enabled? boolean # Saved `context_enabled` before diffview overrode it.
+---@field _context_state_saved? boolean # Whether the two saved values above are populated.
 local File = oop.create_class("vcs.File")
 
 ---@type table<integer, vcs.File.AttachState>
@@ -553,7 +556,7 @@ function File:attach_buffer(force, opt)
       if should_emit_buf_read then
         vim.b[self.bufnr].diffview_buf_read_emitted = true
         local saved_ei = vim.o.eventignore
-        ---@diagnostic disable-next-line: param-type-mismatch
+        ---@diagnostic disable-next-line: undefined-field -- `vim.opt.X` is magic; LuaLS doesn't see it as `vim.Option`.
         vim.opt.eventignore:append("FileType")
         pcall(api.nvim_buf_call, self.bufnr, function()
           api.nvim_exec_autocmds("BufReadPost", { buffer = self.bufnr, modeline = false })

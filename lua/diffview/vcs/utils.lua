@@ -446,7 +446,7 @@ local function parse_file_diff(scanner)
     -- Deleted file
     local deleted_file_mode = (scanner:peek_line() or ""):match([[^deleted file mode (%d+)]])
     if deleted_file_mode then
-      ret.old_file_mode = deleted_file_mode
+      ret.deleted_file_mode = deleted_file_mode
       scanner:next_line()
     end
 

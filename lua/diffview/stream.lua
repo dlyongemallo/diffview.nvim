@@ -86,8 +86,8 @@ end
 function Stream:iter()
   return function()
     local v, i = self:next()
-    ---@diagnostic disable-next-line: missing-return-value, return-type-mismatch
     if v == Stream.EOF then
+      ---@diagnostic disable-next-line: missing-return-value, return-type-mismatch
       return nil
     end
     ---@cast i -?

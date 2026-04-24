@@ -499,7 +499,7 @@ function FileHistoryPanel:highlight_item(item)
   else
     ---@cast item FileEntry
     for _, comp_struct in ipairs(self.components.log.entries) do
-      local i = utils.vec_indexof(comp_struct.comp.context.files, item)
+      local i = utils.vec_indexof(comp_struct.comp.context.files --[[@as FileEntry[] ]], item)
 
       if i ~= -1 then
         if self.single_file then

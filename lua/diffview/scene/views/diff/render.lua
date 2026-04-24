@@ -156,7 +156,7 @@ local function render_file_list(conf, panel, comp, sign_pad)
 end
 
 ---@param ctx DirData
----@param tree_options TreeOptions
+---@param tree_options DiffviewTreeOptions
 ---@return string
 local function get_dir_status_text(ctx, tree_options)
   local folder_statuses = tree_options.folder_statuses

@@ -34,12 +34,13 @@ function HgRev.new_null_tree()
 end
 
 function HgRev:object_name(abbrev_len)
-  if self.commit then
+  local commit = self.commit
+  if type(commit) == "string" then
     if abbrev_len then
-      return self.commit:sub(1, abbrev_len)
+      return commit:sub(1, abbrev_len)
     end
 
-    return self.commit
+    return commit
   end
 
   return "UNKNOWN"
@@ -49,7 +50,12 @@ end
 ---@param rev_to HgRev|string
 ---@return string?
 function HgRev.to_range(rev_from, rev_to)
-  local name_from = type(rev_from) == "string" and rev_from or rev_from:object_name()
+  local name_from
+  if type(rev_from) == "string" then
+    name_from = rev_from
+  else
+    name_from = rev_from:object_name()
+  end
   local name_to
 
   if rev_to then

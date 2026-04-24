@@ -102,10 +102,12 @@ MultiJob.start = async.wrap(function(self, callback)
 
   self._started = true
 
+  ---@type diffview.Job[]?
   local jobs = self.jobs
   local retry_status
 
   for i = 1, self.retry + 1 do
+    ---@cast jobs -?
     if i > 1 then
       for _, listener in ipairs(self.on_retry_listeners) do
         listener(self, jobs)

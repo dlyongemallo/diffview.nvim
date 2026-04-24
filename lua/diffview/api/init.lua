@@ -26,6 +26,7 @@ function M.set_revs(new_rev_arg, opts)
   if not view then
     return
   end
+  ---@cast view DiffView
   if not view.set_revs then
     return
   end
