@@ -49,8 +49,6 @@ jobs:
   type-check:
     runs-on: ubuntu-latest
     name: Type check (LuaLS)
-    # TODO: flip to `false` once the baseline is clean.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

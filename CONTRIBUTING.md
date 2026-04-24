@@ -40,12 +40,11 @@ stylua lua/ scripts/           # apply formatting
 
 Annotations are consumed by [lua-language-server](https://github.com/LuaLS/lua-language-server).
 A `type-check` CI job runs LuaLS in `--check` mode. Source code
-(`lua/diffview/`, excluding `tests/`) is the required gate; the test tree is
-checked separately and advisory, because Luassert modifier chains
-(`assert.is_not_nil`, `assert.has_no.errors`, etc.) are not fully covered by
-the static type annotations plenary.nvim ships. The job is currently
-`continue-on-error: true` until the source baseline is clean, at which
-point it will be made required.
+(`lua/diffview/`, excluding `tests/`) must be free of diagnostics — the
+job is required and fails any PR that introduces a new one. The test
+tree is checked separately and advisory, because Luassert modifier
+chains (`assert.is_not_nil`, `assert.has_no.errors`, etc.) are not
+fully covered by the static type annotations plenary.nvim ships.
 
 To reproduce locally:
 
