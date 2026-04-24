@@ -141,7 +141,7 @@ Diff1Inline._load_old_lines = async.wrap(function(self, callback)
   end
 
   if self.a_file:is_valid() then
-    callback(api.nvim_buf_get_lines(self.a_file.bufnr, 0, -1, false))
+    callback(api.nvim_buf_get_lines(self.a_file.bufnr --[[@as integer ]], 0, -1, false))
     return
   end
 
@@ -182,7 +182,7 @@ function Diff1Inline:_repaint()
   if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then
     return
   end
-  local bufnr = self.b.file.bufnr
+  local bufnr = self.b.file.bufnr --[[@as integer ]]
   if not api.nvim_buf_is_valid(bufnr) then
     return
   end
@@ -254,7 +254,7 @@ Diff1Inline._render_inline = async.void(function(self)
     return
   end
 
-  local bufnr = self.b.file.bufnr
+  local bufnr = self.b.file.bufnr --[[@as integer ]]
   local winid = self.b.id
 
   -- Turn off native diff mode on this window so the unified extmark rendering
@@ -302,7 +302,7 @@ function Diff1Inline:diffget(first, last)
   if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then
     return 0
   end
-  local bufnr = self.b.file.bufnr
+  local bufnr = self.b.file.bufnr --[[@as integer ]]
   if not api.nvim_buf_is_valid(bufnr) then
     return 0
   end

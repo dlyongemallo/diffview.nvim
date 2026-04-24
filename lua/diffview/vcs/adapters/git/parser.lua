@@ -14,10 +14,10 @@ local M = {}
 ---@field ref_names string
 ---@field reflog_selector string
 ---@field subject string
----@field namestat string[]
----@field numstat string[]
+---@field namestat? string[]
+---@field numstat? string[]
 ---@field diff? diff.FileEntry[]
----@field valid boolean
+---@field valid? boolean
 
 -- Git's `--raw` output produces colon-prefixed lines (namestat) and
 -- `--numstat` produces tab-separated numeric lines.  This function
@@ -64,7 +64,7 @@ function M.structure_fh_data(stat_data, keep_diff)
     right_hash = right_hash,
     merge_hash = merge_hash,
     author = stat_data[2],
-    time = tonumber(stat_data[3]),
+    time = tonumber(stat_data[3]) or 0,
     time_offset = time_offset,
     rel_date = stat_data[5],
     ref_names = stat_data[6] and stat_data[6]:sub(3) or "",
@@ -115,7 +115,7 @@ function M.parse_namestat_entry(namestat_line, numstat_line)
 
   local j = 1
   for idx in namestat_line:gmatch("%s+()") do
-    ---@cast idx integer
+    ---@cast idx -string, +integer
     j = j + 1
     if j == offset then
       namestat_fields = utils.str_split(namestat_line:sub(idx), "\t")

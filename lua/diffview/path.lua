@@ -248,8 +248,8 @@ function PathLib:root(path)
 end
 
 ---@class PathLibNormalizeSpec
----@field cwd string
----@field absolute boolean
+---@field cwd? string
+---@field absolute? boolean
 
 ---Normalize a given path, resolving relative segments.
 ---@param path string

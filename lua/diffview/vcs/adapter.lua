@@ -19,25 +19,25 @@ local M = {}
 
 ---@class vcs.adapter.LayoutOpt
 ---@field default_layout Diff2
----@field merge_layout Layout
+---@field merge_layout? Layout
 
 ---@class vcs.adapter.VCSAdapter.Bootstrap
 ---@field done boolean # Did the bootstrapping
 ---@field ok boolean # Bootstrapping was successful
----@field err string?
----@field version table
----@field version_string string
----@field target_version table
----@field target_version_string string
+---@field err? string
+---@field version? table
+---@field version_string? string
+---@field target_version? table
+---@field target_version_string? string
 
 ---@class vcs.adapter.VCSAdapter.Flags
 ---@field switches FlagOption[]
 ---@field options FlagOption[]
 
 ---@class vcs.adapter.VCSAdapter.Ctx
----@field toplevel string # VCS repository toplevel directory
----@field dir string # VCS directory
----@field path_args string[] # Resolved path arguments
+---@field toplevel? string # VCS repository toplevel directory
+---@field dir? string # VCS directory
+---@field path_args? string[] # Resolved path arguments
 
 ---@class VCSAdapter: diffview.Object
 ---@field bootstrap vcs.adapter.VCSAdapter.Bootstrap

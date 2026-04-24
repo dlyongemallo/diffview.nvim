@@ -66,7 +66,7 @@ function M.diffview_open(args)
   local err, adapter = vcs.get_adapter({
     cmd_ctx = {
       path_args = argo.post_args,
-      cpath = argo:get_flag("C", { no_empty = true, expand = true }),
+      cpath = argo:get_flag("C", { no_empty = true, expand = true }) --[[@as string? ]],
     },
   })
 
@@ -128,7 +128,7 @@ function M.file_history(range, args)
   local err, adapter = vcs.get_adapter({
     cmd_ctx = {
       path_args = argo.args,
-      cpath = argo:get_flag("C", { no_empty = true, expand = true }),
+      cpath = argo:get_flag("C", { no_empty = true, expand = true }) --[[@as string? ]],
     },
   })
 

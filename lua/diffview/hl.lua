@@ -12,43 +12,43 @@ local M = {}
 ---@alias hl.HiValue<T> T|"NONE"
 
 ---@class hl.HiSpec
----@field fg         hl.HiValue<string>
----@field bg         hl.HiValue<string>
----@field sp         hl.HiValue<string>
----@field style      hl.HiValue<string>
----@field ctermfg    hl.HiValue<integer>
----@field ctermbg    hl.HiValue<integer>
----@field cterm      hl.HiValue<string>
----@field blend      hl.HiValue<integer>
----@field default    hl.HiValue<boolean> Only set values if the hl group is cleared.
----@field link       string|-1
----@field explicit   boolean All undefined fields will be cleared from the hl group.
+---@field fg?        hl.HiValue<string>
+---@field bg?        hl.HiValue<string>
+---@field sp?        hl.HiValue<string>
+---@field style?     hl.HiValue<string>
+---@field ctermfg?   hl.HiValue<integer>
+---@field ctermbg?   hl.HiValue<integer>
+---@field cterm?     hl.HiValue<string>
+---@field blend?     hl.HiValue<integer>
+---@field default?   hl.HiValue<boolean> Only set values if the hl group is cleared.
+---@field link?      string|-1
+---@field explicit?  boolean All undefined fields will be cleared from the hl group.
 
 ---@class hl.HiLinkSpec
----@field force boolean
----@field default boolean
----@field clear boolean
+---@field force? boolean
+---@field default? boolean
+---@field clear? boolean
 
 ---@class hl.HlData
----@field link string|integer
----@field fg integer Foreground color integer
----@field bg integer Background color integer
----@field sp integer Special color integer
----@field x_fg string Foreground color hex string
----@field x_bg string Background color hex string
----@field x_sp string Special color hex string
----@field bold boolean
----@field italic boolean
----@field underline boolean
----@field underdouble boolean
----@field undercurl boolean
----@field underdashed boolean
----@field underdotted boolean
----@field strikethrough boolean
----@field standout boolean
----@field reverse boolean
----@field blend integer
----@field default boolean
+---@field link? string|integer
+---@field fg? integer Foreground color integer
+---@field bg? integer Background color integer
+---@field sp? integer Special color integer
+---@field x_fg? string Foreground color hex string
+---@field x_bg? string Background color hex string
+---@field x_sp? string Special color hex string
+---@field bold? boolean
+---@field italic? boolean
+---@field underline? boolean
+---@field underdouble? boolean
+---@field undercurl? boolean
+---@field underdashed? boolean
+---@field underdotted? boolean
+---@field strikethrough? boolean
+---@field standout? boolean
+---@field reverse? boolean
+---@field blend? integer
+---@field default? boolean
 
 ---@alias hl.HlAttrValue integer|boolean
 
@@ -280,7 +280,7 @@ function M.hi_link(from, to, opt)
     else
       -- When `clear` is not set; use our `hi()` function such that other
       -- attributes are not affected.
-      M.hi(f, { default = opt.default, link = to })
+      M.hi(f, { default = opt.default, link = to --[[@as string|-1 ]] })
     end
   end
 end

@@ -309,6 +309,8 @@ M.defaults = {
     ---@field disable_diagnostics? boolean Temporarily disable diagnostics for diff buffers while in the view.
     ---@field winbar_info? boolean See `|diffview-config-view.x.winbar_info|`.
     ---@field focus_diff? boolean Focus the main diff window on open instead of the file panel.
+
+    ---@type DiffviewStandardViewTypeConfig
     default = {
       layout = "diff2_horizontal",
       disable_diagnostics = false,
@@ -478,7 +480,7 @@ M.defaults = {
     ---@field single_file? LogOptions.user
     ---@field multi_file? LogOptions.user
     log_options = {
-      ---@type ConfigLogOptions
+      ---@type ConfigLogOptions.user
       git = {
         single_file = {
           diff_merges = "first-parent",
@@ -488,7 +490,7 @@ M.defaults = {
           diff_merges = "first-parent",
         },
       },
-      ---@type ConfigLogOptions
+      ---@type ConfigLogOptions.user
       hg = {
         single_file = {},
         multi_file = {},
@@ -696,28 +698,28 @@ M._config = M.defaults
 ---@field right_only boolean
 ---@field max_count integer
 ---@field L string[]
----@field author string
----@field grep string
----@field G string
----@field S string
----@field diff_merges string
----@field rev_range string
----@field base string
+---@field author? string
+---@field grep? string
+---@field G? string
+---@field S? string
+---@field diff_merges? string
+---@field rev_range? string
+---@field base? string
 ---@field path_args string[]
----@field after string
----@field before string
+---@field after? string
+---@field before? string
 
 ---@class HgLogOptions
----@field follow string
+---@field follow? string
 ---@field limit integer
----@field user string
+---@field user? string
 ---@field no_merges boolean
----@field rev string
----@field keyword string
----@field branch string
----@field bookmark string
----@field include string
----@field exclude string
+---@field rev? string
+---@field keyword? string
+---@field branch? string
+---@field bookmark? string
+---@field include? string
+---@field exclude? string
 ---@field path_args string[]
 
 ---@alias LogOptions GitLogOptions|HgLogOptions
@@ -798,6 +800,7 @@ M.log_option_defaults = {
     keyword = nil,
     include = nil,
     exclude = nil,
+    path_args = {},
   },
 }
 

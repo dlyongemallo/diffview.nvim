@@ -227,6 +227,7 @@ Window.open_file = async.void(function(self)
   self.file:attach_buffer(false, {
     keymaps = config.get_layout_keymaps(self.parent),
     disable_diagnostics = disable_diagnostics,
+    saved_keymaps = {},
   })
 
   if self:show_winbar_info() then
@@ -297,7 +298,7 @@ function Window:_is_file_in_use()
 
   if view and view.cur_layout ~= self.parent then
     local main = view.cur_layout:get_main_win()
-    return main.file.bufnr and main.file.bufnr == self.file.bufnr
+    return main.file.bufnr ~= nil and main.file.bufnr == self.file.bufnr
   end
 
   return false

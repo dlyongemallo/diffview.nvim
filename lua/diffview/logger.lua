@@ -98,11 +98,12 @@ end
 local Logger = oop.create_class("Logger")
 
 ---@enum Logger.OutfileStatus
-Logger.OutfileStatus = oop.enum({
+Logger.OutfileStatus = {
   UNKNOWN = 1,
   READY = 2,
   ERROR = 3,
-})
+}
+utils.add_reverse_lookup(Logger.OutfileStatus)
 
 ---@enum Logger.LogLevels
 Logger.LogLevels = oop.enum({
@@ -366,13 +367,13 @@ end
 ---@diagnostic enable: invisible
 
 ---@class Logger.log_job.Opt
----@field func function|string
----@field label string
----@field no_stdout boolean
----@field no_stderr boolean
----@field silent boolean
----@field debug_level integer
----@field debuginfo debuginfo
+---@field func? function|string
+---@field label? string
+---@field no_stdout? boolean
+---@field no_stderr? boolean
+---@field silent? boolean
+---@field debug_level? integer
+---@field debuginfo? debuginfo
 
 ---@param job diffview.Job
 ---@param opt? Logger.log_job.Opt

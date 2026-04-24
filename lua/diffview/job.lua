@@ -35,7 +35,7 @@ local M = {}
 ---@field handle uv_process_t
 ---@field pid integer
 ---@field code integer
----@field signal integer
+---@field signal? integer|uv.aliases.signals
 ---@field p_out uv_pipe_t
 ---@field p_err uv_pipe_t
 ---@field p_in? uv_pipe_t
@@ -365,7 +365,7 @@ Job.start = async.wrap(function(self, callback)
   end
 
   self.handle = handle
-  self.pid = pid
+  self.pid = pid --[[@as integer ]]
 
   self:handle_reader(self.p_out, self.stdout, "out")
   self:handle_reader(self.p_err, self.stderr, "err")

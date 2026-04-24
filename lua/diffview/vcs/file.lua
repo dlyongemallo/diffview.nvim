@@ -31,7 +31,7 @@ local M = {}
 ---@field commit Commit?
 ---@field symbol string?
 ---@field get_data git.FileDataProducer?
----@field bufnr integer
+---@field bufnr? integer
 ---@field binary boolean
 ---@field active boolean
 ---@field ready boolean
@@ -72,7 +72,7 @@ function File:init(opt)
   self.absolute_path = pl:absolute(opt.path, opt.adapter.ctx.toplevel)
   self.parent_path = pl:parent(opt.path) or ""
   self.basename = pl:basename(opt.path)
-  self.extension = pl:extension(opt.path)
+  self.extension = pl:extension(opt.path) or ""
   self.kind = opt.kind
   self.binary = utils.sate(opt.binary)
   self.nulled = not not opt.nulled
@@ -437,7 +437,7 @@ local function prepare_attach_opt(t1, t2)
 end
 
 ---@class vcs.File.AttachState
----@field keymaps table
+---@field keymaps? table
 ---@field saved_keymaps table<string, table> Original buffer keymaps saved before overwriting.
 ---@field disable_diagnostics boolean
 

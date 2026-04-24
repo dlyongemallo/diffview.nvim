@@ -14,7 +14,7 @@ local M = {}
 ---@field date string
 ---@field iso_date string
 ---@field rel_date string
----@field ref_names string
+---@field ref_names? string
 ---@field subject string
 ---@field body string
 ---@field diff? diff.FileEntry[]

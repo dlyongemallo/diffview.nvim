@@ -27,18 +27,18 @@ local function try_should_null(layout, rev, status, symbol)
 end
 
 ---@class GitStats
----@field additions integer
----@field deletions integer
----@field conflicts integer
+---@field additions? integer
+---@field deletions? integer
+---@field conflicts? integer
 
 ---@class RevMap
 ---@field a Rev
 ---@field b Rev
----@field c Rev
----@field d Rev
+---@field c? Rev
+---@field d? Rev
 
 ---@class FileEntry : diffview.Object
----@field adapter GitAdapter
+---@field adapter VCSAdapter
 ---@field path string
 ---@field oldpath string
 ---@field absolute_path string
@@ -48,7 +48,7 @@ end
 ---@field revs RevMap
 ---@field layout Layout
 ---@field status string
----@field stats GitStats
+---@field stats? GitStats
 ---@field kind vcs.FileKind
 ---@field commit Commit|nil
 ---@field merge_ctx vcs.MergeContext?
@@ -57,13 +57,13 @@ end
 local FileEntry = oop.create_class("FileEntry")
 
 ---@class FileEntry.init.Opt
----@field adapter GitAdapter
+---@field adapter VCSAdapter
 ---@field path string
----@field oldpath string
+---@field oldpath? string
 ---@field revs RevMap
----@field layout Layout
----@field status string
----@field stats GitStats
+---@field layout? Layout
+---@field status? string
+---@field stats? GitStats
 ---@field kind vcs.FileKind
 ---@field commit? Commit
 ---@field merge_ctx? vcs.MergeContext
@@ -77,7 +77,7 @@ function FileEntry:init(opt)
   self.absolute_path = pl:absolute(opt.path, opt.adapter.ctx.toplevel)
   self.parent_path = pl:parent(opt.path) or ""
   self.basename = pl:basename(opt.path)
-  self.extension = pl:extension(opt.path)
+  self.extension = pl:extension(opt.path) or ""
   self.revs = opt.revs
   self.layout = opt.layout
   self.status = opt.status
@@ -264,8 +264,8 @@ function FileEntry.update_index_stat(adapter, stat)
 end
 
 ---@class FileEntry.with_layout.Opt : FileEntry.init.Opt
----@field nulled boolean
----@field get_data git.FileDataProducer?
+---@field nulled? boolean
+---@field get_data? git.FileDataProducer
 
 ---@param layout_class Layout (class)
 ---@param opt FileEntry.with_layout.Opt

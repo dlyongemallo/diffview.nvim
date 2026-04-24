@@ -30,7 +30,7 @@ local await = async.await
 local pl = lazy.access(utils, "path") ---@type PathLib
 
 ---@class DiffviewActionsCompat
----@field fold_cmds DiffviewKeymapEntry[]
+---@field fold_cmds? DiffviewKeymapEntry[]
 
 ---Covers both the emit-stub actions registered dynamically by the
 ---`action_names` loop at the bottom of this file (which LuaLS can't infer from

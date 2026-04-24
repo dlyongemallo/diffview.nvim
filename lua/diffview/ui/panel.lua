@@ -65,13 +65,13 @@ Panel.bufopts = {
 Panel.default_type = "split"
 
 ---@class PanelSplitSpec
----@field type "split"
+---@field type? "split"
 ---@field position "left"|"top"|"right"|"bottom"
----@field relative "editor"|"win"
----@field win integer
+---@field relative? "editor"|"win"
+---@field win? integer
 ---@field width? integer|"auto"
 ---@field height? integer
----@field win_opts WindowOptions
+---@field win_opts? WindowOptions
 
 ---@class PanelSplitSpec.user
 ---@field type? "split" `"split"` for a panel split.
@@ -94,16 +94,16 @@ Panel.default_config_split = {
 ---@class PanelFloatSpec
 ---@field type "float"
 ---@field relative "editor"|"win"|"cursor"
----@field win integer
----@field anchor "NW"|"NE"|"SW"|"SE"
----@field width integer
----@field height integer
+---@field win? integer
+---@field anchor? "NW"|"NE"|"SW"|"SE"
+---@field width? integer
+---@field height? integer
 ---@field row number
 ---@field col number
----@field zindex integer
----@field style "minimal"
----@field border "none"|"single"|"double"|"rounded"|"solid"|"shadow"|string[]
----@field win_opts WindowOptions
+---@field zindex? integer
+---@field style? "minimal"
+---@field border? "none"|"single"|"double"|"rounded"|"solid"|"shadow"|string[]
+---@field win_opts? WindowOptions
 
 ---@class PanelFloatSpec.user
 ---@field type? "float" `"float"` for a floating window.
@@ -218,13 +218,13 @@ function Panel:get_config()
 
     vim.validate({
       relative = valid_enum(config.relative, { "editor", "win", "cursor" }),
-      win = { config.win, "n", true },
+      win = { config.win, "number", true },
       anchor = valid_enum(config.anchor, { "NW", "NE", "SW", "SE" }, true),
-      width = { config.width, "n", false },
-      height = { config.height, "n", false },
-      row = { config.row, "n", false },
-      col = { config.col, "n", false },
-      zindex = { config.zindex, "n", true },
+      width = { config.width, "number", false },
+      height = { config.height, "number", false },
+      row = { config.row, "number", false },
+      col = { config.col, "number", false },
+      zindex = { config.zindex, "number", true },
       style = valid_enum(config.style, { "minimal" }, true),
       win_opts = { config.win_opts, "table" },
       border = {
@@ -304,7 +304,7 @@ function Panel:resize()
           self:render()
           renderer.render(self.bufid, self.render_data)
         end
-      elseif width then
+      elseif type(width) == "number" then
         api.nvim_win_set_width(self.winid, width)
       end
     elseif self.state.form == "row" and config.height then
@@ -566,7 +566,7 @@ function Panel:compute_content_width()
     if type(default) == "number" then
       return default
     elseif type(config.width) == "number" then
-      return config.width
+      return config.width --[[@as integer ]]
     end
     return 35
   end

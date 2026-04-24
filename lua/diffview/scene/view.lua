@@ -268,7 +268,7 @@ function View.get_default_merge_layout()
     return View.get_default_diff3()
   end
 
-  return config.name_to_layout(name)
+  return config.name_to_layout(name --[[@as string ]])
 end
 
 ---@return Diff2

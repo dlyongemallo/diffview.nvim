@@ -179,7 +179,6 @@ function FileHistoryPanel:update_components()
     })
   end
 
-  ---@type CompStruct
   self.components = self.render_data:create_component({
     { name = "header" },
     {
@@ -187,7 +186,7 @@ function FileHistoryPanel:update_components()
       { name = "title" },
       entry_schema,
     },
-  })
+  }) --[[@as CompStruct ]]
 
   self.constrain_cursor = renderer.create_cursor_constraint({ self.components.log.entries.comp })
 end
@@ -209,7 +208,7 @@ FileHistoryPanel.update_entries = async.wrap(function(self, callback)
 
   local stream = self.adapter:file_history({
     log_opt = self.log_options,
-    layout_opt = { default_layout = self.parent.get_default_layout() },
+    layout_opt = { default_layout = self.parent.get_default_layout() --[[@as Diff2 ]] },
   })
 
   self:sync()

@@ -123,7 +123,6 @@ function FilePanel:update_components()
     staged_files = build_file_tree(self.files.staged_tree, self.tree_options)
   end
 
-  ---@type CompStruct
   self.components = self.render_data:create_component({
     { name = "path" },
     {
@@ -149,7 +148,7 @@ function FilePanel:update_components()
       { name = "title" },
       { name = "entries" },
     },
-  })
+  }) --[[@as CompStruct ]]
 
   self.constrain_cursor = renderer.create_cursor_constraint({
     self.components.conflicting.files.comp,

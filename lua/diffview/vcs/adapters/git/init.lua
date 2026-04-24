@@ -635,7 +635,7 @@ function GitAdapter:is_single_file(path_args, lflags)
     return #path_args == 1
       and not pl:is_dir(path_args[1])
       and #self:exec_sync(
-          { "-c", "core.quotePath=false", "ls-files", "--", path_args },
+          utils.vec_join("-c", "core.quotePath=false", "ls-files", "--", path_args),
           self.ctx.toplevel
         )
         < 2
@@ -711,8 +711,7 @@ function GitAdapter:file_history_options(range, paths, argo)
     return v == "." and "." or pl:relative(v, ".")
   end, paths) --[[@as string[] ]]
 
-  ---@type string
-  local range_arg = argo:get_flag("range", { no_empty = true })
+  local range_arg = argo:get_flag("range", { no_empty = true }) --[[@as string? ]]
   if range_arg then
     local ok = self:verify_rev_arg(range_arg)
     if not ok then
@@ -748,13 +747,14 @@ function GitAdapter:file_history_options(range, paths, argo)
     { "before", "until" },
   }
 
-  local log_options = { rev_range = range_arg } --[[@as GitLogOptions ]]
+  local log_options = vim.tbl_deep_extend("force", config.log_option_defaults.git, { rev_range = range_arg }) --[[@as GitLogOptions ]]
   for _, names in ipairs(log_flag_names) do
     local key, _ = names[1]:gsub("%-", "_")
     local v = argo:get_flag(names, {
       expect_string = type(config.log_option_defaults[self.config_key][key]) ~= "boolean",
       expect_list = names[1] == "L",
     })
+    ---@diagnostic disable-next-line: assign-type-mismatch
     log_options[key] = v
   end
 
@@ -812,12 +812,11 @@ GitAdapter.file_history_worker = async.void(function(self, out_stream, opt)
   local single_file =
     self:is_single_file(opt.log_opt.single_file.path_args, opt.log_opt.single_file.L)
 
-  ---@type GitLogOptions
   local log_options = config.get_log_options(
     single_file,
     single_file and opt.log_opt.single_file or opt.log_opt.multi_file,
     "git"
-  )
+  ) --[[@as GitLogOptions ]]
 
   local is_trace = #log_options.L > 0
 
@@ -1203,9 +1202,11 @@ function GitAdapter:diffview_options(argo)
       { "all", "normal", "true" },
       { "no", "false" }
     ),
-    selected_file = argo:get_flag("selected-file", { no_empty = true, expand = true })
+    selected_file = (
+      argo:get_flag("selected-file", { no_empty = true, expand = true })
       or (vim.bo.buftype == "" and pl:vim_expand("%:p"))
-      or nil,
+      or nil
+    ) --[[@as string? ]],
     selected_row = tonumber(argo:get_flag("selected-row", { no_empty = true })),
   }
 

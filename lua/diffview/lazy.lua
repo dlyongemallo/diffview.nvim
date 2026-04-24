@@ -73,7 +73,7 @@ end
 ---```
 ---@param require_path string
 ---@param handler? fun(module: any): any
----@return LazyModule
+---@return any
 function lazy.require(require_path, handler)
   local use_handler = type(handler) == "function"
 
@@ -104,7 +104,7 @@ end
 ---```
 ---@param x table|string Either the table to be accessed, or a module require path.
 ---@param access_path string|string[] Either a `.` separated string of table keys, or a list.
----@return LazyModule
+---@return any
 function lazy.access(x, access_path)
   local keys = type(access_path) == "table" and access_path
     or vim.split(access_path --[[@as string ]], ".", { plain = true })

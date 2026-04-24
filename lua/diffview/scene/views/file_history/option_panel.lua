@@ -100,12 +100,7 @@ function FHOptionPanel:init(parent)
                 values = o:transform(values)
               end
 
-              if not o.expect_list then
-                ---@cast values string
-                values = values[1]
-              end
-
-              self:_set_option(option_name, values)
+              self:_set_option(option_name, o.expect_list and values or values[1])
             end
 
             self:render()
@@ -181,7 +176,6 @@ function FHOptionPanel:update_components()
     table.insert(option_schema, { name = "option", context = { option = option } })
   end
 
-  ---@type CompStruct
   self.components = self.render_data:create_component({
     {
       name = "switches",
@@ -193,7 +187,7 @@ function FHOptionPanel:update_components()
       { name = "title" },
       { name = "items", unpack(option_schema) },
     },
-  })
+  }) --[[@as CompStruct ]]
 end
 
 ---Get the file entry under the cursor.

@@ -214,11 +214,12 @@ AsyncStream.await = async.sync_wrap(
 )
 
 ---@enum StreamState
-local StreamState = oop.enum({
+local StreamState = {
   OPEN = 1,
   CLOSING = 2,
   CLOSED = 3,
-})
+}
+utils.add_reverse_lookup(StreamState)
 
 ---@class AsyncListStream : AsyncStream
 ---@operator call : AsyncListStream

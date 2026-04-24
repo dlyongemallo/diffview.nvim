@@ -8,11 +8,7 @@
         "it",
         "pending"
     ],
-    "Lua.diagnostics.disable": [
-        "assign-type-mismatch",
-        "cast-type-mismatch",
-        "missing-fields"
-    ],
+    "Lua.diagnostics.disable": [],
     "Lua.workspace.checkThirdParty": false,
     "Lua.workspace.library": [
         "./lua",
