@@ -1,15 +1,24 @@
 {
     "$schema": "https://raw.githubusercontent.com/sumneko/vscode-lua/master/setting/schema.json",
+    "Lua.runtime.version": "LuaJIT",
+    "Lua.diagnostics.globals": [
+        "after_each",
+        "before_each",
+        "describe",
+        "it",
+        "pending"
+    ],
     "Lua.diagnostics.disable": [
         "assign-type-mismatch",
         "cast-type-mismatch",
         "missing-fields"
     ],
-    "runtime.version": "LuaJIT",
-    "workspace.checkThirdParty": false,
-    "workspace.library": [
+    "Lua.workspace.checkThirdParty": false,
+    "Lua.workspace.library": [
         "./lua",
         "$VIMRUNTIME/lua",
-        ".dev/lua/nvim"
+        "./.dev/lua/nvim",
+        "./.dev/lua/plenary/lua",
+        "./scripts/meta"
     ]
 }
