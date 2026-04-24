@@ -1,4 +1,8 @@
 /doc/tags
 /.tests/
 /.dev/
+/.luals-log/
+/.luals-log-tests/
+/.luarc.generated.json
+/.luarc.source.json
 /.nvimlog

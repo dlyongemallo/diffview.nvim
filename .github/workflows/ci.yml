@@ -9,6 +9,7 @@ on:
 env:
   P4_VERSION: r24.2
   JJ_VERSION: "0.39.0"
+  LUALS_VERSION: 3.13.4
 
 jobs:
   lint:
@@ -44,6 +45,62 @@ jobs:
 
       - name: Check DiffviewConfig sync with M.defaults
         run: make check-config-schema
+
+  type-check:
+    runs-on: ubuntu-latest
+    name: Type check (LuaLS)
+    # TODO: flip to `false` once the baseline is clean.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+
+      - name: Cache lua-language-server
+        id: cache-luals
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/lua-language-server
+          key: luals-${{ env.LUALS_VERSION }}-linux-x64
+
+      - name: Install lua-language-server
+        if: steps.cache-luals.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.local/share/lua-language-server
+          curl -sL "https://github.com/LuaLS/lua-language-server/releases/download/${{ env.LUALS_VERSION }}/lua-language-server-${{ env.LUALS_VERSION }}-linux-x64.tar.gz" \
+            | tar -xz -C ~/.local/share/lua-language-server
+
+      - name: Expose lua-language-server on PATH
+        run: |
+          mkdir -p ~/.local/bin
+          ln -sf ~/.local/share/lua-language-server/bin/lua-language-server ~/.local/bin/lua-language-server
+
+      - name: Fetch neodev types
+        run: make dev
+
+      - name: Run LuaLS check (source)
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          make type-check
+
+      - name: Run LuaLS check (tests, advisory)
+        if: always()
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          make type-check-tests
+
+      - name: Upload LuaLS diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: luals-check
+          path: |
+            .luals-log/check.json
+            .luals-log-tests/check.json
+          if-no-files-found: ignore
 
   test:
     runs-on: ubuntu-latest

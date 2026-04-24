@@ -36,11 +36,33 @@ stylua --check lua/ scripts/   # CI equivalent; fails on any diff
 stylua lua/ scripts/           # apply formatting
 ```
 
+### Type annotations
+
+Annotations are consumed by [lua-language-server](https://github.com/LuaLS/lua-language-server).
+A `type-check` CI job runs LuaLS in `--check` mode. Source code
+(`lua/diffview/`, excluding `tests/`) is the required gate; the test tree is
+checked separately and advisory, because Luassert modifier chains
+(`assert.is_not_nil`, `assert.has_no.errors`, etc.) are not fully covered by
+the static type annotations plenary.nvim ships. The job is currently
+`continue-on-error: true` until the source baseline is clean, at which
+point it will be made required.
+
+To reproduce locally:
+
+```bash
+make dev                 # one-time: fetch neodev types + plenary into .dev/
+make type-check          # strict check of source (fails on any diagnostic)
+make type-check-tests    # advisory check of tests (never fails)
+```
+
+Suppressions live in `.luarc.json`. Prefer fixing a diagnostic over adding a
+blanket suppression; use `---@diagnostic disable-next-line:<code>` for local,
+justified exceptions.
+
 ## Adding or changing a config option
 
-Type annotations in `lua/diffview/config.lua` are consumed by
-[lua-language-server](https://github.com/LuaLS/lua-language-server) to power
-editor completion and hover information.
+Type annotations in `lua/diffview/config.lua` power editor completion and
+hover information on options passed to `setup()`.
 
 When you add, remove, or rename a key under `M.defaults` in
 `lua/diffview/config.lua`, update **all** of the following in the same PR:
