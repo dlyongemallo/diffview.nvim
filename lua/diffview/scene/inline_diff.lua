@@ -190,7 +190,7 @@ local function diff_units(a_units, b_units)
     ctxlen = 0,
     linematch = 0,
     indent_heuristic = false,
-  }) or {}
+  }) --[[@as integer[][] ]] or {}
 end
 
 -- Skip intraline highlighting when a diff produces more than this many
@@ -891,7 +891,7 @@ function M.render(bufnr, old_lines, new_lines, opts)
     diff_opts.ignore_blank_lines = opts.ignore_blank_lines
   end
 
-  local hunks = vim.diff(old, new, diff_opts)
+  local hunks = vim.diff(old, new, diff_opts) --[[@as integer[][]? ]]
 
   if not hunks then
     return

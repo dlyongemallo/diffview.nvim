@@ -219,7 +219,7 @@ M.completers = {
       if adapter then
         utils.vec_extend(candidates, adapter:path_candidates(ctx.arg_lead))
       else
-        utils.vec_extend(candidates, vim.fn.getcompletion(ctx.arg_lead, "file", 0))
+        utils.vec_extend(candidates, vim.fn.getcompletion(ctx.arg_lead, "file", false))
       end
     elseif adapter then
       if not has_rev_arg and ctx.arg_lead:sub(1, 1) ~= "-" then
@@ -242,7 +242,7 @@ M.completers = {
   end,
   ---@param ctx CmdLineContext
   DiffviewDiffFiles = function(ctx)
-    return vim.fn.getcompletion(ctx.arg_lead, "file", 0)
+    return vim.fn.getcompletion(ctx.arg_lead, "file", false)
   end,
   ---@param ctx CmdLineContext
   DiffviewFileHistory = function(ctx)
@@ -257,7 +257,7 @@ M.completers = {
       )
       utils.vec_extend(candidates, adapter:path_candidates(ctx.arg_lead))
     else
-      utils.vec_extend(candidates, vim.fn.getcompletion(ctx.arg_lead, "file", 0))
+      utils.vec_extend(candidates, vim.fn.getcompletion(ctx.arg_lead, "file", false))
     end
 
     return candidates

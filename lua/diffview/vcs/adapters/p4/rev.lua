@@ -28,11 +28,20 @@ end
 ---@param rev_to? P4Rev|string
 ---@return string?
 function P4Rev.to_range(rev_from, rev_to)
-  local name_from = type(rev_from) == "string" and rev_from or rev_from:object_name()
-  local name_to
+  local name_from
+  if type(rev_from) == "string" then
+    name_from = rev_from
+  else
+    name_from = rev_from:object_name()
+  end
 
+  local name_to
   if rev_to then
-    name_to = type(rev_to) == "string" and rev_to or rev_to:object_name()
+    if type(rev_to) == "string" then
+      name_to = rev_to
+    else
+      name_to = rev_to:object_name()
+    end
   end
 
   if name_from and name_to and name_from ~= name_to then

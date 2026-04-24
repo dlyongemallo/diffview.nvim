@@ -34,7 +34,7 @@ local M = {}
 local P4Adapter = oop.create_class("P4Adapter", VCSAdapter)
 
 P4Adapter.Rev = P4Rev
-P4Adapter.config_key = "p4" -- Key for config table
+P4Adapter.config_key = "p4" -- Key for config table; reuses the `HgLogOptions` schema.
 P4Adapter.bootstrap = {
   done = false,
   ok = false,
@@ -130,6 +130,7 @@ function P4Adapter.find_toplevel(top_indicators)
   local client_root
 
   for _, p in ipairs(top_indicators) do
+    ---@type string?
     local target_dir = p
     if not pl:is_dir(p) then
       target_dir = pl:parent(p)
@@ -312,7 +313,7 @@ end
 ---@return boolean ok, string description
 function P4Adapter:file_history_dry_run(log_opt)
   local single_file = #log_opt.path_args == 1 -- Basic check, doesn't verify if path is file/dir
-  local log_options = config.get_log_options(single_file, log_opt, self.config_key)
+  local log_options = config.get_log_options(single_file, log_opt, self.config_key) --[[@as HgLogOptions]]
   local prepared_opts = self:prepare_fh_options(log_options, single_file)
 
   local description_parts = {
@@ -422,7 +423,7 @@ P4Adapter.file_history_worker = async.void(function(self, out_stream, opt)
   local log_options = config.get_log_options(
     single_file,
     single_file and single_file_opt or opt.log_opt.multi_file,
-    "p4"
+    self.config_key
   )
 
   ---@type P4Adapter.FHState
@@ -600,52 +601,55 @@ end)
 
 -- Diff View Implementation
 
---- Parse revision arguments for :DiffviewOpen
----@param argo ArgObject
-function P4Adapter:diffview_options(argo)
-  local rev_arg = argo.args[1] -- e.g., @CL, CL1..CL2, #head
-  local left, right
-
+---Parse a revision argument into left/right Revs.
+---@param rev_arg string?
+---@param opt table
+---@return Rev? left
+---@return Rev? right
+function P4Adapter:parse_revs(rev_arg, opt)
   if not rev_arg then
     -- Default: workspace vs head
-    left = P4Rev(RevType.COMMIT, "#head")
-    right = P4Rev(RevType.LOCAL) -- Represents workspace
-  elseif rev_arg:match("^(@?%d+)%.%.(@?%d+)$") or rev_arg:match("^(@?%d+),(@?%d+)$") then
+    return P4Rev(RevType.COMMIT, "#head"), P4Rev(RevType.LOCAL)
+  end
+
+  if rev_arg:match("^(@?%d+)%.%.(@?%d+)$") or rev_arg:match("^(@?%d+),(@?%d+)$") then
     -- Range specified CL1..CL2 or @CL1,@CL2
     local r1, r2 = rev_arg:match("^(@?%d+)[%.%.,](@?%d+)$")
     local ok1, _ = self:verify_rev_arg(r1)
     local ok2, _ = self:verify_rev_arg(r2)
-    if ok1 and ok2 then
-      left = P4Rev(RevType.COMMIT, r1)
-      right = P4Rev(RevType.COMMIT, r2)
-    else
+    if not (ok1 and ok2) then
       utils.err("Invalid revision range specified: " .. rev_arg)
-      return nil
+      return nil, nil
     end
-  else
-    -- Single revision specified, e.g., @CL, CL, #head
-    -- Compare this revision against the workspace? Or show diff *within* the CL?
-    -- Let's default to showing the diff *within* the CL (like `git show`)
-    -- This requires comparing CL vs CL-1.
-    local ok, resolved = self:verify_rev_arg(rev_arg)
-    if not ok then
-      utils.err("Invalid revision specified: " .. rev_arg)
-      return nil
-    end
-    local current_rev_spec = resolved[1] -- Use resolved spec if possible
-    local cl_num = current_rev_spec:match("@(%d+)")
-    if cl_num then
-      local prev_cl_num = tonumber(cl_num) - 1
-      left = P4Rev(RevType.COMMIT, "@" .. prev_cl_num) -- CL-1
-      right = P4Rev(RevType.COMMIT, current_rev_spec) -- CL
-    else
-      -- Cannot easily determine previous rev for non-CL specs like #head or labels
-      -- Fallback to comparing spec against workspace?
-      -- Or maybe error out? Let's compare against workspace for now.
-      left = P4Rev(RevType.COMMIT, current_rev_spec)
-      right = P4Rev(RevType.LOCAL)
-      -- utils.warn("Comparing single non-CL revision against workspace. To see diff *within* a CL, specify the changelist number.")
-    end
+    return P4Rev(RevType.COMMIT, r1), P4Rev(RevType.COMMIT, r2)
+  end
+
+  -- Single revision specified, e.g., @CL, CL, #head. Default to showing the
+  -- diff *within* the CL (like `git show`), which means comparing CL vs CL-1.
+  local ok, resolved = self:verify_rev_arg(rev_arg)
+  if not ok then
+    utils.err("Invalid revision specified: " .. rev_arg)
+    return nil, nil
+  end
+  local current_rev_spec = resolved[1] -- Use resolved spec if possible
+  local cl_num = current_rev_spec:match("@(%d+)")
+  if cl_num then
+    local prev_cl_num = tonumber(cl_num) - 1
+    return P4Rev(RevType.COMMIT, "@" .. prev_cl_num), P4Rev(RevType.COMMIT, current_rev_spec)
+  end
+  -- Cannot easily determine previous rev for non-CL specs like #head or
+  -- labels. Fall back to comparing spec against workspace.
+  return P4Rev(RevType.COMMIT, current_rev_spec), P4Rev(RevType.LOCAL)
+end
+
+--- Parse revision arguments for :DiffviewOpen
+---@param argo ArgObject
+function P4Adapter:diffview_options(argo)
+  local rev_arg = argo.args[1] -- e.g., @CL, CL1..CL2, #head
+
+  local left, right = self:parse_revs(rev_arg, {})
+  if not (left and right) then
+    return nil
   end
 
   ---@type DiffViewOptions

@@ -17,10 +17,7 @@ local M = {}
 ---@param view View?
 ---@return DiffView?
 local function resolve_view(view)
-  if view then
-    return view
-  end
-  return lib.get_current_view()
+  return view or lib.get_current_view() --[[@as DiffView?]]
 end
 
 ---Return the panel from the given view, or nil if the view is not a DiffView.

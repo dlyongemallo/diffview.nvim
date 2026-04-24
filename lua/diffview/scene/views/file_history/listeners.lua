@@ -66,7 +66,7 @@ return function(view)
         return
       end
 
-      local commit = item.commit or (item.entry and item.entry.commit)
+      local commit = item.commit
       if not commit then
         return
       end

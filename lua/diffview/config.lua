@@ -465,10 +465,12 @@ M.defaults = {
     ---@class DiffviewFileHistoryLogOptions
     ---@field git ConfigLogOptions
     ---@field hg ConfigLogOptions
+    ---@field p4 ConfigLogOptions
 
     ---@class DiffviewFileHistoryLogOptions.user
     ---@field git? ConfigLogOptions.user Log options for git.
     ---@field hg? ConfigLogOptions.user Log options for hg.
+    ---@field p4? ConfigLogOptions.user Log options for Perforce.
 
     ---@class ConfigLogOptions
     ---@field single_file LogOptions
@@ -490,6 +492,11 @@ M.defaults = {
       },
       ---@type ConfigLogOptions
       hg = {
+        single_file = {},
+        multi_file = {},
+      },
+      ---@type ConfigLogOptions
+      p4 = {
         single_file = {},
         multi_file = {},
       },
@@ -812,7 +819,7 @@ end
 
 ---@param single_file boolean
 ---@param t GitLogOptions|HgLogOptions
----@param vcs "git"|"hg"
+---@param vcs "git"|"hg"|"p4" # P4 reuses the `HgLogOptions` schema.
 ---@return GitLogOptions|HgLogOptions
 function M.get_log_options(single_file, t, vcs)
   local log_options
@@ -963,6 +970,7 @@ function M.setup(user_config)
 
   --#region DEPRECATION NOTICES
 
+  ---@diagnostic disable-next-line: undefined-field -- Deprecated legacy key, kept for warning-only detection.
   if type(M._config.file_panel.use_icons) ~= "nil" then
     utils.warn("'file_panel.use_icons' has been deprecated. See ':h diffview.changelog-64'.")
   end
@@ -992,11 +1000,13 @@ function M.setup(user_config)
   end
 
   -- Move old keymaps
+  ---@diagnostic disable: undefined-field, inject-field -- `key_bindings` is a deprecated legacy key; the block migrates it onto `keymaps` and clears it.
   if user_config.key_bindings then
     M._config.keymaps = vim.tbl_deep_extend("force", M._config.keymaps, user_config.key_bindings)
     user_config.keymaps = user_config.key_bindings
     M._config.key_bindings = nil
   end
+  ---@diagnostic enable: undefined-field, inject-field
 
   local user_log_options = utils.tbl_access(user_config, "file_history_panel.log_options")
   if user_log_options then

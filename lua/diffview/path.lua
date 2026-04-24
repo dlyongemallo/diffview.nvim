@@ -78,10 +78,17 @@ end
 
 ---@private
 function PathLib:_cwd()
-  return self.cwd or self:convert(uv.cwd())
+  if self.cwd then
+    return self.cwd
+  end
+  -- Bind to a local so `assert`'s second return doesn't leak into `convert` as `sep`.
+  local cwd = assert(uv.cwd(), "uv.cwd() failed")
+  return self:convert(cwd)
 end
 
----@private
+---Module-internal path normalisation. Intentionally not `---@private` so
+---the async-wrapped `PathLib.touch` — which LuaLS sees as a free function
+---rather than a method — can still call it.
 ---@return ...
 function PathLib:_clean(...)
   local argc = select("#", ...)
@@ -332,8 +339,11 @@ function PathLib:expand(path)
 
   for i = idx, #segments do
     local env_var = segments[i]:match("^%$(%S+)$")
-    if env_var and uv.os_getenv(env_var) ~= nil then
-      segments[i] = uv.os_getenv(env_var)
+    if env_var then
+      local value = vim.env[env_var]
+      if value ~= nil then
+        segments[i] = value
+      end
     end
   end
 
@@ -544,7 +554,7 @@ function PathLib:vim_expand(path, nosuf, list)
   if list then
     return vim.tbl_map(function(v)
       return self:convert(v)
-    end, vim.fn.expand(path, nosuf, list))
+    end, vim.fn.expand(path, nosuf, list) --[[@as string[] ]])
   end
 
   return self:convert(vim.fn.expand(path, nosuf, list) --[[@as string ]])

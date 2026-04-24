@@ -196,4 +196,50 @@ describe("diffview.scene.view", function()
       assert.are.equal(45, find_linematch(vim.opt.diffopt:get()))
     end)
   end)
+
+  -- Regression: configuring a boolean flag whose name is a prefix of another
+  -- (e.g. `iwhite` vs `iwhiteall`/`iwhiteeol`) must not remove the longer
+  -- flags from diffopt.
+  describe("diffopt boolean flag override", function()
+    local orig_config
+    local orig_diffopt
+
+    before_each(function()
+      orig_config = vim.deepcopy(config.get_config())
+      orig_diffopt = vim.deepcopy(vim.opt.diffopt:get())
+    end)
+
+    after_each(function()
+      config.setup(orig_config)
+      vim.opt.diffopt = vim.deepcopy(orig_diffopt)
+    end)
+
+    it("does not strip iwhiteall/iwhiteeol when iwhite is configured", function()
+      vim.opt.diffopt:remove({ "iwhite", "iwhiteall", "iwhiteeol" })
+      vim.opt.diffopt:append({ "iwhiteall", "iwhiteeol" })
+      config.setup({ diffopt = { iwhite = true } })
+
+      local view = View({ default_layout = {} })
+      view_mod._test.apply_diffopt(view)
+
+      local opts = vim.opt.diffopt:get()
+      assert.is_true(vim.tbl_contains(opts, "iwhite"))
+      assert.is_true(vim.tbl_contains(opts, "iwhiteall"))
+      assert.is_true(vim.tbl_contains(opts, "iwhiteeol"))
+    end)
+
+    it("removes only the exact flag when disabled", function()
+      vim.opt.diffopt:remove({ "iwhite", "iwhiteall", "iwhiteeol" })
+      vim.opt.diffopt:append({ "iwhite", "iwhiteall", "iwhiteeol" })
+      config.setup({ diffopt = { iwhite = false } })
+
+      local view = View({ default_layout = {} })
+      view_mod._test.apply_diffopt(view)
+
+      local opts = vim.opt.diffopt:get()
+      assert.is_false(vim.tbl_contains(opts, "iwhite"))
+      assert.is_true(vim.tbl_contains(opts, "iwhiteall"))
+      assert.is_true(vim.tbl_contains(opts, "iwhiteeol"))
+    end)
+  end)
 end)

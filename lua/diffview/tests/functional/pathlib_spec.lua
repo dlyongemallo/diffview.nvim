@@ -151,6 +151,14 @@ describe("diffview.path", function()
       eq([[\\?\foo\bar\baz]], pl:absolute([[bar\baz]], [[\\?\foo]]))
       eq([[\\?\foo\bar\baz]], pl:absolute([[\\?\foo\bar\baz]], [[\\?\foo]]))
     end)
+
+    it("falls back to uv.cwd() when no cwd is given", function()
+      -- Regression: `assert(uv.cwd(), msg)` returns two values when truthy, and
+      -- the message used to leak into `convert(path, sep)` as the separator.
+      local pl = PathLib({ os = "unix" })
+      local cwd = assert(vim.uv.cwd())
+      eq(cwd .. "/bar/baz", pl:absolute("bar/baz"))
+    end)
   end)
 
   describe("is_root()", function()

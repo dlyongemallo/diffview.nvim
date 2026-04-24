@@ -305,7 +305,7 @@ function Panel:resize()
           renderer.render(self.bufid, self.render_data)
         end
       elseif width then
-        api.nvim_win_set_width(self.winid, width)
+        api.nvim_win_set_width(self.winid, width --[[@as integer]])
       end
     elseif self.state.form == "row" and config.height then
       api.nvim_win_set_height(self.winid, config.height)
@@ -566,7 +566,7 @@ function Panel:compute_content_width()
     if type(default) == "number" then
       return default
     elseif type(config.width) == "number" then
-      return config.width
+      return config.width --[[@as integer]]
     end
     return 35
   end

@@ -35,6 +35,7 @@ local same_rev = lazy.access(rev_lib, "same_rev") ---@type fun(a: Rev?, b: Rev?)
 ---@return DiffView?
 function M.find_existing_view(adapter, rev_arg, path_args, left, right)
   for _, view in ipairs(M.views) do
+    ---@cast view DiffView
     if
       DiffView.__get():ancestorof(view)
       and view.adapter.ctx.toplevel == adapter.ctx.toplevel

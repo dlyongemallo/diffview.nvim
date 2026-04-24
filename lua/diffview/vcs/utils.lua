@@ -432,28 +432,28 @@ local function parse_file_diff(scanner)
     -- Old mode
     local old_mode = (scanner:peek_line() or ""):match([[^old mode (%d+)]])
     if old_mode then
-      ret.old_mode = old_mode
+      ret.old_mode = tonumber(old_mode)
       scanner:next_line()
     end
 
     -- New mode
     local new_mode = (scanner:peek_line() or ""):match([[^new mode (%d+)]])
     if new_mode then
-      ret.new_mode = new_mode
+      ret.new_mode = tonumber(new_mode)
       scanner:next_line()
     end
 
     -- Deleted file
     local deleted_file_mode = (scanner:peek_line() or ""):match([[^deleted file mode (%d+)]])
     if deleted_file_mode then
-      ret.old_file_mode = deleted_file_mode
+      ret.deleted_file_mode = tonumber(deleted_file_mode)
       scanner:next_line()
     end
 
     -- New file
     local new_file_mode = (scanner:peek_line() or ""):match([[^new file mode (%d+)]])
     if new_file_mode then
-      ret.new_file_mode = new_file_mode
+      ret.new_file_mode = tonumber(new_file_mode)
       scanner:next_line()
     end
 

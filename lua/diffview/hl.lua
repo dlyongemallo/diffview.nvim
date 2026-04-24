@@ -107,6 +107,7 @@ function M.get_hl(name, no_trans)
   end
 
   if hl then
+    ---@cast hl hl.HlData
     if hl.fg then
       hl.x_fg = string.format("#%06x", hl.fg)
     end
@@ -252,7 +253,7 @@ function M.hi(groups, opt)
       end
     end
 
-    api.nvim_set_hl(0, group, def_spec)
+    api.nvim_set_hl(0, group, def_spec --[[@as vim.api.keyset.highlight]])
   end
 end
 

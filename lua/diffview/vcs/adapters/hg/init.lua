@@ -856,7 +856,7 @@ function HgAdapter:is_rev_arg_range(rev_arg)
 end
 
 ---Parse a given rev arg.
----@param rev_arg string
+---@param rev_arg string?
 ---@param opt table
 ---@return Rev? left
 ---@return Rev? right

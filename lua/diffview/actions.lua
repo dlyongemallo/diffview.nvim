@@ -116,11 +116,11 @@ M.compat = {}
 ---currently-displayed file buffer.
 ---@param view StandardView?
 ---@return Window? main
----@return integer? bufnr
+---@return integer? bufnr # Only valid when `main` is non-nil.
 local function get_valid_main(view)
   local main = view and view.cur_layout and view.cur_layout:get_main_win()
   if not (main and main:is_valid() and main.file and main.file:is_valid()) then
-    return
+    return nil, nil
   end
   return main, main.file.bufnr
 end
@@ -265,6 +265,7 @@ function M.open_in_new_tab()
     utils.info("This action only works in a diff view.")
     return
   end
+  ---@cast view DiffView
 
   local new_view = DiffView({
     adapter = view.adapter,
@@ -286,6 +287,7 @@ function M.diff_against_default_branch()
   local adapter
 
   if view then
+    ---@cast view DiffView|FileHistoryView
     adapter = view.adapter
   else
     -- Get an adapter for the current working directory.
@@ -334,6 +336,7 @@ function M.jumpto_conflict(num, use_delta)
     local main, bufnr = get_valid_main(view)
 
     if main then
+      ---@cast bufnr integer
       local next_idx
       local conflicts, cur, cur_idx =
         vcs_utils.parse_conflicts(api.nvim_buf_get_lines(bufnr, 0, -1, false), main.id)
@@ -404,6 +407,7 @@ local function jump_inline_hunk_by(picker)
   if not main then
     return
   end
+  ---@cast bufnr integer
 
   local cur = api.nvim_win_get_cursor(main.id)[1] - 1
   local row = picker(bufnr, cur)
@@ -431,6 +435,7 @@ function M.jump_to_first_change(view)
   if not main then
     return
   end
+  ---@cast bufnr integer
 
   api.nvim_win_call(main.id, function()
     utils.set_cursor(0, 1, 0)
@@ -445,7 +450,7 @@ function M.jump_to_first_change(view)
         api.nvim_win_set_cursor(main.id, { rows[1] + 1, 0 })
       end
     else
-      pcall(vim.cmd, "norm! ]c")
+      pcall(api.nvim_command, "norm! ]c")
     end
     vim.cmd("norm! zz")
   end)
@@ -570,6 +575,7 @@ local function resolve_all_conflicts(view, target)
   local main, bufnr = get_valid_main(view)
 
   if main then
+    ---@cast bufnr integer
     local lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
     local conflicts = vcs_utils.parse_conflicts(lines, main.id)
 
@@ -652,6 +658,7 @@ function M.conflict_choose(target)
       local main, bufnr = get_valid_main(view)
 
       if main then
+        ---@cast bufnr integer
         local _, cur =
           vcs_utils.parse_conflicts(api.nvim_buf_get_lines(bufnr, 0, -1, false), main.id)
 
@@ -764,7 +771,7 @@ function M.diffput(target)
   end
 end
 
----@type table<string, Layout>
+---@type table<string, Layout|LazyModule>
 local layout_name_map = {
   diff1_plain = Diff1,
   diff1_inline = Diff1Inline,
@@ -976,9 +983,9 @@ do
   local function compat_fold(fold_cmd)
     return function()
       if vim.wo.foldmethod ~= "manual" then
-        local ok, msg = pcall(vim.cmd, "norm! " .. fold_cmd)
+        local ok, msg = pcall(api.nvim_command, "norm! " .. fold_cmd)
         if not ok and msg then
-          api.nvim_err_writeln(msg)
+          api.nvim_echo({ { msg, "ErrorMsg" } }, true, { err = true })
         end
         return
       end
@@ -991,7 +998,7 @@ do
 
         for _, win in ipairs(view.cur_layout.windows) do
           api.nvim_win_call(win.id, function()
-            local ok, msg = pcall(vim.cmd, "norm! " .. fold_cmd)
+            local ok, msg = pcall(api.nvim_command, "norm! " .. fold_cmd)
             if not ok then
               err = msg
             end
@@ -999,7 +1006,7 @@ do
         end
 
         if err then
-          api.nvim_err_writeln(err)
+          api.nvim_echo({ { err, "ErrorMsg" } }, true, { err = true })
         end
       end
     end

@@ -125,6 +125,7 @@ return function(view)
           for line = start_line, end_line do
             local item = view.panel:get_item_at_line(line)
             if item and type(item.collapsed) ~= "boolean" then
+              ---@cast item FileEntry
               view.panel:toggle_selection(item)
             end
           end

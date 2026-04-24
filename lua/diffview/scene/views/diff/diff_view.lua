@@ -51,6 +51,7 @@ local same_rev = lazy.access(rev_lib, "same_rev") ---@type fun(a: Rev?, b: Rev?)
 ---@field merge_ctx? vcs.MergeContext
 ---@field initialized boolean
 ---@field valid boolean
+---@field update_needed? boolean # Set by external listeners to force a refresh on next redraw.
 ---@field watcher uv_fs_poll_t # UV fs poll handle.
 local DiffView = oop.create_class("DiffView", StandardView.__get())
 
@@ -501,7 +502,7 @@ local update_files_impl = debounce.debounce_trailing(
   100,
   true,
   ---@param self DiffView
-  ---@param opts { force?: boolean }?
+  ---@param opts { force?: boolean }
   ---@param callback fun(err?: string[])
   async.wrap(function(self, opts, callback)
     -- Never update if the view is closing (prevents coroutine failure from race conditions).
