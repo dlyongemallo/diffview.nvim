@@ -36,6 +36,24 @@ stylua --check lua/   # CI equivalent; fails on any diff
 stylua lua/           # apply formatting
 ```
 
+## Adding or changing a config option
+
+Type annotations in `lua/diffview/config.lua` are consumed by
+[lua-language-server](https://github.com/LuaLS/lua-language-server) to power
+editor completion and hover information.
+
+When you add, remove, or rename a key under `M.defaults` in
+`lua/diffview/config.lua`, update **all** of the following in the same PR:
+
+1. `M.defaults` itself — the actual value.
+2. `@class DiffviewConfig` — the internal/resolved type.
+3. `@class DiffviewConfig.user` — the user-facing (optional-fields) type passed
+   to `setup()`. Include a short description on the `@field` line so it shows
+   up in editor tooltips.
+4. `doc/diffview_defaults.txt` — the annotated example users copy from.
+5. `doc/diffview.txt` — the reference section for that option, if it warrants
+   prose (type, valid values, behavioural notes).
+
 ## Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/). Keep the

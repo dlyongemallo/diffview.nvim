@@ -17,6 +17,7 @@ local pl = lazy.access(utils, "path") ---@type PathLib
 
 local M = {}
 
+---@param user_config? DiffviewConfig.user
 function M.setup(user_config)
   config.setup(user_config or {})
 end

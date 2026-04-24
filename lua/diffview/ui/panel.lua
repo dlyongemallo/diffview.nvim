@@ -14,6 +14,7 @@ local M = {}
 local uid_counter = 0
 
 ---@alias PanelConfig PanelFloatSpec|PanelSplitSpec
+---@alias PanelConfig.user PanelFloatSpec.user|PanelSplitSpec.user
 ---@alias PanelType "split"|"float"
 
 ---@type PerfTimer
@@ -21,7 +22,7 @@ local perf = PerfTimer("[Panel] redraw")
 
 ---@class Panel : diffview.Object
 ---@field type PanelType
----@field config_producer PanelConfig|fun(): PanelConfig
+---@field config_producer PanelConfig.user|fun(): PanelConfig.user
 ---@field state table
 ---@field bufid integer
 ---@field winid integer
@@ -68,9 +69,18 @@ Panel.default_type = "split"
 ---@field position "left"|"top"|"right"|"bottom"
 ---@field relative "editor"|"win"
 ---@field win integer
----@field width? integer
+---@field width? integer|"auto"
 ---@field height? integer
 ---@field win_opts WindowOptions
+
+---@class PanelSplitSpec.user
+---@field type? "split" `"split"` for a panel split.
+---@field position? "left"|"top"|"right"|"bottom" Panel position.
+---@field relative? "editor"|"win" What `position` is relative to.
+---@field win? integer Target window handle (when `relative="win"`). Use `0` for current window.
+---@field width? integer|"auto" Width (for `position="left"|"right"`). `"auto"` fits content, capped at `math.floor(vim.o.columns * 0.5)`.
+---@field height? integer Height (for `position="top"|"bottom"`).
+---@field win_opts? WindowOptions Window-local options to set on the panel window.
 
 ---@type PanelSplitSpec
 Panel.default_config_split = {
@@ -94,6 +104,20 @@ Panel.default_config_split = {
 ---@field style "minimal"
 ---@field border "none"|"single"|"double"|"rounded"|"solid"|"shadow"|string[]
 ---@field win_opts WindowOptions
+
+---@class PanelFloatSpec.user
+---@field type? "float" `"float"` for a floating window.
+---@field relative? "editor"|"win"|"cursor" See `|nvim_open_win()|`.
+---@field win? integer Target window handle (when `relative="win"`).
+---@field anchor? "NW"|"NE"|"SW"|"SE" Anchor corner.
+---@field width? integer Width in character cells.
+---@field height? integer Height in character cells.
+---@field row? number Row offset.
+---@field col? number Column offset.
+---@field zindex? integer Stacking order.
+---@field style? "minimal" Floating window style.
+---@field border? "none"|"single"|"double"|"rounded"|"solid"|"shadow"|string[] Border style.
+---@field win_opts? WindowOptions Window-local options to set on the panel window.
 
 ---@type PanelFloatSpec
 Panel.default_config_float = {
@@ -127,7 +151,7 @@ Panel.au = {
 
 ---@class PanelSpec
 ---@field type PanelType
----@field config PanelConfig|fun(): PanelConfig
+---@field config PanelConfig.user|fun(): PanelConfig.user
 ---@field bufname string
 
 ---@param opt PanelSpec
@@ -305,17 +329,8 @@ function Panel:open()
   local config = self:get_config()
 
   if config.type == "split" then
-    -- Resolve "auto" position based on vim's splitright/splitbelow options.
-    local position = config.position
-    if position == "auto" then
-      if self.state.form == "row" then
-        position = vim.o.splitbelow and "bottom" or "top"
-      else
-        position = vim.o.splitright and "right" or "left"
-      end
-    end
-
-    local split_dir = vim.tbl_contains({ "top", "left" }, position) and "aboveleft" or "belowright"
+    local split_dir = vim.tbl_contains({ "top", "left" }, config.position) and "aboveleft"
+      or "belowright"
     local split_cmd = self.state.form == "row" and "sp" or "vsp"
     local rel_winid = config.relative == "win"
         and api.nvim_win_is_valid(config.win or -1)
@@ -331,7 +346,7 @@ function Panel:open()
       end
 
       if config.relative == "editor" then
-        local dir = ({ left = "H", bottom = "J", top = "K", right = "L" })[position]
+        local dir = ({ left = "H", bottom = "J", top = "K", right = "L" })[config.position]
         vim.cmd("wincmd " .. dir)
         vim.cmd("wincmd =")
       end
