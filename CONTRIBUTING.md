@@ -32,8 +32,8 @@ cargo install stylua --locked --version 2.4.1 --features luajit
 Then run:
 
 ```bash
-stylua --check lua/   # CI equivalent; fails on any diff
-stylua lua/           # apply formatting
+stylua --check lua/ scripts/   # CI equivalent; fails on any diff
+stylua lua/ scripts/           # apply formatting
 ```
 
 ## Adding or changing a config option
@@ -53,6 +53,10 @@ When you add, remove, or rename a key under `M.defaults` in
 4. `doc/diffview_defaults.txt` — the annotated example users copy from.
 5. `doc/diffview.txt` — the reference section for that option, if it warrants
    prose (type, valid values, behavioural notes).
+
+The CI job `config-schema` performs a mechanical key-drift/consistency check
+to ensure #1, #2, and #3 stay in sync. Doc/reference drift (#4 and #5) is
+reviewer-enforced.
 
 ## Commit messages
 

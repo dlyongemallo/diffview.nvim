@@ -29,7 +29,21 @@ jobs:
         run: cargo install stylua --locked --version 2.4.1 --features luajit
 
       - name: Check formatting
-        run: stylua --check lua/
+        run: stylua --check lua/ scripts/
+
+  config-schema:
+    runs-on: ubuntu-latest
+    name: Config schema drift check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+
+      - name: Check DiffviewConfig sync with M.defaults
+        run: make check-config-schema
 
   test:
     runs-on: ubuntu-latest
