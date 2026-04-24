@@ -40,13 +40,12 @@ stylua lua/ scripts/           # apply formatting
 
 Annotations are consumed by [lua-language-server](https://github.com/LuaLS/lua-language-server).
 A `type-check` CI job runs LuaLS in `--check` mode. Source code
-(`lua/diffview/`, excluding `tests/`) is intended to become the required
-gate once the baseline is clean; the test tree is checked separately and
+(`lua/diffview/`, excluding `tests/`) must be free of diagnostics; the
+job is required and fails if any are reported (after the suppressions
+configured in `.luarc.json`). The test tree is checked separately and
 advisory, because Luassert modifier chains (`assert.is_not_nil`,
 `assert.has_no.errors`, etc.) are not fully covered by the static type
-annotations `plenary.nvim` ships. The job is currently
-`continue-on-error: true` until the source baseline is clean, at which
-point it will be made required.
+annotations `plenary.nvim` ships.
 
 Prerequisites on `PATH`:
 [`lua-language-server`](https://github.com/LuaLS/lua-language-server)
@@ -55,6 +54,12 @@ Prerequisites on `PATH`:
 `.luarc.json`, `nvim` to resolve `VIMRUNTIME` for the generated config,
 and `git` (used by `make dev` to fetch the neodev and plenary sources
 into `.dev/`).
+
+CI pins the Neovim version used for the type-check job (see
+`NVIM_TYPECHECK_VERSION` in `.github/workflows/ci.yml`) so the required
+gate stays deterministic across upstream Neovim releases. To reproduce
+the CI result exactly, install that same version locally; otherwise a
+newer Neovim's `$VIMRUNTIME` may surface diagnostics that CI does not.
 
 To reproduce locally:
 

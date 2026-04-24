@@ -13,6 +13,13 @@
 
 local api = vim.api
 
+-- `vim.text.diff` was added in Nvim 0.12; `vim.diff` is still supported
+-- but marked deprecated by LuaLS. Alias once here so the eventual switch
+-- to `vim.text.diff` (when the plugin's minimum Neovim version is raised
+-- to 0.12) is a single-line change.
+---@diagnostic disable-next-line: deprecated
+local diff = vim.diff
+
 local M = {}
 
 M.ns = api.nvim_create_namespace("diffview_inline_diff")
@@ -184,7 +191,7 @@ local function diff_units(a_units, b_units)
   end
   local a = table.concat(a_units, "\n") .. "\n"
   local b = table.concat(b_units, "\n") .. "\n"
-  return vim.diff(a, b, {
+  return diff(a, b, {
     result_type = "indices",
     algorithm = "minimal",
     ctxlen = 0,
@@ -891,7 +898,7 @@ function M.render(bufnr, old_lines, new_lines, opts)
     diff_opts.ignore_blank_lines = opts.ignore_blank_lines
   end
 
-  local hunks = vim.diff(old, new, diff_opts) --[[@as integer[][]? ]]
+  local hunks = diff(old, new, diff_opts) --[[@as integer[][]? ]]
 
   if not hunks then
     return

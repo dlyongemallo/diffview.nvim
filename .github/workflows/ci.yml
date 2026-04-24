@@ -10,6 +10,12 @@ env:
   P4_VERSION: r24.2
   JJ_VERSION: "0.39.0"
   LUALS_VERSION: 3.13.4
+  # Pinned for the LuaLS type-check job so the required gate stays
+  # deterministic: a new Neovim stable release can change deprecation/type
+  # metadata in `$VIMRUNTIME/lua/vim/_meta`, which would otherwise cause
+  # unrelated PRs to start failing. Bump intentionally when ready to absorb
+  # the new diagnostics.
+  NVIM_TYPECHECK_VERSION: v0.12.2
 
 jobs:
   lint:
@@ -55,7 +61,7 @@ jobs:
       - uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
-          version: stable
+          version: ${{ env.NVIM_TYPECHECK_VERSION }}
 
       - name: Cache lua-language-server
         id: cache-luals
@@ -80,8 +86,6 @@ jobs:
         run: make dev
 
       - name: Run LuaLS check (source)
-        # TODO: flip to `false` once the baseline is clean.
-        continue-on-error: true
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           make type-check
