@@ -48,11 +48,11 @@ end, { nargs = 0, bang = true })
 
 command("DiffviewFocusFiles", function()
   diffview.emit("focus_files")
-end, { nargs = 0, bang = true })
+end, { nargs = 0 })
 
 command("DiffviewToggleFiles", function()
   diffview.emit("toggle_files")
-end, { nargs = 0, bang = true })
+end, { nargs = 0 })
 
 command("DiffviewRefresh", function()
   diffview.emit("refresh_files")
@@ -62,4 +62,4 @@ command("DiffviewLog", function()
   vim.cmd(("sp %s | norm! G"):format(
     vim.fn.fnameescape(DiffviewGlobal.logger.outfile)
   ))
-end, { nargs = 0, bang = true })
+end, { nargs = 0 })
