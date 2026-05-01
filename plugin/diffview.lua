@@ -42,8 +42,8 @@ command("DiffviewFileHistory", function(ctx)
   diffview.file_history(range, arg_parser.scan(ctx.args).args)
 end, { nargs = "*", complete = completion, range = true })
 
-command("DiffviewClose", function()
-  diffview.close()
+command("DiffviewClose", function(ctx)
+  diffview.close(nil, { force = ctx.bang })
 end, { nargs = 0, bang = true })
 
 command("DiffviewFocusFiles", function()

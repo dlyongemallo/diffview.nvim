@@ -297,8 +297,67 @@ function DiffView:set_revs(new_rev_arg, opts)
   self:update_files()
 end
 
+---Collect paths of file entries whose STAGE-rev sub-buffers have unsaved
+---edits. Used by `close` (via `can_close`) to decide whether to abort, and
+---by the BufWritePost auto-close retry path to silently re-check the gate
+---without warning on every save.
+---@return string[]
+function DiffView:_modified_stage_paths()
+  local paths = {}
+  for _, file in self.files:iter() do
+    for _, f in ipairs(file.layout:files()) do
+      if
+        f.rev.type == RevType.STAGE
+        and f.bufnr
+        and api.nvim_buf_is_loaded(f.bufnr)
+        and vim.bo[f.bufnr].modified
+      then
+        paths[#paths + 1] = file.path
+        break
+      end
+    end
+  end
+  return paths
+end
+
+---Pre-flight gate for `close`: returns whether a guarded close would be
+---allowed to proceed *now*, surfacing the same warning as `close` would on
+---abort. Use this from callers that have visible side effects which must be
+---ordered around the close (e.g. `goto_file_edit_close` navigates first and
+---would otherwise strand the user if the close aborts).
+---@param opts? diffview.View.CloseOpts
+---@return boolean ok
+function DiffView:can_close(opts)
+  opts = opts or {}
+  local force = opts.force
+  if force == nil then
+    force = true
+  end
+  if force then
+    return true
+  end
+
+  local modified = self:_modified_stage_paths()
+  if #modified > 0 then
+    utils.err(
+      ("Stage buffer(s) have unsaved changes: %s. Use :DiffviewClose! to discard, or :write to apply to the index."):format(
+        table.concat(modified, ", ")
+      )
+    )
+    return false
+  end
+  return true
+end
+
 ---@override
-function DiffView:close()
+---@param opts? diffview.View.CloseOpts # `force = true` (default) bypasses the
+---unsaved-stage-edit check, mirroring the `:DiffviewClose!` semantics.
+---@return boolean closed # `false` if the close was aborted.
+function DiffView:close(opts)
+  if not self:can_close(opts) then
+    return false
+  end
+
   if not self.closing:check() then
     self.closing:send()
 
@@ -347,6 +406,7 @@ function DiffView:close()
     self.commit_log_panel:destroy()
     DiffView.super_class.close(self)
   end
+  return true
 end
 
 ---@private

@@ -150,26 +150,34 @@ function M.diff_files(args)
   end
 end
 
-function M.close(tabpage)
+---@param tabpage? integer
+---@param opts? diffview.View.CloseOpts # Forwarded to `view:close`. With
+---`force = false`, `DiffView` aborts when stage buffers are modified.
+---@return boolean closed # `false` if the close was aborted.
+function M.close(tabpage, opts)
   if tabpage then
     vim.schedule(function()
       lib.dispose_stray_views()
     end)
-    return
+    return true
   end
 
   local view = lib.get_current_view()
   if view then
-    view:close()
+    local closed = view:close(opts)
+    if closed == false then
+      return false
+    end
     lib.dispose_view(view)
   end
+  return true
 end
 
 ---@param args string[]
 function M.toggle(args)
   local view = lib.get_current_view()
   if view then
-    M.close()
+    M.close(nil, { force = false })
   else
     M.open(args)
   end

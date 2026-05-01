@@ -21,8 +21,8 @@ describe("diffview.toggle", function()
     stub(diffview, "open", function(args)
       call_log[#call_log + 1] = { fn = "open", args = args }
     end)
-    stub(diffview, "close", function()
-      call_log[#call_log + 1] = { fn = "close" }
+    stub(diffview, "close", function(tabpage, opts)
+      call_log[#call_log + 1] = { fn = "close", tabpage = tabpage, opts = opts }
     end)
   end)
 
@@ -91,5 +91,20 @@ describe("diffview.toggle", function()
     for _, entry in ipairs(call_log) do
       assert.are_not.equal("close", entry.fn)
     end
+  end)
+
+  -- Regression guard: dropping `{ force = false }` here would silently
+  -- restore the old force-close behaviour (data loss on dirty stage buffers).
+  it("forwards `{ force = false }` to close so the unsaved-stage gate fires", function()
+    stub(lib, "get_current_view", function()
+      return { tabpage = 1 }
+    end)
+
+    diffview.toggle({})
+
+    eq(1, #call_log)
+    eq("close", call_log[1].fn)
+    eq(nil, call_log[1].tabpage)
+    eq({ force = false }, call_log[1].opts)
   end)
 end)

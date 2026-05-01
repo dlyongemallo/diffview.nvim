@@ -94,6 +94,9 @@ describe("diffview.actions goto_file command routing", function()
           return { id = 1 }
         end,
       },
+      can_close = function()
+        return true
+      end,
       close = function()
         close_calls = close_calls + 1
       end,
@@ -210,6 +213,19 @@ describe("diffview.actions goto_file command routing", function()
   it("goto_file_edit_close does not close or dispose when no file is inferred", function()
     mock_view.infer_cur_file = function()
       return nil
+    end
+    actions.goto_file_edit_close()
+    eq(0, #cmds_issued)
+    eq(0, close_calls)
+    eq(0, #disposed_views)
+  end)
+
+  -- Pre-flight gate: an aborted close must not navigate first, otherwise the
+  -- user is stranded in the target file with the diffview still open. See the
+  -- fix that introduced `DiffView:can_close()`.
+  it("goto_file_edit_close aborts before navigating when can_close returns false", function()
+    mock_view.can_close = function()
+      return false
     end
     actions.goto_file_edit_close()
     eq(0, #cmds_issued)

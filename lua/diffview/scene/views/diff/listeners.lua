@@ -14,6 +14,43 @@ local await = async.await
 
 ---@param view DiffView
 return function(view)
+  -- Re-arm `auto_close_on_empty` retry after a deferred close. Set when the
+  -- guarded close aborts (dirty stage buffer); cleared when the retry either
+  -- succeeds or no longer applies (working/conflicting non-empty).
+  local auto_close_pending = false
+
+  ---Run the `auto_close_on_empty` policy. Closes the view when there are no
+  ---working/conflicting entries left and stage buffers are clean. If the
+  ---guarded close aborts, set the retry flag so the next stage save (via
+  ---`buf_write_post`) re-evaluates.
+  ---
+  ---When `silent` is true, the dirty-stage gate is pre-checked and the close
+  ---call is skipped if it would fail. The BufWritePost retry path uses this
+  ---to avoid re-warning on every save: the autocmd fires globally without
+  ---buffer context, so unrelated saves would otherwise repeatedly trip the
+  ---gate while a stage buffer stays dirty.
+  ---@param silent? boolean
+  local function maybe_auto_close(silent)
+    if not config.get_config().auto_close_on_empty then
+      auto_close_pending = false
+      return
+    end
+    if #view.files.working ~= 0 or #view.files.conflicting ~= 0 then
+      auto_close_pending = false
+      return
+    end
+    if silent and #view:_modified_stage_paths() > 0 then
+      auto_close_pending = true
+      return
+    end
+    if view:close({ force = false }) ~= false then
+      auto_close_pending = false
+      lib.dispose_view(view)
+    else
+      auto_close_pending = true
+    end
+  end
+
   return {
     tab_enter = function()
       local file = view.panel.cur_file
@@ -42,12 +79,36 @@ return function(view)
       end
     end,
     buf_write_post = function()
+      -- Saving a stage buffer clears the dirty flag that aborted a previous
+      -- guarded auto-close; retry afterwards so `auto_close_on_empty` doesn't
+      -- strand the user in an empty view. Use the silent path: the original
+      -- action already warned when the close was first deferred, and
+      -- BufWritePost fires for every save (any buffer, any tab), so a
+      -- non-silent retry would re-warn on every unrelated save until the
+      -- stage buffer is finally saved.
+      --
+      -- The retry must run *after* the `update_files` refresh so a save that
+      -- reintroduces working/conflicting entries (e.g. user edited a tracked
+      -- file) is reflected in `view.files` before the gate is re-evaluated;
+      -- otherwise the close would fire against pre-refresh state.
+      local function retry_auto_close()
+        if auto_close_pending then
+          maybe_auto_close(true)
+        end
+      end
+
       if view.adapter:has_local(view.left, view.right) then
         view.update_needed = true
         if api.nvim_get_current_tabpage() == view.tabpage then
-          view:update_files()
+          view:update_files(nil, retry_auto_close)
+          return
         end
       end
+
+      -- No refresh scheduled (different tabpage, or this view's range doesn't
+      -- track local). The file list can't change from this save, so a sync
+      -- retry is safe.
+      retry_auto_close()
     end,
     file_open_new = function(_, entry)
       actions.jump_to_first_change(view)
@@ -66,7 +127,7 @@ return function(view)
         -- own close listener should handle it.
         local win_conf = api.nvim_win_get_config(0)
         if win_conf.relative == "" then
-          view:close()
+          view:close({ force = false })
         end
       end
     end,
@@ -327,13 +388,7 @@ return function(view)
         nil,
         vim.schedule_wrap(function()
           view.panel:highlight_cur_file()
-          -- Auto-close if all working/conflicting files have been staged.
-          if config.get_config().auto_close_on_empty then
-            if #view.files.working == 0 and #view.files.conflicting == 0 then
-              view:close()
-              lib.dispose_view(view)
-            end
-          end
+          maybe_auto_close()
         end)
       )
       view.emitter:emit(EventName.FILES_STAGED, view)
@@ -353,13 +408,7 @@ return function(view)
 
         view:update_files(nil, function()
           view.panel:highlight_cur_file()
-          -- Auto-close if all working/conflicting files have been staged.
-          if config.get_config().auto_close_on_empty then
-            if #view.files.working == 0 and #view.files.conflicting == 0 then
-              view:close()
-              lib.dispose_view(view)
-            end
-          end
+          maybe_auto_close()
         end)
         view.emitter:emit(EventName.FILES_STAGED, view)
       end

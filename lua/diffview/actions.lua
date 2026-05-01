@@ -213,6 +213,17 @@ end
 ---and closing the diffview tab leaves you on that new tabpage.
 function M.goto_file_edit_close()
   local view = lib.get_current_view()
+
+  -- Pre-flight the guarded close before navigating: the action's contract is
+  -- "navigate and close", so an aborted close after a successful navigation
+  -- would leave the user on the target file with the diffview still open.
+  if view and view:instanceof(DiffView.__get()) then
+    ---@cast view DiffView
+    if not view:can_close({ force = false }) then
+      return
+    end
+  end
+
   if not open_goto_file({ target_tab = true, target_tab_cmd = "edit", cmd = "tabnew" }) then
     return
   end

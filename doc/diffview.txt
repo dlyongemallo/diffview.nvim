@@ -24,7 +24,9 @@ compares against the index.
 You can have multiple Diffviews open, tracking different git revs. Each Diffview
 opens in its own tabpage. To close and dispose of a Diffview, call
 `:DiffviewClose`, `:DiffviewToggle`, or `:tabclose` while a Diffview is the
-current tabpage.
+current tabpage. `:DiffviewClose` and `:DiffviewToggle` abort if any stage
+buffer has unsaved edits; use `:DiffviewClose!` to discard them, or `:write`
+the buffer first to apply them to the index.
 Diffviews are automatically updated:
 
         • Every time you enter a Diffview
@@ -404,14 +406,19 @@ COMMANDS                                        *diffview-commands*
                 Exclude commits touching files as specified in the {pattern}.
 
                                                 *:DiffviewClose*
-:DiffviewClose          Close the active Diffview.
+:DiffviewClose[!]       Close the active Diffview. Aborts with an error if
+                        any stage diff buffer has unsaved edits (mirrors
+                        Vim's `:bd` / `:q` behaviour). Use `!` to force the
+                        close and discard those edits, or `:write` the
+                        buffer first to apply them to the index.
 
                                                 *:DiffviewToggle*
 :DiffviewToggle [git-rev] [options] [ -- {paths...}]
 
         Alias for `:DiffviewOpen` when the current tabpage is not a Diffview,
-        otherwise acts as an alias for `:DiffviewClose`. Accepts the same
-        arguments as `:DiffviewOpen`.
+        otherwise acts as an alias for `:DiffviewClose` (subject to the same
+        unsaved-stage-edit guard; use `:DiffviewClose!` to force-close past
+        it). Accepts the same arguments as `:DiffviewOpen`.
 
                                                 *:DiffviewToggleFiles*
 :DiffviewToggleFiles    Toggles the file panel.

@@ -116,6 +116,9 @@ local LayoutMode = oop.enum({
   VERTICAL = 2,
 })
 
+---@class diffview.View.CloseOpts
+---@field force? boolean
+
 ---@class View : diffview.Object
 ---@field tabpage integer
 ---@field emitter EventEmitter
@@ -187,7 +190,10 @@ function View:open()
   DiffviewGlobal.emitter:emit("view_enter", self)
 end
 
-function View:close()
+---@param opts? diffview.View.CloseOpts # Forwarded to subclass overrides; ignored at the base level.
+---@return boolean? closed # `false` if a subclass aborted the close.
+---@diagnostic disable-next-line: unused-local
+function View:close(opts)
   self.closing:send()
 
   if self.tabpage and api.nvim_tabpage_is_valid(self.tabpage) then
