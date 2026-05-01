@@ -56,7 +56,6 @@ local pl = lazy.access(utils, "path") ---@type PathLib
 ---@field options fun()
 ---@field prev_entry fun()
 ---@field prev_entry_in_commit fun()
----@field refresh_files fun()
 ---@field restore_entry fun()
 ---@field select_entry fun()
 ---@field select_next_entry fun()
@@ -95,6 +94,7 @@ local pl = lazy.access(utils, "path") ---@type PathLib
 ---@field open_in_new_tab fun()
 ---@field prev_conflict fun(): diffview.ConflictCount?
 ---@field prev_inline_hunk fun()
+---@field refresh_files fun(opts?: DiffviewRefreshFilesOpts)
 ---@field scroll_view fun(distance: number): fun()
 ---@field set_layout fun(layout_name: LayoutName): fun()
 ---@field view_windo fun(cmd: string|fun(layout_name: string, symbol: string)): fun()
@@ -935,6 +935,23 @@ function M.set_layout(layout_name)
   end
 end
 
+---@class DiffviewRefreshFilesOpts
+---@field force? boolean Force-reload stage diff buffers, discarding unsaved edits.
+
+---Refresh the file list for the current view.
+---
+---With `opts.force = true`, entries that include a STAGE buffer are destroyed
+---and recreated rather than updated in place, discarding any unsaved edits in
+---those buffers (parity with vim-fugitive's `:edit!` for the staged buffer).
+---Only entries with a STAGE-rev side are affected; LOCAL working-tree buffers
+---are left alone (use `:edit!` on them via the standard Vim mechanism). Without
+---the flag, `refresh_files` is a no-op for stage buffers whose index entry
+---hasn't changed (the default `R` behaviour).
+---@param opts? DiffviewRefreshFilesOpts
+function M.refresh_files(opts)
+  require("diffview").emit("refresh_files", opts)
+end
+
 ---@param keymap_groups string|string[]
 ---@return fun()
 function M.help(keymap_groups)
@@ -1039,7 +1056,6 @@ local action_names = {
   "options",
   "prev_entry",
   "prev_entry_in_commit",
-  "refresh_files",
   "restore_entry",
   "select_entry",
   "select_next_entry",

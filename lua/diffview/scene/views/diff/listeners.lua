@@ -322,16 +322,19 @@ return function(view)
         end
       end
 
-      view:update_files(vim.schedule_wrap(function()
-        view.panel:highlight_cur_file()
-        -- Auto-close if all working/conflicting files have been staged.
-        if config.get_config().auto_close_on_empty then
-          if #view.files.working == 0 and #view.files.conflicting == 0 then
-            view:close()
-            lib.dispose_view(view)
+      view:update_files(
+        nil,
+        vim.schedule_wrap(function()
+          view.panel:highlight_cur_file()
+          -- Auto-close if all working/conflicting files have been staged.
+          if config.get_config().auto_close_on_empty then
+            if #view.files.working == 0 and #view.files.conflicting == 0 then
+              view:close()
+              lib.dispose_view(view)
+            end
           end
-        end
-      end))
+        end)
+      )
       view.emitter:emit(EventName.FILES_STAGED, view)
     end,
     stage_all = function()
@@ -347,7 +350,7 @@ return function(view)
           return
         end
 
-        view:update_files(function()
+        view:update_files(nil, function()
           view.panel:highlight_cur_file()
           -- Auto-close if all working/conflicting files have been staged.
           if config.get_config().auto_close_on_empty then
@@ -481,8 +484,8 @@ return function(view)
     toggle_files = function()
       view.panel:toggle(true)
     end,
-    refresh_files = function()
-      view:update_files()
+    refresh_files = function(_, opts)
+      view:update_files(opts)
     end,
     open_all_folds = function()
       if not view.panel:is_focused() or view.panel.listing_style ~= "tree" then

@@ -25,6 +25,7 @@ local logger = DiffviewGlobal.logger
 local pl = lazy.access(utils, "path") ---@type PathLib
 
 local rev_lib = lazy.require("diffview.vcs.rev") ---@module "diffview.vcs.rev"
+local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
 
 local M = {}
 
@@ -489,13 +490,20 @@ function DiffView:_should_focus_diff(next_file)
   return view_conf.focus_diff
 end
 
----Update the file list, including stats and status for all files.
-DiffView.update_files = debounce.debounce_trailing(
+-- Update the file list, including stats and status for all files.
+--
+-- When `opts.force` is true, entries that would otherwise be updated in place
+-- are replaced (destroyed and recreated) when they include a STAGE-rev side,
+-- discarding any unsaved edits in those stage buffers. This powers
+-- `actions.refresh_files({ force = true })`. LOCAL working-tree buffers are
+-- unaffected.
+local update_files_impl = debounce.debounce_trailing(
   100,
   true,
   ---@param self DiffView
+  ---@param opts { force?: boolean }?
   ---@param callback fun(err?: string[])
-  async.wrap(function(self, callback)
+  async.wrap(function(self, opts, callback)
     -- Never update if the view is closing (prevents coroutine failure from race conditions).
     if self.closing:check() then
       callback({ "The update was cancelled." })
@@ -595,6 +603,23 @@ DiffView.update_files = debounce.debounce_trailing(
           -- Guard against nil entries that can occur during async race conditions (#395).
           if old_file and new_file then
             local replace_noop = self.adapter:force_entry_refresh_on_noop(self.left, self.right)
+
+            -- Force-refresh recreates buffers for entries that include a
+            -- STAGE-rev side. STAGE buffers are diffview-virtual: edits to
+            -- them only apply to the index when the user runs `:write`, so
+            -- discarding unsaved edits here matches the documented
+            -- semantics of `actions.refresh_files({ force = true })`.
+            -- LOCAL buffers are intentionally excluded (the user can
+            -- `:edit!` them via the standard Vim mechanism), and
+            -- COMMIT/HEAD buffers have no editable state to drop.
+            if not replace_noop and opts.force then
+              for _, f in ipairs(old_file.layout:files()) do
+                if f.rev.type == RevType.STAGE then
+                  replace_noop = true
+                  break
+                end
+              end
+            end
 
             -- Even with a stable path, rev endpoints can change on refresh
             -- (e.g. symbolic revs like `master...@`). Replace the entry so
@@ -772,6 +797,23 @@ DiffView.update_files = debounce.debounce_trailing(
     callback()
   end)
 )
+
+---Refresh the file list. See `update_files_impl` above for the heavy lifting.
+---
+---Normalizes args so legacy `update_files(callback)` callers don't trip the
+---new `(opts, callback)` shape: a function in the `opts` slot is treated as
+---the callback, and any non-table `opts` is coerced to an empty table.
+---@param opts? { force?: boolean }|fun(err?: string[])
+---@param callback? fun(err?: string[])
+function DiffView:update_files(opts, callback)
+  if type(opts) == "function" and callback == nil then
+    opts, callback = nil, opts
+  end
+  if type(opts) ~= "table" then
+    opts = {}
+  end
+  return update_files_impl(self, opts, callback)
+end
 
 ---Ensures there are files to load, and loads the null buffer otherwise.
 ---@return boolean
