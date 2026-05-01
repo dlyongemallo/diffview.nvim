@@ -873,6 +873,19 @@ view.inline                                     *diffview-config-view.inline*
                       deletions (default: `DiffDelete` colours +
                       `strikethrough`; override with |:hi| to customise).
 
+            {deletion_highlight} ("text"|"full_width"|"hanging")
+                How far the |hl-DiffDelete| background extends on the
+                virtual lines used to render deletions. Default:
+                `"text"`.
+
+                • `"text"`: the highlight covers exactly the deleted
+                  characters.
+                • `"full_width"`: the background spans the row (matching
+                  `diff2_horizontal`'s native |hl-DiffDelete| look).
+                • `"hanging"`: leading whitespace is emitted without a
+                  highlight; the rest of the row carries
+                  |hl-DiffDelete|.
+
 file_panel                                      *diffview-config-file_panel*
         Type: `table`, Default: (see defaults)
 

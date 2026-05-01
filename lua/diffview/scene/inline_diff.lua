@@ -24,6 +24,15 @@ local M = {}
 
 M.ns = api.nvim_create_namespace("diffview_inline_diff")
 
+-- Upper bound on the padded width used by `deletion_highlight = "full_width"`.
+-- The actual pad target is `min(vim.o.columns, DELETION_HL_WIDTH_CAP)`. The
+-- editor-wide `vim.o.columns` is an upper bound on any window's text area,
+-- and this cap guards against pathological `:set columns=…` values that
+-- would allocate huge space strings per virt_line. Virt_lines past a
+-- window's edge are clipped, so over-padding within reasonable bounds is
+-- free.
+local DELETION_HL_WIDTH_CAP = 250
+
 -- Iterate over UTF-8 characters in `s`. Each step yields the character
 -- substring, its 0-indexed byte offset, and its byte length. Pure-Lua O(n)
 -- traversal: avoids the quadratic cost of `vim.fn.strcharpart(s, i, 1)` in
@@ -455,7 +464,15 @@ local function render_char_highlights(bufnr, new_row, old_line, new_line, inline
   return "ok"
 end
 
--- Attach a block of deleted lines as virtual lines near `new_start`.
+-- Attach a block of deleted lines as virtual lines near `new_start`. The
+-- `extent` argument controls how far the `del_hl` background reaches:
+--   • `"text"`:       only the deleted characters carry `del_hl`.
+--   • `"full_width"`: append a space-padded chunk under `del_hl` so the
+--                     highlight spans the row (matching
+--                     `diff2_horizontal`'s native `DiffDelete` look). Pad
+--                     target is `min(vim.o.columns, DELETION_HL_WIDTH_CAP)`.
+--   • `"hanging"`:    leading whitespace is emitted unhighlighted; the
+--                     remainder of the line carries `del_hl`.
 ---@param bufnr integer
 ---@param old_lines string[]
 ---@param old_from integer 1-based start index into `old_lines`.
@@ -464,6 +481,7 @@ end
 ---@param anchor_row? integer 0-indexed row to attach to; default `new_start - 1`.
 ---@param above? boolean Default: `new_start == 0`.
 ---@param del_hl? string Highlight group for the deleted text. Default: `DiffviewDiffDelete`.
+---@param extent? "text"|"full_width"|"hanging" Default: `"text"`.
 local function render_deleted_block(
   bufnr,
   old_lines,
@@ -472,15 +490,45 @@ local function render_deleted_block(
   new_start,
   anchor_row,
   above,
-  del_hl
+  del_hl,
+  extent
 )
   del_hl = del_hl or "DiffviewDiffDelete"
+  extent = extent or "text"
   local virt_lines = {}
-  for k = old_from, old_to do
-    virt_lines[#virt_lines + 1] = {
-      { old_lines[k] or "", del_hl },
-    }
-  end
+  -- `strdisplaywidth` reads `tabstop` from the current buffer; evaluate
+  -- widths against `bufnr` so tab-bearing deletions pad correctly when
+  -- the caller's current buffer differs.
+  api.nvim_buf_call(bufnr, function()
+    for k = old_from, old_to do
+      local text = old_lines[k] or ""
+      local chunks
+      if extent == "full_width" then
+        chunks = { { text, del_hl } }
+        local pad = math.min(vim.o.columns, DELETION_HL_WIDTH_CAP) - vim.fn.strdisplaywidth(text)
+        if pad > 0 then
+          chunks[#chunks + 1] = { string.rep(" ", pad), del_hl }
+        end
+      elseif extent == "hanging" then
+        local indent, rest = text:match("^(%s*)(.*)$")
+        if rest ~= "" then
+          chunks = {}
+          if indent ~= "" then
+            chunks[#chunks + 1] = { indent }
+          end
+          chunks[#chunks + 1] = { rest, del_hl }
+        else
+          -- Empty or all-whitespace line: no "rest" to highlight without
+          -- making the row invisible. Fall back to highlighting the whole
+          -- line so the deletion stays visible.
+          chunks = { { text, del_hl } }
+        end
+      else
+        chunks = { { text, del_hl } }
+      end
+      virt_lines[#virt_lines + 1] = chunks
+    end
+  end)
 
   if #virt_lines == 0 then
     return
@@ -815,6 +863,7 @@ end
 ---@field ignore_whitespace_change_at_eol? boolean
 ---@field ignore_blank_lines? boolean
 ---@field style? "unified"|"overleaf" Default: `"unified"`.
+---@field deletion_highlight? "text"|"full_width"|"hanging" Extent of the `del_hl` background on virt_line deletions. Default: `"text"`.
 
 ---@class InlineDiffStyle
 ---@field del_hl string Highlight group for virt_line deletions.
@@ -852,6 +901,7 @@ local STYLES = {
 function M.render(bufnr, old_lines, new_lines, opts)
   opts = opts or {}
   local style = STYLES[opts.style] or STYLES.unified
+  local extent = opts.deletion_highlight or "text"
   M.clear(bufnr)
 
   if not api.nvim_buf_is_valid(bufnr) then
@@ -930,7 +980,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
         new_start,
         nil,
         nil,
-        style.del_hl
+        style.del_hl,
+        extent
       )
     elseif old_count > 0 and new_count > 0 then
       -- Modification: unified and overleaf diverge on how deletions are
@@ -949,7 +1000,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
           new_start,
           new_start - 1,
           true,
-          style.del_hl
+          style.del_hl,
+          extent
         )
       elseif old_count > paired then
         -- Overleaf: overflow old lines still get a virt_line above.
@@ -962,7 +1014,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
           new_start,
           anchor,
           false,
-          style.del_hl
+          style.del_hl,
+          extent
         )
       end
 
@@ -998,7 +1051,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
             new_start + k,
             row,
             true,
-            "DiffviewDiffDelete"
+            "DiffviewDiffDelete",
+            extent
           )
         end
       end

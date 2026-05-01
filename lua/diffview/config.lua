@@ -347,11 +347,14 @@ M.defaults = {
     },
 
     ---@alias DiffviewInlineStyle "unified"|"overleaf"
+    ---@alias DiffviewInlineDeletionHighlight "text"|"full_width"|"hanging"
     ---@class DiffviewInlineConfig
     ---@field style DiffviewInlineStyle
+    ---@field deletion_highlight DiffviewInlineDeletionHighlight
 
     ---@class DiffviewInlineConfig.user
     ---@field style? DiffviewInlineStyle Rendering style for `diff1_inline`. "unified" shows old lines as virt_lines above; "overleaf" renders deletions as inline strikethrough virt_text.
+    ---@field deletion_highlight? DiffviewInlineDeletionHighlight Extent of the `DiffDelete` background on deleted virt_lines: `"text"` covers only the deleted chars, `"full_width"` pads to the row, `"hanging"` covers everything except the leading indent.
     -- Options specific to the `diff1_inline` layout.
     inline = {
       -- Rendering style. "unified": proper unified diff — old lines shown
@@ -359,6 +362,13 @@ M.defaults = {
       -- "overleaf": deleted chars on modified lines rendered inline as
       -- strikethrough virtual text (Overleaf-editor style); no block echo.
       style = "unified",
+      -- How far the `DiffDelete` background extends on deleted virt_lines:
+      --   "text":       just the deleted characters.
+      --   "full_width": highlight the row, which matches `diff2_horizontal`'s
+      --                 native look.
+      --   "hanging":    skip the leading indent, then highlight the rest of
+      --                 the row.
+      deletion_highlight = "text",
     },
   },
 
@@ -1182,6 +1192,18 @@ function M.setup(user_config)
         )
       )
       view.inline.style = M.defaults.view.inline.style
+    end
+    local valid_deletion_hl = { "text", "full_width", "hanging" }
+    if view.inline.deletion_highlight == nil then
+      view.inline.deletion_highlight = M.defaults.view.inline.deletion_highlight
+    elseif not vim.tbl_contains(valid_deletion_hl, view.inline.deletion_highlight) then
+      utils.err(
+        ("Invalid value '%s' for 'view.inline.deletion_highlight'! Must be one of (%s)."):format(
+          view.inline.deletion_highlight,
+          fmt_enum(valid_deletion_hl)
+        )
+      )
+      view.inline.deletion_highlight = M.defaults.view.inline.deletion_highlight
     end
   end
 

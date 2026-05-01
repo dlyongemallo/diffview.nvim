@@ -366,6 +366,131 @@ describe("diffview.scene.inline_diff", function()
     end)
   end)
 
+  describe("deletion_highlight", function()
+    local function virt_line_chunks(marks)
+      local out = {}
+      for _, m in ipairs(marks) do
+        if m[4] and m[4].virt_lines then
+          for _, line in ipairs(m[4].virt_lines) do
+            out[#out + 1] = line
+          end
+        end
+      end
+      return out
+    end
+
+    -- The cap value mirrors `DELETION_HL_WIDTH_CAP` in `inline_diff.lua`.
+    -- Kept as a literal so a drift in the source value is caught here.
+    local FULL_WIDTH_CAP = 250
+
+    it("'full_width' appends a padding chunk under the same hl, sized by display width", function()
+      -- Tab + "hi" with tabstop=4 = 6 display cells; padding fills out
+      -- the rest of `vim.o.columns`. `nvim_buf_call` ensures
+      -- `strdisplaywidth` reads the target buffer's tabstop even when
+      -- the active buffer differs.
+      local target = fresh_buf({ "tail" })
+      vim.api.nvim_set_option_value("tabstop", 4, { buf = target })
+      local other = fresh_buf({ "" })
+      vim.api.nvim_set_option_value("tabstop", 8, { buf = other })
+      api.nvim_win_set_buf(api.nvim_get_current_win(), other)
+
+      inline_diff.render(
+        target,
+        { "\thi", "tail" },
+        { "tail" },
+        { deletion_highlight = "full_width" }
+      )
+
+      local lines = virt_line_chunks(extmarks(target))
+      assert.are.equal(1, #lines)
+      local chunks = lines[1]
+      assert.are.equal(2, #chunks)
+      assert.are.equal("DiffviewDiffDelete", chunks[1][2])
+      assert.are.equal("DiffviewDiffDelete", chunks[2][2])
+      assert.are.equal(math.min(vim.o.columns, FULL_WIDTH_CAP) - 6, #chunks[2][1])
+    end)
+
+    it("'full_width' pads in overleaf style under the overleaf del_hl", function()
+      local bufnr = fresh_buf({ "alpha" })
+      inline_diff.render(
+        bufnr,
+        { "xyz", "pqr" },
+        { "alpha" },
+        { style = "overleaf", deletion_highlight = "full_width" }
+      )
+
+      local lines = virt_line_chunks(extmarks(bufnr))
+      assert.is_true(#lines > 0)
+      for _, chunks in ipairs(lines) do
+        -- Every virt_line must carry both a text chunk and a padding chunk
+        -- under the overleaf del_hl so the background stays consistent.
+        assert.are.equal(2, #chunks)
+        for _, chunk in ipairs(chunks) do
+          assert.are.equal("DiffviewDiffDeleteInline", chunk[2])
+        end
+      end
+    end)
+
+    it("'text' emits a single chunk covering only the deleted characters", function()
+      local bufnr = fresh_buf({ "tail" })
+      inline_diff.render(bufnr, { "deleted", "tail" }, { "tail" }, { deletion_highlight = "text" })
+
+      local lines = virt_line_chunks(extmarks(bufnr))
+      assert.are.equal(1, #lines)
+      local chunks = lines[1]
+      assert.are.equal(1, #chunks)
+      assert.are.equal("deleted", chunks[1][1])
+      assert.are.equal("DiffviewDiffDelete", chunks[1][2])
+    end)
+
+    it("'hanging' splits leading whitespace off the highlight", function()
+      local bufnr = fresh_buf({ "tail" })
+      inline_diff.render(
+        bufnr,
+        { "  indented", "tail" },
+        { "tail" },
+        { deletion_highlight = "hanging" }
+      )
+
+      local lines = virt_line_chunks(extmarks(bufnr))
+      assert.are.equal(1, #lines)
+      local chunks = lines[1]
+      assert.are.equal(2, #chunks)
+      -- Leading whitespace chunk: no hl_group set (single-element chunk).
+      assert.are.equal("  ", chunks[1][1])
+      assert.is_nil(chunks[1][2])
+      -- Remainder gets the deletion highlight.
+      assert.are.equal("indented", chunks[2][1])
+      assert.are.equal("DiffviewDiffDelete", chunks[2][2])
+    end)
+
+    it("'hanging' on a non-indented line emits the whole text under del_hl", function()
+      local bufnr = fresh_buf({ "tail" })
+      inline_diff.render(bufnr, { "plain", "tail" }, { "tail" }, { deletion_highlight = "hanging" })
+
+      local lines = virt_line_chunks(extmarks(bufnr))
+      assert.are.equal(1, #lines)
+      local chunks = lines[1]
+      assert.are.equal(1, #chunks)
+      assert.are.equal("plain", chunks[1][1])
+      assert.are.equal("DiffviewDiffDelete", chunks[1][2])
+    end)
+
+    it("'hanging' on an all-whitespace line still highlights the row", function()
+      -- Defensive fallback: a deleted blank/all-whitespace line must remain
+      -- visible as a deletion rather than collapsing to a zero-chunk virt_line.
+      local bufnr = fresh_buf({ "tail" })
+      inline_diff.render(bufnr, { "   ", "tail" }, { "tail" }, { deletion_highlight = "hanging" })
+
+      local lines = virt_line_chunks(extmarks(bufnr))
+      assert.are.equal(1, #lines)
+      local chunks = lines[1]
+      assert.are.equal(1, #chunks)
+      assert.are.equal("   ", chunks[1][1])
+      assert.are.equal("DiffviewDiffDelete", chunks[1][2])
+    end)
+  end)
+
   describe("hunk navigation", function()
     -- Set up a buffer with three discontiguous hunks: pure add at top,
     -- change in the middle, and pure deletion at the end.

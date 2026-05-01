@@ -164,6 +164,7 @@ local function render_opts()
   local opts = effective_diffopt()
   local inline_opt = config.get_config().view.inline or {}
   opts.style = inline_opt.style
+  opts.deletion_highlight = inline_opt.deletion_highlight
   return opts
 end
 

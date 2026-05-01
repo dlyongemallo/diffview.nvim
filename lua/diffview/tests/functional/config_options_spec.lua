@@ -186,3 +186,40 @@ describe("view.inline.style", function()
     assert.equals("unified", conf.view.inline.style)
   end)
 end)
+
+describe("view.inline.deletion_highlight", function()
+  local original
+  local utils = require("diffview.utils")
+  local orig_err
+
+  before_each(function()
+    original = vim.deepcopy(config.get_config())
+    orig_err = utils.err
+    utils.err = function() end
+  end)
+
+  after_each(function()
+    config.setup(original)
+    utils.err = orig_err
+  end)
+
+  it("defaults to 'text'", function()
+    local conf = setup_with({})
+    assert.equals("text", conf.view.inline.deletion_highlight)
+  end)
+
+  it("accepts 'full_width'", function()
+    local conf = setup_with({ view = { inline = { deletion_highlight = "full_width" } } })
+    assert.equals("full_width", conf.view.inline.deletion_highlight)
+  end)
+
+  it("accepts 'hanging'", function()
+    local conf = setup_with({ view = { inline = { deletion_highlight = "hanging" } } })
+    assert.equals("hanging", conf.view.inline.deletion_highlight)
+  end)
+
+  it("rejects unknown values and falls back to the default", function()
+    local conf = setup_with({ view = { inline = { deletion_highlight = "bogus" } } })
+    assert.equals("text", conf.view.inline.deletion_highlight)
+  end)
+end)
