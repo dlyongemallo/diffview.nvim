@@ -92,7 +92,7 @@ and committing workflows.
 | `:DiffviewClose` | Close the current diffview. You can also use `:tabclose`. |
 | `:DiffviewToggleFiles` | Toggle the file panel |
 | `:DiffviewFocusFiles` | Bring focus to the file panel |
-| `:DiffviewRefresh` | Update stats and entries in the file list |
+| `:DiffviewRefresh[!]` | Update stats and entries in the file list (with `!`, also force-reload stage diff buffers) |
 
 Examples:
 

@@ -54,8 +54,8 @@ command("DiffviewToggleFiles", function()
   diffview.emit("toggle_files")
 end, { nargs = 0 })
 
-command("DiffviewRefresh", function()
-  diffview.emit("refresh_files")
+command("DiffviewRefresh", function(ctx)
+  diffview.emit("refresh_files", ctx.bang and { force = true } or nil)
 end, { nargs = 0, bang = true })
 
 command("DiffviewLog", function()

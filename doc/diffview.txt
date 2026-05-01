@@ -420,8 +420,13 @@ COMMANDS                                        *diffview-commands*
 :DiffviewFocusFiles     Brings focus to the file panel. Opens it if it's closed.
 
                                                 *:DiffviewRefresh*
-:DiffviewRefresh        Update stats and entries in the file list of the
-                        current Diffview.
+:DiffviewRefresh[!]     Update stats and entries in the file list of the
+                        current Diffview. With `!`, also force-reload stage
+                        diff buffers, discarding any unsaved edits in them
+                        (parity with vim-fugitive's `:edit!`). Equivalent to
+                        `actions.refresh_files({ force = true })`. LOCAL
+                        working-tree buffers are unaffected; use Vim's
+                        `:edit!` on them via the standard mechanism.
 
                                                 *:DiffviewLog*
 :DiffviewLog            Open the debug log.
@@ -1582,13 +1587,14 @@ refresh_files                                   *diffview-actions-refresh_files*
         whose underlying index entry hasn't changed are not reloaded, which
         means in-buffer edits to a stage buffer survive across refreshes.
 
-        When called as `actions.refresh_files({ force = true })`, entries
-        that include a STAGE-rev side are destroyed and recreated, discarding
-        any unsaved edits in those stage buffers (parity with vim-fugitive's
-        `:edit!`). LOCAL working-tree buffers are left alone; use Vim's
-        `:edit!` on them via the standard mechanism. Useful when staging
-        hunks has left a stage buffer in an unintended state and you want
-        to reset it to whatever the index currently holds.
+        When called as `actions.refresh_files({ force = true })` (or via
+        |:DiffviewRefresh|!), entries that include a STAGE-rev side are
+        destroyed and recreated, discarding any unsaved edits in those stage
+        buffers (parity with vim-fugitive's `:edit!`). LOCAL working-tree
+        buffers are left alone; use Vim's `:edit!` on them via the standard
+        mechanism. Useful when staging hunks has left a stage buffer in an
+        unintended state and you want to reset it to whatever the index
+        currently holds.
 
 restore_entry                                   *diffview-actions-restore_entry*
         Contexts: `view`, `panel`
@@ -2069,11 +2075,12 @@ X                       Revert the selected file entry to the state from the
                         again.
 
                                                 *diffview-maps-refresh_files*
-R                       Update the stats and entries in the file list. Pass
-                        `{ force = true }` (e.g. by binding a separate key to
-                        `actions.refresh_files({ force = true })`) to also
-                        force-reload stage buffers, discarding any unsaved
-                        edits in them.
+R                       Update the stats and entries in the file list. To
+                        also force-reload stage buffers (discarding any
+                        unsaved edits in them), run |:DiffviewRefresh|! or
+                        bind a separate key to
+                        `actions.refresh_files({ force = true })` via
+                        |diffview-config-keymaps|.
 
 <Tab>                   Open the diff for the next file.
 
