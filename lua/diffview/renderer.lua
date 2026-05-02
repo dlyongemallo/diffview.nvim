@@ -15,7 +15,7 @@ M.last_draw_time = 0
 ---@field last integer Exclusive
 
 ---@class renderer.HlList
----@field offset integer
+---@field offset? integer
 ---@field [integer] renderer.HlData
 
 ---@class CompStruct
@@ -449,7 +449,7 @@ end
 
 ---@param line_idx integer
 ---@param lines string[]
----@param hl_data renderer.HlData[]
+---@param hl_data renderer.HlList[]
 ---@param component RenderComponent
 ---@return integer
 local function process_component(line_idx, lines, hl_data, component)

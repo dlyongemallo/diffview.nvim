@@ -1,7 +1,7 @@
 local lazy = require("diffview.lazy")
 
 local Job = lazy.access("diffview.job", "Job") ---@type diffview.Job|LazyModule
-local logger = lazy.access(_G, { "DiffviewGlobal", "logger" }) ---@type Logger
+local logger = lazy.access(_G, { "DiffviewGlobal", "logger" }) --[[@as Logger ]]
 
 local api = vim.api
 
@@ -13,10 +13,9 @@ local M = {}
 
 local path_sep = package.config:sub(1, 1)
 
----@type PathLib
 M.path = lazy.require("diffview.path", function(module)
   return module.PathLib({ separator = "/" })
-end)
+end) --[[@as PathLib ]]
 
 ---@return number # Current time (ms)
 function M.now()
@@ -276,9 +275,9 @@ function M.str_match(str, patterns)
 end
 
 ---@class utils.str_quote.Opt
----@field esc_fmt string Format string for escaping quotes. Passed to `string.format()`.
----@field prefer_single boolean Prefer single quotes.
----@field only_if_whitespace boolean Only quote the string if it contains whitespace.
+---@field esc_fmt? string Format string for escaping quotes. Passed to `string.format()`.
+---@field prefer_single? boolean Prefer single quotes.
+---@field only_if_whitespace? boolean Only quote the string if it contains whitespace.
 
 ---@param s string
 ---@param opt? utils.str_quote.Opt
@@ -315,13 +314,13 @@ function M.str_quote(s, opt)
 end
 
 ---@class utils.job.Opt
----@field cwd string Working directory of the job.
----@field writer string|string[] Something that will write to the stdin of this job.
----@field silent boolean Suppress log output.
----@field fail_on_empty boolean Return code 1 if stdout is empty.
----@field retry integer Number of times the job will be retried if it fails.
----@field timeout integer? Max duration in ms (default: 30000).
----@field log_opt Logger.log_job.Opt
+---@field cwd? string Working directory of the job.
+---@field writer? string|string[] Something that will write to the stdin of this job.
+---@field silent? boolean Suppress log output.
+---@field fail_on_empty? boolean Return code 1 if stdout is empty.
+---@field retry? integer Number of times the job will be retried if it fails.
+---@field timeout? integer Max duration in ms (default: 30000).
+---@field log_opt? Logger.log_job.Opt
 
 ---@param cmd string[]
 ---@param cwd_or_opt? string|utils.job.Opt
@@ -950,10 +949,10 @@ function M.buf_search(bufnr, pattern, opt)
 end
 
 ---@class ListBufsSpec
----@field loaded boolean Filter out buffers that aren't loaded.
----@field listed boolean Filter out buffers that aren't listed.
----@field no_hidden boolean Filter out buffers that are hidden.
----@field tabpage integer Filter out buffers that are not displayed in a given tabpage.
+---@field loaded? boolean Filter out buffers that aren't loaded.
+---@field listed? boolean Filter out buffers that aren't listed.
+---@field no_hidden? boolean Filter out buffers that are hidden.
+---@field tabpage? integer Filter out buffers that are not displayed in a given tabpage.
 
 ---@param opt? ListBufsSpec
 ---@return integer[]
@@ -1181,9 +1180,9 @@ function M.clear_prompt()
 end
 
 ---@class InputCharSpec
----@field clear_prompt boolean (default: true)
----@field allow_non_ascii boolean (default: true)
----@field prompt_hl string (default: nil)
+---@field clear_prompt? boolean (default: true)
+---@field allow_non_ascii? boolean (default: true)
+---@field prompt_hl? string (default: nil)
 
 ---@param prompt string
 ---@param opt InputCharSpec
@@ -1214,16 +1213,15 @@ function M.input_char(prompt, opt)
   end
 
   local s = type(c) == "number" and vim.fn.nr2char(c) or nil
-  ---@type string
-  local raw = type(c) == "number" and s or c
+  local raw = (type(c) == "number" and s or c) --[[@as string ]]
 
   return s, raw
 end
 
 ---@class InputSpec
----@field default string
----@field completion string|function
----@field cancelreturn string
+---@field default? string
+---@field completion? string|function
+---@field cancelreturn? string
 ---@field callback fun(response: string?)
 
 ---@param prompt string

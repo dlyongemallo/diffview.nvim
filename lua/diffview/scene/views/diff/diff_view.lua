@@ -22,14 +22,14 @@ local api = vim.api
 local await = async.await
 local fmt = string.format
 local logger = DiffviewGlobal.logger
-local pl = lazy.access(utils, "path") ---@type PathLib
+local pl = lazy.access(utils, "path") --[[@as PathLib ]]
 
 local rev_lib = lazy.require("diffview.vcs.rev") ---@module "diffview.vcs.rev"
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
 
 local M = {}
 
-local same_rev = lazy.access(rev_lib, "same_rev") ---@type fun(a: Rev?, b: Rev?): boolean
+local same_rev = lazy.access(rev_lib, "same_rev") --[[@as fun(a: Rev?, b: Rev?): boolean ]]
 
 ---@class DiffViewOptions
 ---@field show_untracked? boolean
@@ -95,7 +95,7 @@ function DiffView:post_open()
   })
 
   if config.get_config().watch_index and self.adapter:instanceof(GitAdapter.__get()) then
-    self.watcher = vim.uv.new_fs_poll()
+    self.watcher = assert(vim.uv.new_fs_poll(), "Failed to create fs poll handle!")
     self.watcher:start(
       self.adapter.ctx.dir .. "/index",
       1000,

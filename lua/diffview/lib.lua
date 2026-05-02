@@ -17,14 +17,14 @@ local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local api = vim.api
 local logger = DiffviewGlobal.logger
-local pl = lazy.access(utils, "path") ---@type PathLib
+local pl = lazy.access(utils, "path") --[[@as PathLib ]]
 
 local M = {}
 
 ---@type View[]
 M.views = {}
 
-local same_rev = lazy.access(rev_lib, "same_rev") ---@type fun(a: Rev?, b: Rev?): boolean
+local same_rev = lazy.access(rev_lib, "same_rev") --[[@as fun(a: Rev?, b: Rev?): boolean ]]
 
 ---Find an existing DiffView matching the given parameters.
 ---@param adapter VCSAdapter
@@ -66,7 +66,7 @@ function M.diffview_open(args)
   local err, adapter = vcs.get_adapter({
     cmd_ctx = {
       path_args = argo.post_args,
-      cpath = argo:get_flag("C", { no_empty = true, expand = true }),
+      cpath = argo:get_flag("C", { no_empty = true, expand = true }) --[[@as string? ]],
     },
   })
 
@@ -128,7 +128,7 @@ function M.file_history(range, args)
   local err, adapter = vcs.get_adapter({
     cmd_ctx = {
       path_args = argo.args,
-      cpath = argo:get_flag("C", { no_empty = true, expand = true }),
+      cpath = argo:get_flag("C", { no_empty = true, expand = true }) --[[@as string? ]],
     },
   })
 

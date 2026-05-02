@@ -3,7 +3,7 @@ local lazy = require("diffview.lazy")
 
 local EventName = lazy.access("diffview.events", "EventName") ---@type EventName|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
-local actions = lazy.require("diffview.actions") ---@module "diffview.actions"
+local actions = lazy.require("diffview.actions") --[[@as DiffviewActions ]]
 local config = lazy.require("diffview.config") ---@module "diffview.config"
 local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"

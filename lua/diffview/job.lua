@@ -35,7 +35,7 @@ local M = {}
 ---@field handle uv_process_t
 ---@field pid integer
 ---@field code integer
----@field signal integer
+---@field signal? integer|uv.aliases.signals
 ---@field p_out uv_pipe_t
 ---@field p_err uv_pipe_t
 ---@field p_in? uv_pipe_t
@@ -285,14 +285,11 @@ end
 Job.start = async.wrap(function(self, callback)
   self:reset()
 
-  self.p_out = uv.new_pipe(false)
-  self.p_err = uv.new_pipe(false)
-
-  assert(self.p_out and self.p_err, "Failed to create pipes!")
+  self.p_out = assert(uv.new_pipe(false), "Failed to create pipe!")
+  self.p_err = assert(uv.new_pipe(false), "Failed to create pipe!")
 
   if self.writer then
-    self.p_in = uv.new_pipe(false)
-    assert(self.p_in, "Failed to create pipes!")
+    self.p_in = assert(uv.new_pipe(false), "Failed to create pipe!")
   end
 
   self._started = true
@@ -365,7 +362,7 @@ Job.start = async.wrap(function(self, callback)
   end
 
   self.handle = handle
-  self.pid = pid
+  self.pid = pid --[[@as integer ]]
 
   self:handle_reader(self.p_out, self.stdout, "out")
   self:handle_reader(self.p_err, self.stderr, "err")

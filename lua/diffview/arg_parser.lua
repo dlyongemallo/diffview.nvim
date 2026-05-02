@@ -15,7 +15,7 @@ local long_flag_pat = { "^%-%-(%a[%a%d-]*)=?(.*)", "^%+%+(%a[%a%d-]*)=?(.*)" }
 local ArgObject = oop.create_class("ArgObject")
 
 ---ArgObject constructor.
----@param flags table<string, string>
+---@param flags table<string, string[]>
 ---@param args string[]
 function ArgObject:init(flags, args, post_args)
   self.flags = flags
@@ -24,11 +24,11 @@ function ArgObject:init(flags, args, post_args)
 end
 
 ---@class ArgObject.GetFlagSpec
----@field plain boolean Never cast string values to booleans.
----@field expect_list boolean Return a list of all defined values for the given flag.
----@field expect_string boolean Inferred boolean values are changed to be empty strings.
----@field no_empty boolean Return nil if the value is an empty string. Implies `expect_string`.
----@field expand boolean Expand wildcards and special keywords (`:h expand()`).
+---@field plain? boolean Never cast string values to booleans.
+---@field expect_list? boolean Return a list of all defined values for the given flag.
+---@field expect_string? boolean Inferred boolean values are changed to be empty strings.
+---@field no_empty? boolean Return nil if the value is an empty string. Implies `expect_string`.
+---@field expand? boolean Expand wildcards and special keywords (`:h expand()`).
 
 ---Get a flag value.
 ---@param names string|string[] Flag synonyms
@@ -75,7 +75,7 @@ function ArgObject:get_flag(names, opt)
 end
 
 ---@class FlagValueMap : diffview.Object
----@field map table<string, string[]>
+---@field map table<string, string[]|fun(name_lead: string, arg_lead: string): string[]>
 local FlagValueMap = oop.create_class("FlagValueMap")
 
 ---FlagValueMap constructor
@@ -118,7 +118,7 @@ function FlagValueMap:get(flag_name)
     return self.map[flag_name](flag_name .. (not is_short and "=" or ""), "")
   end
 
-  return self.map[flag_name]
+  return self.map[flag_name] --[[@as string[] ]]
 end
 
 ---Get a list of all flag names.
@@ -243,9 +243,9 @@ end
 ---@field between boolean # The current position is between two arguments.
 
 ---@class arg_parser.scan.Opt
----@field cur_pos integer # The current cursor position in the command line.
----@field allow_quoted boolean # Everything between a pair of quotes should be treated as  part of a single argument. (default: true)
----@field allow_ex_range boolean # The command line may contain an EX command range. (default: false)
+---@field cur_pos? integer # The current cursor position in the command line.
+---@field allow_quoted? boolean # Everything between a pair of quotes should be treated as  part of a single argument. (default: true)
+---@field allow_ex_range? boolean # The command line may contain an EX command range. (default: false)
 
 ---Tokenize a command line string.
 ---@param cmd_line string

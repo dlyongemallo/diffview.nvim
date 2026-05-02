@@ -112,6 +112,8 @@ jobs:
       fail-fast: false
       matrix:
         neovim: [stable, nightly]
+    # Keep nightly as an early-warning signal but don't let it block PRs.
+    continue-on-error: ${{ matrix.neovim == 'nightly' }}
     name: Test (Neovim ${{ matrix.neovim }})
     steps:
       - uses: actions/checkout@v4

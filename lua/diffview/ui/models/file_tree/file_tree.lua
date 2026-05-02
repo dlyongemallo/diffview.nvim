@@ -13,7 +13,7 @@ local M = {}
 ---@field kind vcs.FileKind
 ---@field collapsed boolean
 ---@field status string
----@field _node Node
+---@field _node? Node
 
 ---@class FileTree : Model
 ---@field root Node

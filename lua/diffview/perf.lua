@@ -11,7 +11,7 @@ local M = {}
 ---@field first integer Start time (ns)
 ---@field last integer Stop time (ns)
 ---@field final_time number Final time (ms)
----@field laps number[] List of lap times (ms)
+---@field laps { [1]: string|number, [2]: number }[] List of lap times (ms), each entry `{ subject, ms }`.
 local PerfTimer = oop.create_class("PerfTimer")
 
 ---PerfTimer constructor.
@@ -65,7 +65,7 @@ function PerfTimer:__tostring()
       s = s
         .. string.format(
           ">> %s %.3f ms\t(%.3f ms)\n",
-          utils.str_right_pad(lap[1], 36),
+          utils.str_right_pad(tostring(lap[1]), 36),
           lap[2],
           lap[2] - last
         )

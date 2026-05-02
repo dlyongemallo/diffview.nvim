@@ -1,7 +1,7 @@
 local lazy = require("diffview.lazy")
 local oop = require("diffview.oop")
 
-local FileEntry = lazy.access("diffview.scene.file_entry", "FileEntry") ---@type FileEntry
+local FileEntry = lazy.access("diffview.scene.file_entry", "FileEntry") --[[@as FileEntry ]]
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local M = {}

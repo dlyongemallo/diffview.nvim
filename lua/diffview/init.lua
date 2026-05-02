@@ -13,7 +13,7 @@ local vcs = lazy.require("diffview.vcs") ---@module "diffview.vcs"
 
 local api = vim.api
 local logger = DiffviewGlobal.logger
-local pl = lazy.access(utils, "path") ---@type PathLib
+local pl = lazy.access(utils, "path") --[[@as PathLib ]]
 
 local M = {}
 

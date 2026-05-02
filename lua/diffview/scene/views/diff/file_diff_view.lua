@@ -9,7 +9,7 @@ local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|Lazy
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local fmt = string.format
-local pl = lazy.access(utils, "path") ---@type PathLib
+local pl = lazy.access(utils, "path") --[[@as PathLib ]]
 
 local M = {}
 

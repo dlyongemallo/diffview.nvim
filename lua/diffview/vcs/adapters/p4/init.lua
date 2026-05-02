@@ -24,7 +24,7 @@ local api = vim.api
 local await, pawait = async.await, async.pawait
 local fmt = string.format
 local logger = DiffviewGlobal.logger
-local pl = lazy.access(utils, "path") ---@type PathLib
+local pl = lazy.access(utils, "path") --[[@as PathLib ]]
 local uv = vim.loop
 
 local M = {}
@@ -655,9 +655,11 @@ function P4Adapter:diffview_options(argo)
   ---@type DiffViewOptions
   local options = {
     show_untracked = false, -- Untracked files less relevant in P4 workflows usually
-    selected_file = argo:get_flag("selected-file", { no_empty = true, expand = true })
+    selected_file = (
+      argo:get_flag("selected-file", { no_empty = true, expand = true })
       or (vim.bo.buftype == "" and pl:vim_expand("%:p"))
-      or nil,
+      or nil
+    ) --[[@as string? ]],
   }
 
   return { left = left, right = right, options = options }

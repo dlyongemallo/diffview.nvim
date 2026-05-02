@@ -12,7 +12,7 @@ local M = {}
 ---@field Rev NullRev
 local NullAdapter = oop.create_class("NullAdapter", VCSAdapter.__get())
 
-NullAdapter.Rev = NullRev
+NullAdapter.Rev = NullRev --[[@as NullRev ]]
 
 ---@class NullAdapter.create.Opt
 ---@field toplevel string

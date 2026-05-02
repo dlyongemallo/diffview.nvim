@@ -21,7 +21,7 @@ local vcs_utils = require("diffview.vcs.utils")
 local await, pawait = async.await, async.pawait
 local fmt = string.format
 local logger = DiffviewGlobal.logger
-local pl = lazy.access(utils, "path") ---@type PathLib
+local pl = lazy.access(utils, "path") --[[@as PathLib ]]
 local uv = vim.uv
 
 local M = {}
@@ -246,8 +246,8 @@ function HgAdapter:file_history_options(range, paths, argo)
     { "exclude", "X" },
   }
 
-  ---@type HgLogOptions
-  local log_options = { rev_range = range_arg }
+  ---@diagnostic disable-next-line: missing-fields
+  local log_options = { rev_range = range_arg } --[[@as HgLogOptions ]]
   for _, names in ipairs(log_flag_names) do
     local key, _ = names[1]:gsub("%-", "_")
     local v = argo:get_flag(names, {
@@ -533,12 +533,11 @@ HgAdapter.file_history_worker = async.void(function(self, out_stream, opt)
   local single_file =
     self:is_single_file(opt.log_opt.single_file.path_args, opt.log_opt.single_file.L)
 
-  ---@type HgLogOptions
   local log_options = config.get_log_options(
     single_file,
     single_file and opt.log_opt.single_file or opt.log_opt.multi_file,
     "hg"
-  )
+  ) --[[@as HgLogOptions ]]
 
   -- TODO: Change in the future if `-L` is implemented
   local is_trace = false

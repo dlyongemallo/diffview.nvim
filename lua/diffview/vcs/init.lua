@@ -11,8 +11,8 @@ local M = {}
 ---@field cmd_ctx vcs.init.get_adapter.Opt.Cmd_Ctx? # Context data from a command call.
 
 ---@class vcs.init.get_adapter.Opt.Cmd_Ctx
----@field path_args string[] # Raw path args
----@field cpath string? # Cwd path given by the `-C` flag option
+---@field path_args? string[] # Raw path args
+---@field cpath? string # Cwd path given by the `-C` flag option
 
 ---@param opt vcs.init.get_adapter.Opt
 ---@return string? err
