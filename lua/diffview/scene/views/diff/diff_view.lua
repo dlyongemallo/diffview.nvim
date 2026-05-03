@@ -359,6 +359,24 @@ function DiffView:close(opts)
   end
 
   if not self.closing:check() then
+    -- Warn (don't block) when closing during a merge/rebase/cherry-pick/revert
+    -- with unstaged conflicts: git won't continue the operation until the
+    -- resolutions are `git add`-ed. Goes to `:messages` so the user can
+    -- recover the context if it scrolled past.
+    if self.merge_ctx and #self.files.conflicting > 0 then
+      local count = #self.files.conflicting
+      api.nvim_echo({
+        {
+          ("Closing with %d unstaged conflict%s; "):format(count, count == 1 and "" or "s"),
+          "WarningMsg",
+        },
+        {
+          "git won't continue this operation until they're staged.",
+          "WarningMsg",
+        },
+      }, true, {})
+    end
+
     self.closing:send()
 
     -- Final save and clean up the debounced handle.

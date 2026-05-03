@@ -460,6 +460,70 @@ describe("diffview.scene.views.diff.DiffView", function()
     end)
   end)
 
+  -- The unstaged-conflict warning runs inside `close()` and is informational
+  -- only — it never blocks the close. The two-condition gate (in a merge
+  -- context AND >0 conflicting files) is small enough that one positive
+  -- and one negative test cover it.
+  describe("unstaged conflict close warning", function()
+    local DiffView = require("diffview.scene.views.diff.diff_view").DiffView
+
+    ---@param opts { merge_ctx?: table, conflicting?: table }
+    local function make_view(opts)
+      local closing_sent = false
+      return setmetatable({
+        merge_ctx = opts.merge_ctx,
+        tabpage = api.nvim_get_current_tabpage(),
+        files = {
+          conflicting = opts.conflicting or {},
+          iter = function()
+            return function() end
+          end,
+        },
+        closing = {
+          check = function() return closing_sent end,
+          send = function() closing_sent = true end,
+        },
+      }, { __index = DiffView })
+    end
+
+    local function close_and_capture_echo(view)
+      local orig = api.nvim_echo
+      local captured = ""
+      api.nvim_echo = function(chunks, _, _)
+        for _, c in ipairs(chunks) do captured = captured .. c[1] end
+      end
+      pcall(view.close, view, { force = true })
+      api.nvim_echo = orig
+      return captured
+    end
+
+    it("warns with the conflict count when in a merge with unstaged conflicts", function()
+      local one = close_and_capture_echo(make_view({
+        merge_ctx = {},
+        conflicting = { { path = "a.txt" } },
+      }))
+      assert.is_truthy(one:find("1 unstaged conflict;"))
+      assert.is_truthy(one:find("git won't continue"))
+
+      local many = close_and_capture_echo(make_view({
+        merge_ctx = {},
+        conflicting = { { path = "a.txt" }, { path = "b.txt" } },
+      }))
+      assert.is_truthy(many:find("2 unstaged conflicts;"))
+    end)
+
+    it("stays silent when not in a merge or when there are no conflicts", function()
+      eq("", close_and_capture_echo(make_view({
+        merge_ctx = nil,
+        conflicting = { { path = "a.txt" } },
+      })))
+      eq("", close_and_capture_echo(make_view({
+        merge_ctx = {},
+        conflicting = {},
+      })))
+    end)
+  end)
+
   -- Companion to the close-gate fix: when `auto_close_on_empty` fires while a
   -- stage buffer is dirty, the deferred close used to be lost. The
   -- buf_write_post listener now picks it up after the user saves, so the
