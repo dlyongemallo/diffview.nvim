@@ -113,44 +113,149 @@ local function is_word_token(s)
   return s ~= "" and is_word_byte(s:byte(1))
 end
 
--- Tokenize `s` for word-level intraline diffing. Each maximal run of word
--- characters forms one token; each non-word character becomes its own
--- token. Returns the token list and a parallel byte-range map.
+-- Classify a UTF-8 character into a subword class for `tokenize`:
+-- "lower" (ASCII a-z, plus any non-ASCII byte — see below), "upper"
+-- (ASCII A-Z), "digit" (ASCII 0-9), "under" (`_`), or `nil` for ASCII
+-- non-word characters.
+--
+-- ASCII-only classification by design: every multi-byte character and
+-- every stray high byte from malformed UTF-8 falls into "lower". This
+-- keeps multi-byte runs joined with adjacent ASCII lowercase rather
+-- than splitting per-character, and avoids carrying a Unicode category
+-- table in pure Lua. Known trade-offs that follow from this:
+--   * Accented uppercase (`Ü`, `É`) does not trigger a lower→upper
+--     split, so `fooÜber` stays one token.
+--   * Unicode punctuation/symbols (`—`, emoji) are not treated as
+--     non-word and stay inside word tokens rather than splitting them.
+-- ASCII camelCase/PascalCase/snake_case/digit splits — the common case
+-- in source code — work as expected. Stray high bytes share the
+-- "lower" bucket so classification stays consistent with
+-- `is_word_byte`, which treats them as word bytes.
+---@param ch string
+---@return "lower"|"upper"|"digit"|"under"|nil
+local function subword_class(ch)
+  if ch == "" then
+    return nil
+  end
+  if #ch > 1 then
+    return "lower"
+  end
+  local b = ch:byte(1)
+  if b >= 0x80 then
+    return "lower"
+  end
+  if b >= 0x61 and b <= 0x7A then
+    return "lower"
+  end
+  if b >= 0x41 and b <= 0x5A then
+    return "upper"
+  end
+  if b >= 0x30 and b <= 0x39 then
+    return "digit"
+  end
+  if b == 0x5F then
+    return "under"
+  end
+  return nil
+end
+
+-- Tokenize `s` for subword-level intraline diffing. Splits both on
+-- ASCII non-word characters AND on subword boundaries within word-char
+-- runs: camelCase (`fooBar` → `foo`, `Bar`), acronym→word
+-- (`XMLParser` → `XML`, `Parser`), digit↔letter (`error123abc` →
+-- `error`, `123`, `abc`), and underscore (`audio_preservation` →
+-- `audio`, `_`, `preservation`). Each ASCII non-word character becomes
+-- its own token; each subword run becomes one token. Multi-byte chars
+-- bucket as lowercase letters; see `subword_class` for the trade-offs.
+-- Returns the token list and a parallel byte-range map.
 --
 -- Per-character tokenization was tried first, but `vim.diff --minimal`
 -- matches coincidental letters between dissimilar lines (e.g.
 -- "something." and "any tracked metric." share 't', 'e', 'm', 'i', '.')
 -- and splits the diff into small hunks. Rendered in overleaf style those
 -- fragments interleave deleted and inserted text into unreadable
--- character-level noise. Word tokens sidestep that failure mode: a
--- shared word is meaningful context, a shared letter is not.
+-- character-level noise.
+--
+-- Whole-identifier word tokens fixed that but introduced a second
+-- failure: a 1:1 token replacement between unrelated identifiers sharing
+-- only a structural prefix (`EventStateOpen` / `EventStateClose`)
+-- admitted char-level refinement on the prefix-overlap gate, then
+-- `vim.diff` latched onto a coincidental letter inside the differing
+-- tails (`Open` / `Close` share an `e`) and produced interleaved
+-- per-char noise. Subword tokens close the gap: the divergent subword
+-- now pairs directly with its replacement, the resulting char-level
+-- diff has no shared prefix/suffix to admit refinement, and the hunk
+-- renders as a clean whole-token replacement.
 ---@param s string
 ---@return string[] tokens
 ---@return { byte: integer, byte_len: integer }[] byte_map
 local function tokenize(s)
   local tokens, byte_map = {}, {}
-  local word_start, word_bytes
+  -- Active token state. `cur_class == nil` means no active word run.
+  ---@type "lower"|"upper"|"digit"|"under"|nil
+  local cur_class
+  local cur_chars = {}
+  local cur_start_byte = 0
+  local cur_byte_len = 0
+
+  local function flush()
+    if #cur_chars == 0 then
+      return
+    end
+    tokens[#tokens + 1] = table.concat(cur_chars)
+    byte_map[#byte_map + 1] = { byte = cur_start_byte, byte_len = cur_byte_len }
+    cur_chars = {}
+    cur_byte_len = 0
+    cur_class = nil
+  end
+
   for ch, byte_pos, char_len in utf8_iter(s) do
-    if is_word_char(ch) then
-      if word_start then
-        tokens[#tokens] = tokens[#tokens] .. ch
-        word_bytes = word_bytes + char_len
-      else
-        tokens[#tokens + 1] = ch
-        word_start, word_bytes = byte_pos, char_len
-      end
-    else
-      if word_start then
-        byte_map[#byte_map + 1] = { byte = word_start, byte_len = word_bytes }
-        word_start = nil
-      end
+    local cls = subword_class(ch)
+
+    if cls == nil then
+      -- Non-word: each char is its own token, breaks any active run.
+      flush()
       tokens[#tokens + 1] = ch
       byte_map[#byte_map + 1] = { byte = byte_pos, byte_len = char_len }
+    elseif cur_class == nil then
+      cur_chars = { ch }
+      cur_start_byte = byte_pos
+      cur_byte_len = char_len
+      cur_class = cls
+    elseif cur_class == cls then
+      cur_chars[#cur_chars + 1] = ch
+      cur_byte_len = cur_byte_len + char_len
+    elseif cur_class == "upper" and cls == "lower" then
+      -- Upper→lower transition. A single-upper run (`P` in `Parser`)
+      -- continues with the lowercase tail as one subword. A multi-upper
+      -- run (`XML` in `XMLParser`) is the acronym→word case: the trailing
+      -- upper actually starts the following lowercase word, so split off
+      -- the prefix and seed a new run with the popped upper + this lower.
+      if #cur_chars >= 2 then
+        local last_ch = cur_chars[#cur_chars]
+        local last_byte_len = #last_ch
+        cur_chars[#cur_chars] = nil
+        cur_byte_len = cur_byte_len - last_byte_len
+        flush()
+        cur_chars = { last_ch, ch }
+        cur_start_byte = byte_pos - last_byte_len
+        cur_byte_len = last_byte_len + char_len
+        cur_class = "lower"
+      else
+        cur_chars[#cur_chars + 1] = ch
+        cur_byte_len = cur_byte_len + char_len
+        cur_class = "lower"
+      end
+    else
+      flush()
+      cur_chars = { ch }
+      cur_start_byte = byte_pos
+      cur_byte_len = char_len
+      cur_class = cls
     end
   end
-  if word_start then
-    byte_map[#byte_map + 1] = { byte = word_start, byte_len = word_bytes }
-  end
+  flush()
+
   return tokens, byte_map
 end
 
@@ -1082,6 +1187,7 @@ end
 M._test = {
   is_word_char = is_word_char,
   is_word_token = is_word_token,
+  subword_class = subword_class,
   tokenize = tokenize,
   split_chars = split_chars,
   diff_units = diff_units,

@@ -664,6 +664,70 @@ describe("diffview.scene.inline_diff", function()
       assert.are.equal(5, m[1].byte_len)
     end)
 
+    it("tokenize splits PascalCase identifiers at lower→upper boundaries", function()
+      local tokens, m = h.tokenize("OnEventStateOpen")
+      assert.are.same({ "On", "Event", "State", "Open" }, tokens)
+      -- Byte ranges line up with the split points in the original string.
+      assert.are.equal(0, m[1].byte)
+      assert.are.equal(2, m[1].byte_len)
+      assert.are.equal(2, m[2].byte)
+      assert.are.equal(5, m[2].byte_len)
+      assert.are.equal(7, m[3].byte)
+      assert.are.equal(5, m[3].byte_len)
+      assert.are.equal(12, m[4].byte)
+      assert.are.equal(4, m[4].byte_len)
+    end)
+
+    it("tokenize splits acronyms before the trailing word (XMLParser → XML, Parser)", function()
+      assert.are.same({ "XML", "Parser" }, (h.tokenize("XMLParser")))
+      assert.are.same({ "my", "XML", "Parser" }, (h.tokenize("myXMLParser")))
+    end)
+
+    it("tokenize keeps an all-uppercase run as one subword when no word follows", function()
+      assert.are.same({ "XML" }, (h.tokenize("XML")))
+      assert.are.same({ "foo", "_", "XML" }, (h.tokenize("foo_XML")))
+    end)
+
+    it("tokenize splits at digit↔letter boundaries", function()
+      assert.are.same({ "error", "123", "abc" }, (h.tokenize("error123abc")))
+      assert.are.same({ "0", "x", "DEADBEEF" }, (h.tokenize("0xDEADBEEF")))
+    end)
+
+    it("tokenize emits each underscore run as its own subword", function()
+      assert.are.same({ "audio", "_", "preservation" }, (h.tokenize("audio_preservation")))
+      assert.are.same({ "__", "init", "__" }, (h.tokenize("__init__")))
+    end)
+
+    it("tokenize handles non-Latin scripts: joins lowercase, splits at uppercase", function()
+      -- 日本 = U+65E5 U+672C, 6 bytes; multi-byte chars bucket as "lower",
+      -- so non-Latin scripts join with adjacent ASCII lowercase rather
+      -- than splitting per-character.
+      assert.are.same(
+        { "type\xe6\x97\xa5\xe6\x9c\xac" },
+        (h.tokenize("type\xe6\x97\xa5\xe6\x9c\xac"))
+      )
+      -- A following uppercase letter still triggers the lower→upper split.
+      assert.are.same(
+        { "\xe6\x97\xa5\xe6\x9c\xac", "Type" },
+        (h.tokenize("\xe6\x97\xa5\xe6\x9c\xacType"))
+      )
+    end)
+
+    it("subword_class buckets ASCII and multi-byte chars correctly", function()
+      assert.are.equal("lower", h.subword_class("a"))
+      assert.are.equal("upper", h.subword_class("Z"))
+      assert.are.equal("digit", h.subword_class("3"))
+      assert.are.equal("under", h.subword_class("_"))
+      assert.are.equal("lower", h.subword_class("\xc3\xa9")) -- é treated as lower
+      -- Stray high byte from malformed UTF-8 (1-byte chunk with b >= 0x80)
+      -- is bucketed as "lower" to match `is_word_byte`'s word-char treatment.
+      assert.are.equal("lower", h.subword_class("\xc3"))
+      assert.are.equal("lower", h.subword_class("\x80"))
+      assert.is_nil(h.subword_class(" "))
+      assert.is_nil(h.subword_class(","))
+      assert.is_nil(h.subword_class(""))
+    end)
+
     it("is_word_token distinguishes word runs from punctuation tokens", function()
       assert.is_true(h.is_word_token("foo"))
       assert.is_true(h.is_word_token("_x"))
@@ -844,6 +908,32 @@ describe("diffview.scene.inline_diff", function()
       local inlines = inline_virt_texts(extmarks(bufnr), "DiffviewDiffDeleteInline")
       assert.are.equal(1, #inlines)
       assert.are.equal(",", inlines[1].text)
+    end)
+
+    it("renders PascalCase identifier replacements as whole-subword swaps (overleaf)", function()
+      -- Regression: a 1:1 token replacement between identifiers sharing a
+      -- structural prefix (`EventStateOpen` / `EventStateClose`) used to
+      -- admit char-level refinement on the prefix gate, then `vim.diff`
+      -- latched onto a coincidental `e` inside the differing tails and
+      -- rendered interleaved per-char noise. With subword tokens the
+      -- divergent subword pairs directly with its replacement.
+      local old = "    EventStateOpen = 0,"
+      local new = "    EventStateClose = 0,"
+      local bufnr = fresh_buf({ new })
+      inline_diff.render(bufnr, { old }, { new }, { style = "overleaf" })
+
+      local inlines = inline_virt_texts(extmarks(bufnr), "DiffviewDiffDeleteInline")
+      assert.are.equal(1, #inlines, "expected a single inline deletion virt_text")
+      assert.are.equal("Open", inlines[1].text)
+      -- Anchor sits before "Close" in the new line.
+      assert.are.equal(("    EventState"):len(), inlines[1].col)
+
+      -- The DiffText hl on "Close" is one contiguous span, not interleaved
+      -- per-char fragments.
+      local ranges = char_ranges(extmarks(bufnr))
+      assert.are.equal(1, #ranges, "expected one DiffText span over the inserted subword")
+      assert.are.equal(("    EventState"):len(), ranges[1].start)
+      assert.are.equal(("    EventStateClose"):len(), ranges[1].finish)
     end)
 
     it("ensure_eof_virt_lines_visible bumps topline so trailing deletions fit", function()
