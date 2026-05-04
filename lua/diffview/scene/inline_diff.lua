@@ -24,14 +24,37 @@ local M = {}
 
 M.ns = api.nvim_create_namespace("diffview_inline_diff")
 
--- Upper bound on the padded width used by `deletion_highlight = "full_width"`.
--- The actual pad target is `min(vim.o.columns, DELETION_HL_WIDTH_CAP)`. The
--- editor-wide `vim.o.columns` is an upper bound on any window's text area,
--- and this cap guards against pathological `:set columns=…` values that
--- would allocate huge space strings per virt_line. Virt_lines past a
--- window's edge are clipped, so over-padding within reasonable bounds is
--- free.
-local DELETION_HL_WIDTH_CAP = 250
+-- Upper bound on `string.rep(" ", pad)` per virt_line. Real terminal widths
+-- are well under this; the cap exists to bound memory on unusually wide
+-- setups (multi-monitor tiles, font-scaled ultrawides) where the windowed
+-- width itself could push into the thousands.
+local DELETION_HL_WIDTH_CAP = 500
+
+-- Compute the padding target width for `extent = "full_width"`. Returns the
+-- largest text-area width across windows currently displaying `bufnr`, or 0
+-- when the buffer isn't shown anywhere (in which case `render_deleted_block`
+-- skips emitting the padding chunk). The max correctly fills the widest
+-- window without truncating any narrower one sharing the buffer, since
+-- clipping handles the over-pad on the smaller window. Each window's
+-- `'foldcolumn'`/`'signcolumn'`/number-column width (`textoff`) is excluded
+-- so the padding string isn't allocated longer than the actual text region.
+-- Capped at `DELETION_HL_WIDTH_CAP` to bound the per-virt_line allocation.
+---@param bufnr integer
+---@return integer
+local function full_width_target(bufnr)
+  local max = 0
+  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if api.nvim_win_is_valid(winid) then
+      local info = vim.fn.getwininfo(winid)[1]
+      local textoff = (info and info.textoff) or 0
+      local w = api.nvim_win_get_width(winid) - textoff
+      if w > max then
+        max = w
+      end
+    end
+  end
+  return math.min(max, DELETION_HL_WIDTH_CAP)
+end
 
 -- Iterate over UTF-8 characters in `s`. Each step yields the character
 -- substring, its 0-indexed byte offset, and its byte length. Pure-Lua O(n)
@@ -470,7 +493,7 @@ end
 --   • `"full_width"`: append a space-padded chunk under `del_hl` so the
 --                     highlight spans the row (matching
 --                     `diff2_horizontal`'s native `DiffDelete` look). Pad
---                     target is `min(vim.o.columns, DELETION_HL_WIDTH_CAP)`.
+--                     target is `full_width_target(bufnr)`.
 --   • `"hanging"`:    leading whitespace is emitted unhighlighted; the
 --                     remainder of the line carries `del_hl`.
 ---@param bufnr integer
@@ -482,6 +505,7 @@ end
 ---@param above? boolean Default: `new_start == 0`.
 ---@param del_hl? string Highlight group for the deleted text. Default: `DiffviewDiffDelete`.
 ---@param extent? "text"|"full_width"|"hanging" Default: `"text"`.
+---@param fw_target? integer Pad target for `extent == "full_width"`. Default: 0 (no padding).
 local function render_deleted_block(
   bufnr,
   old_lines,
@@ -491,10 +515,12 @@ local function render_deleted_block(
   anchor_row,
   above,
   del_hl,
-  extent
+  extent,
+  fw_target
 )
   del_hl = del_hl or "DiffviewDiffDelete"
   extent = extent or "text"
+  fw_target = fw_target or 0
   local virt_lines = {}
   -- `strdisplaywidth` reads `tabstop` from the current buffer; evaluate
   -- widths against `bufnr` so tab-bearing deletions pad correctly when
@@ -505,7 +531,7 @@ local function render_deleted_block(
       local chunks
       if extent == "full_width" then
         chunks = { { text, del_hl } }
-        local pad = math.min(vim.o.columns, DELETION_HL_WIDTH_CAP) - vim.fn.strdisplaywidth(text)
+        local pad = fw_target - vim.fn.strdisplaywidth(text)
         if pad > 0 then
           chunks[#chunks + 1] = { string.rep(" ", pad), del_hl }
         end
@@ -958,6 +984,12 @@ function M.render(bufnr, old_lines, new_lines, opts)
   register_cache_cleanup(bufnr)
   register_scroll_adjuster(bufnr)
 
+  -- Resolve the `full_width` pad target once for the whole render. It depends
+  -- only on the buffer's displayed windows, so a hunk loop that emits many
+  -- deleted blocks would otherwise repeat a `win_findbuf` + `getwininfo`
+  -- traversal per block.
+  local fw_target = extent == "full_width" and full_width_target(bufnr) or 0
+
   for _, h in ipairs(hunks) do
     local old_start, old_count, new_start, new_count = h[1], h[2], h[3], h[4]
 
@@ -981,7 +1013,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
         nil,
         nil,
         style.del_hl,
-        extent
+        extent,
+        fw_target
       )
     elseif old_count > 0 and new_count > 0 then
       -- Modification: unified and overleaf diverge on how deletions are
@@ -1001,7 +1034,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
           new_start - 1,
           true,
           style.del_hl,
-          extent
+          extent,
+          fw_target
         )
       elseif old_count > paired then
         -- Overleaf: overflow old lines still get a virt_line above.
@@ -1015,7 +1049,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
           anchor,
           false,
           style.del_hl,
-          extent
+          extent,
+          fw_target
         )
       end
 
@@ -1052,7 +1087,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
             row,
             true,
             "DiffviewDiffDelete",
-            extent
+            extent,
+            fw_target
           )
         end
       end

@@ -66,12 +66,19 @@ local repaint_augroup = api.nvim_create_augroup("diffview_inline_repaint", { cle
 ---the deletion markers feel responsive while the user is still typing.
 local INSERT_REPAINT_DEBOUNCE_MS = 150
 
+---Debounce delay (ms) for `WinResized`/`VimResized`-driven repaints.
+---Coalesces a drag-resize burst (the events can fire many times per second)
+---into a single re-emit so the per-resize-step diff cost doesn't pile up.
+local RESIZE_REPAINT_DEBOUNCE_MS = 100
+
 ---@class Diff1Inline : Diff1
 ---@field a_file vcs.File? Old-side file used only to compute the diff (never rendered in a window).
 ---@field _cached_old_lines string[]? Old-side content captured on first render; reused by repaints so each keystroke-level refresh doesn't re-fetch from disk.
 ---@field _repaint_bufnr integer? Buffer id the repaint autocmds are attached to (nil when no autocmds are installed).
 ---@field _repaint_debounced CancellableFn? Trailing-edge debounced `_repaint` used for the insert-mode `TextChangedI` hook.
 ---@field _suppress_repaint boolean? Set by batched buffer edits (e.g. a multi-hunk `diffget`) to turn `_repaint` into a no-op so a single trailing call covers the whole batch.
+---@field _resize_autocmd integer? Autocmd id for the global WinResized/VimResized handler that re-emits `full_width` deletion padding when the window dimensions change.
+---@field _resize_debounced CancellableFn? Trailing-edge debounced `_repaint` used by the resize handler so a drag-resize burst coalesces into one re-emit.
 local Diff1Inline = oop.create_class("Diff1Inline", Diff1)
 
 ---@class Diff1Inline.init.Opt : Diff1.init.Opt
@@ -247,6 +254,54 @@ local function register_repaint_autocmds(self, bufnr)
       self._repaint_debounced()
     end,
   })
+  -- Resize handler: `full_width` deletion padding is sized to the displayed
+  -- window width, so a width change requires re-emitting the virt_lines with
+  -- the new pad target. Buffer-scoped autocmds don't see WinResized (it
+  -- reports the resized window ids via `v:event.windows`), so this is
+  -- registered globally and filters down to our buffer in the callback.
+  -- Registered unconditionally (not gated on `deletion_highlight`) so a
+  -- runtime switch to `"full_width"` takes effect on the next resize without
+  -- needing a re-render to install the autocmd; the callback early-returns
+  -- when the current extent doesn't depend on width. Debounced so a
+  -- drag-resize burst coalesces into a single re-emit instead of one diff
+  -- per intermediate width. Idempotent across re-registrations on the same
+  -- instance.
+  if not self._resize_autocmd then
+    self._resize_debounced = debounce.debounce_trailing(
+      RESIZE_REPAINT_DEBOUNCE_MS,
+      false,
+      function()
+        self:_repaint()
+      end
+    )
+    self._resize_autocmd = api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
+      group = repaint_augroup,
+      callback = function(args)
+        local target = self._repaint_bufnr
+        if not target or not api.nvim_buf_is_valid(target) then
+          return
+        end
+        local inline_opt = config.get_config().view.inline or {}
+        if inline_opt.deletion_highlight ~= "full_width" then
+          return
+        end
+        if args.event == "VimResized" then
+          self._resize_debounced()
+          return
+        end
+        local resized = vim.v.event.windows
+        if not resized then
+          return
+        end
+        for _, winid in ipairs(resized) do
+          if api.nvim_win_is_valid(winid) and api.nvim_win_get_buf(winid) == target then
+            self._resize_debounced()
+            return
+          end
+        end
+      end,
+    })
+  end
 end
 
 ---Apply inline-view winopts on the displayed window and render the unified
@@ -408,6 +463,16 @@ end
 function Diff1Inline:teardown_render()
   if self._repaint_bufnr and api.nvim_buf_is_valid(self._repaint_bufnr) then
     pcall(api.nvim_clear_autocmds, { group = repaint_augroup, buffer = self._repaint_bufnr })
+  end
+  if self._resize_autocmd then
+    -- The resize handler is registered globally (not buffer-scoped), so the
+    -- buffer-filtered `nvim_clear_autocmds` above doesn't catch it.
+    pcall(api.nvim_del_autocmd, self._resize_autocmd)
+    self._resize_autocmd = nil
+  end
+  if self._resize_debounced then
+    self._resize_debounced:close()
+    self._resize_debounced = nil
   end
   if self._repaint_debounced then
     self._repaint_debounced:close()

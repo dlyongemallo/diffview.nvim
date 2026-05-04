@@ -93,13 +93,29 @@ describe("diffview.scene.inline_diff", function()
     return out
   end
 
+  local initial_winid
+
   before_each(function()
     created_bufs = {}
+    initial_winid = api.nvim_get_current_win()
   end)
 
   after_each(function()
     for _, b in ipairs(created_bufs) do
       pcall(api.nvim_buf_delete, b, { force = true })
+    end
+    -- Close any windows the test opened so a leak (e.g. from a failing
+    -- assertion before in-test cleanup) doesn't pollute later tests'
+    -- current-window/widths/win_findbuf state. If the test invalidated
+    -- `initial_winid` itself, fall back to keeping `wins[1]` so we don't
+    -- attempt to close every window (which would error on the last one).
+    local keep = api.nvim_win_is_valid(initial_winid) and initial_winid or nil
+    for _, winid in ipairs(api.nvim_tabpage_list_wins(0)) do
+      if keep == nil then
+        keep = winid
+      elseif winid ~= keep then
+        pcall(api.nvim_win_close, winid, true)
+      end
     end
   end)
 
@@ -379,20 +395,26 @@ describe("diffview.scene.inline_diff", function()
       return out
     end
 
-    -- The cap value mirrors `DELETION_HL_WIDTH_CAP` in `inline_diff.lua`.
-    -- Kept as a literal so a drift in the source value is caught here.
-    local FULL_WIDTH_CAP = 250
+    -- Mirrors `DELETION_HL_WIDTH_CAP` in `inline_diff.lua`. Kept as a literal
+    -- so a drift in the source value is caught here.
+    local FULL_WIDTH_CAP = 500
 
-    it("'full_width' appends a padding chunk under the same hl, sized by display width", function()
-      -- Tab + "hi" with tabstop=4 = 6 display cells; padding fills out
-      -- the rest of `vim.o.columns`. `nvim_buf_call` ensures
-      -- `strdisplaywidth` reads the target buffer's tabstop even when
-      -- the active buffer differs.
+    it("'full_width' appends a padding chunk sized to the displayed window", function()
+      -- Tab + "hi" with tabstop=4 = 6 display cells. The buffer is shown in a
+      -- vsplit so the pad target is the window's text-area width.
+      -- `nvim_buf_call` inside the renderer ensures `strdisplaywidth` reads
+      -- the target buffer's tabstop even when the active buffer differs.
       local target = fresh_buf({ "tail" })
       vim.api.nvim_set_option_value("tabstop", 4, { buf = target })
       local other = fresh_buf({ "" })
       vim.api.nvim_set_option_value("tabstop", 8, { buf = other })
       api.nvim_win_set_buf(api.nvim_get_current_win(), other)
+      vim.cmd("vsplit")
+      local winid = api.nvim_get_current_win()
+      api.nvim_win_set_buf(winid, target)
+      local info = vim.fn.getwininfo(winid)[1]
+      local textoff = (info and info.textoff) or 0
+      local text_width = api.nvim_win_get_width(winid) - textoff
 
       inline_diff.render(
         target,
@@ -407,11 +429,43 @@ describe("diffview.scene.inline_diff", function()
       assert.are.equal(2, #chunks)
       assert.are.equal("DiffviewDiffDelete", chunks[1][2])
       assert.are.equal("DiffviewDiffDelete", chunks[2][2])
-      assert.are.equal(math.min(vim.o.columns, FULL_WIDTH_CAP) - 6, #chunks[2][1])
+      assert.are.equal(math.min(text_width, FULL_WIDTH_CAP) - 6, #chunks[2][1])
+    end)
+
+    it("'full_width' pads to the displayed window's width, not vim.o.columns", function()
+      -- Splitting vertically so the target window's width is independent of
+      -- the surrounding test windowing also exercises the typical vsplit
+      -- diff layout.
+      local bufnr = fresh_buf({ "context" })
+      vim.cmd("vsplit")
+      local winid = api.nvim_get_current_win()
+      api.nvim_win_set_buf(winid, bufnr)
+      -- Mirror `full_width_target`: subtract `textoff` so number/sign/fold
+      -- columns aren't double-counted in the expected pad width.
+      local info = vim.fn.getwininfo(winid)[1]
+      local textoff = (info and info.textoff) or 0
+      local text_width = api.nvim_win_get_width(winid) - textoff
+
+      inline_diff.render(
+        bufnr,
+        { "deleted", "context" },
+        { "context" },
+        { deletion_highlight = "full_width" }
+      )
+
+      local lines = virt_line_chunks(extmarks(bufnr))
+      assert.are.equal(1, #lines)
+      local chunks = lines[1]
+      assert.are.equal(2, #chunks)
+      -- "deleted" is 7 display cells; padding fills the rest of the window.
+      assert.are.equal(math.min(text_width, FULL_WIDTH_CAP) - 7, #chunks[2][1])
     end)
 
     it("'full_width' pads in overleaf style under the overleaf del_hl", function()
       local bufnr = fresh_buf({ "alpha" })
+      vim.cmd("vsplit")
+      local winid = api.nvim_get_current_win()
+      api.nvim_win_set_buf(winid, bufnr)
       inline_diff.render(
         bufnr,
         { "xyz", "pqr" },

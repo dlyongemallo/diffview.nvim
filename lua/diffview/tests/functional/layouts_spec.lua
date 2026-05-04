@@ -216,6 +216,182 @@ describe("diffview.layout symbols", function()
     end)
   )
 
+  it(
+    "Diff1Inline VimResized triggers a debounced repaint when full_width",
+    helpers.async_test(function()
+      local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+      local config = require("diffview.config")
+      local api = vim.api
+
+      local original_config = vim.deepcopy(config.get_config())
+      config.setup({ view = { inline = { deletion_highlight = "full_width" } } })
+
+      local repaint_count = 0
+
+      local bufnr = api.nvim_create_buf(false, true)
+      api.nvim_buf_set_lines(bufnr, 0, -1, false, { "new content" })
+      local winid = api.nvim_get_current_win()
+
+      local inst = setmetatable({}, { __index = Diff1Inline })
+      inst.b = {
+        file = {
+          bufnr = bufnr,
+          is_valid = function()
+            return true
+          end,
+        },
+        is_valid = function()
+          return true
+        end,
+        id = winid,
+      }
+      inst._cached_old_lines = { "old content" }
+      inst._repaint = function()
+        repaint_count = repaint_count + 1
+      end
+
+      async.await(inst:_render_inline())
+
+      -- A drag-resize burst fires VimResized many times; the trailing-edge
+      -- debounce should coalesce them into a single repaint.
+      for _ = 1, 5 do
+        api.nvim_exec_autocmds("VimResized", {})
+      end
+
+      -- Wait past the resize debounce window (100ms) so the trailing fire
+      -- has a chance to run.
+      async.await(async.timeout(200))
+      async.await(async.scheduler())
+
+      local ok, err = pcall(eq, 1, repaint_count)
+
+      inst:teardown_render()
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+      config.setup(original_config)
+
+      if not ok then
+        error(err)
+      end
+    end)
+  )
+
+  it(
+    "Diff1Inline VimResized is a no-op when the extent doesn't depend on width",
+    helpers.async_test(function()
+      local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+      local config = require("diffview.config")
+      local api = vim.api
+
+      local original_config = vim.deepcopy(config.get_config())
+      -- Default extent: only the deleted characters get highlighted, so a
+      -- resize doesn't change the rendered output and the handler must
+      -- early-return without a repaint.
+      config.setup({ view = { inline = { deletion_highlight = "text" } } })
+
+      local repaint_count = 0
+
+      local bufnr = api.nvim_create_buf(false, true)
+      api.nvim_buf_set_lines(bufnr, 0, -1, false, { "new content" })
+      local winid = api.nvim_get_current_win()
+
+      local inst = setmetatable({}, { __index = Diff1Inline })
+      inst.b = {
+        file = {
+          bufnr = bufnr,
+          is_valid = function()
+            return true
+          end,
+        },
+        is_valid = function()
+          return true
+        end,
+        id = winid,
+      }
+      inst._cached_old_lines = { "old content" }
+      inst._repaint = function()
+        repaint_count = repaint_count + 1
+      end
+
+      async.await(inst:_render_inline())
+
+      api.nvim_exec_autocmds("VimResized", {})
+
+      async.await(async.timeout(200))
+      async.await(async.scheduler())
+
+      local ok, err = pcall(eq, 0, repaint_count)
+
+      inst:teardown_render()
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+      config.setup(original_config)
+
+      if not ok then
+        error(err)
+      end
+    end)
+  )
+
+  it(
+    "Diff1Inline:teardown_render removes the global resize autocmd",
+    helpers.async_test(function()
+      local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+      local config = require("diffview.config")
+      local api = vim.api
+
+      local original_config = vim.deepcopy(config.get_config())
+      config.setup({ view = { inline = { deletion_highlight = "full_width" } } })
+
+      local repaint_count = 0
+
+      local bufnr = api.nvim_create_buf(false, true)
+      api.nvim_buf_set_lines(bufnr, 0, -1, false, { "new content" })
+      local winid = api.nvim_get_current_win()
+
+      local inst = setmetatable({}, { __index = Diff1Inline })
+      inst.b = {
+        file = {
+          bufnr = bufnr,
+          is_valid = function()
+            return true
+          end,
+        },
+        is_valid = function()
+          return true
+        end,
+        id = winid,
+      }
+      inst._cached_old_lines = { "old content" }
+      inst._repaint = function()
+        repaint_count = repaint_count + 1
+      end
+
+      async.await(inst:_render_inline())
+
+      -- Sanity: the global resize autocmd is installed.
+      assert.is_truthy(inst._resize_autocmd)
+
+      inst:teardown_render()
+
+      -- After teardown the autocmd id and debounced fn must be cleared so a
+      -- subsequent resize doesn't call into a destroyed instance.
+      assert.is_nil(inst._resize_autocmd)
+      assert.is_nil(inst._resize_debounced)
+
+      api.nvim_exec_autocmds("VimResized", {})
+      async.await(async.timeout(200))
+      async.await(async.scheduler())
+
+      local ok, err = pcall(eq, 0, repaint_count)
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+      config.setup(original_config)
+
+      if not ok then
+        error(err)
+      end
+    end)
+  )
+
   describe("Diff1Inline:diffget", function()
     local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
     local inline_diff = require("diffview.scene.inline_diff")
