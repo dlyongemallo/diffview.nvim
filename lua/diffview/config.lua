@@ -9,7 +9,9 @@ local Diff1 = lazy.access("diffview.scene.layouts.diff_1", "Diff1") ---@type Dif
 local Diff1Inline = lazy.access("diffview.scene.layouts.diff_1_inline", "Diff1Inline") ---@type Diff1Inline|LazyModule
 local Diff2 = lazy.access("diffview.scene.layouts.diff_2", "Diff2") ---@type Diff2|LazyModule
 local Diff2Hor = lazy.access("diffview.scene.layouts.diff_2_hor", "Diff2Hor") ---@type Diff2Hor|LazyModule
+local Diff2HorPinned = lazy.access("diffview.scene.layouts.diff_2_hor_pinned", "Diff2HorPinned") ---@type Diff2HorPinned|LazyModule
 local Diff2Ver = lazy.access("diffview.scene.layouts.diff_2_ver", "Diff2Ver") ---@type Diff2Ver|LazyModule
+local Diff2VerPinned = lazy.access("diffview.scene.layouts.diff_2_ver_pinned", "Diff2VerPinned") ---@type Diff2VerPinned|LazyModule
 local Diff3 = lazy.access("diffview.scene.layouts.diff_3", "Diff3") ---@type Diff3|LazyModule
 local Diff3Hor = lazy.access("diffview.scene.layouts.diff_3_hor", "Diff3Hor") ---@type Diff3Hor|LazyModule
 local Diff3Mixed = lazy.access("diffview.scene.layouts.diff_3_mixed", "Diff3Mixed") ---@type Diff3Mixed|LazyModule
@@ -31,7 +33,12 @@ function M.diffview_callback(cb_name)
   return actions[cb_name]
 end
 
--- Layout aliases used across multiple view kinds and cycle_layouts.
+-- Layout aliases used across multiple view kinds and cycle_layouts. The
+-- pinned `Diff2` variants (`diff2_*_pinned`) intentionally aren't listed
+-- here: they're internal to file-history `pin_local` mode and are
+-- selected by the view based on whether `--pin-local` is active, not by
+-- direct user configuration. The `LayoutName` alias below still includes
+-- them so `name_to_layout` can resolve them internally.
 ---@alias DiffviewStandardLayout "diff1_plain"|"diff1_inline"|"diff2_horizontal"|"diff2_vertical"
 ---@alias DiffviewMergeLayout "diff1_plain"|"diff3_horizontal"|"diff3_vertical"|"diff3_mixed"|"diff4_mixed"
 ---@alias DiffviewInferredLayout -1
@@ -865,7 +872,9 @@ end
 ---@alias LayoutName "diff1_plain"
 ---       | "diff1_inline"
 ---       | "diff2_horizontal"
+---       | "diff2_horizontal_pinned"
 ---       | "diff2_vertical"
+---       | "diff2_vertical_pinned"
 ---       | "diff3_horizontal"
 ---       | "diff3_vertical"
 ---       | "diff3_mixed"
@@ -875,7 +884,9 @@ local layout_map = {
   diff1_plain = Diff1,
   diff1_inline = Diff1Inline,
   diff2_horizontal = Diff2Hor,
+  diff2_horizontal_pinned = Diff2HorPinned,
   diff2_vertical = Diff2Ver,
+  diff2_vertical_pinned = Diff2VerPinned,
   diff3_horizontal = Diff3Hor,
   diff3_vertical = Diff3Ver,
   diff3_mixed = Diff3Mixed,

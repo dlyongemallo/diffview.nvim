@@ -584,6 +584,269 @@ describe("diffview.layout symbols", function()
   end)
 end)
 
+describe("diffview.scene.layouts.diff_2_*_pinned class structure", function()
+  local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+  local Diff2VerPinned = require("diffview.scene.layouts.diff_2_ver_pinned").Diff2VerPinned
+
+  it("Diff2HorPinned inherits Diff2Hor and keeps symbols { 'a', 'b' }", function()
+    eq({ "a", "b" }, Diff2HorPinned.symbols)
+    eq(Diff2Hor, Diff2HorPinned.super_class)
+    eq("diff2_horizontal_pinned", Diff2HorPinned.name)
+  end)
+
+  it("Diff2VerPinned inherits Diff2Ver and keeps symbols { 'a', 'b' }", function()
+    eq({ "a", "b" }, Diff2VerPinned.symbols)
+    eq(Diff2Ver, Diff2VerPinned.super_class)
+    eq("diff2_vertical_pinned", Diff2VerPinned.name)
+  end)
+
+  it("config.name_to_layout resolves the pinned layout names", function()
+    local config = require("diffview.config")
+    eq(Diff2HorPinned, config.name_to_layout("diff2_horizontal_pinned"))
+    eq(Diff2VerPinned, config.name_to_layout("diff2_vertical_pinned"))
+  end)
+end)
+
+describe("diffview.scene.layouts.diff_2_*_pinned should_null", function()
+  local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+  local Diff2VerPinned = require("diffview.scene.layouts.diff_2_ver_pinned").Diff2VerPinned
+
+  -- pin_local sets revs.a to the commit itself (not its parent), so the
+  -- standard parent-vs-commit semantics don't apply on the a-side: the
+  -- file is missing iff it doesn't exist in this commit, i.e. status "D".
+  -- (sym "b" isn't covered: pinned-mode b-side files are injected by the
+  -- view's cache and never go through `try_should_null`.)
+  it("nulls window a only when the file is absent from the commit (status D)", function()
+    local commit = { type = RevType.COMMIT }
+    for _, cls in ipairs({ Diff2HorPinned, Diff2VerPinned }) do
+      assert.True(cls.should_null(commit, "D", "a"))
+      assert.False(cls.should_null(commit, "A", "a"))
+      assert.False(cls.should_null(commit, "M", "a"))
+      assert.False(cls.should_null(commit, "R", "a"))
+      assert.False(cls.should_null(commit, "?", "a"))
+    end
+  end)
+end)
+
+describe("diffview.scene.layouts.diff_2_*_pinned ownership", function()
+  local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+  local Diff2VerPinned = require("diffview.scene.layouts.diff_2_ver_pinned").Diff2VerPinned
+
+  -- The b-side `vcs.File` is owned by the FileHistoryView (its pin_local
+  -- cache), not by individual FileEntries. `shared_symbols` is the contract
+  -- that tells `Layout:owned_files()` to exclude that window from the
+  -- destruction set in `FileEntry:destroy` and `FileEntry:set_active`.
+  it("declares 'b' as a shared symbol so entry teardown skips it", function()
+    eq({ "b" }, Diff2HorPinned.shared_symbols)
+    eq({ "b" }, Diff2VerPinned.shared_symbols)
+  end)
+
+  -- Concrete check of the filter: a fully-constructed pinned layout's
+  -- `owned_files()` must return only the a-side file, even though both
+  -- windows are populated. This is what protects the view-owned b-file
+  -- from being destroyed when the LogEntry tree is torn down on refresh.
+  it("owned_files() excludes the b-side file", function()
+    for _, cls in ipairs({ Diff2HorPinned, Diff2VerPinned }) do
+      local a_file = { path = "old/foo.txt" }
+      local b_file = { path = "foo.txt" }
+      local inst = setmetatable({
+        a = { file = a_file },
+        b = { file = b_file },
+        windows = {},
+        symbols = cls.symbols,
+        shared_symbols = cls.shared_symbols,
+      }, { __index = cls })
+
+      eq({ a_file }, inst:owned_files())
+    end
+  end)
+end)
+
+describe("diffview.scene.layouts.diff_2_*_pinned detach_files_for_swap", function()
+  local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+  local Diff2VerPinned = require("diffview.scene.layouts.diff_2_ver_pinned").Diff2VerPinned
+
+  -- The swap variant is what `_set_file` calls between log entries; it
+  -- skips the pinned b so the LOCAL buffer's keymaps/edits survive the
+  -- swap when the b-file stays the same instance (single-file pinning,
+  -- and same-row navigation in multi-file). The full `detach_files()` is
+  -- left to the base Layout so tab-leave/view-close still tear everything
+  -- down (no diffview state leaks into the user's normal editing windows).
+  it("detaches window a but not window b when next entry's b matches", function()
+    for _, cls in ipairs({ Diff2HorPinned, Diff2VerPinned }) do
+      local detached = {}
+      local shared_b_file = { path = "live.txt" }
+      local inst = setmetatable({
+        a = {
+          detach_file = function()
+            detached.a = true
+          end,
+        },
+        b = {
+          file = shared_b_file,
+          detach_file = function()
+            detached.b = true
+          end,
+        },
+      }, { __index = cls })
+
+      -- Stub the next FileEntry so its layout's b-side points at the same
+      -- shared instance: that's the single-file pin case (and the
+      -- same-path row-stay case in multi-file).
+      local next_entry = { layout = { b = { file = shared_b_file } } }
+      inst:detach_files_for_swap(next_entry)
+
+      assert.True(detached.a)
+      assert.is_nil(detached.b)
+    end
+  end)
+
+  -- Multi-file pinning: each path has its own view-owned working-tree
+  -- File. Crossing rows changes the b-side instance, and the OLD b's
+  -- buffer must be detached so it doesn't keep diffview keymaps and
+  -- buffer-local overrides after navigation. Without this, plugins
+  -- attached via diffview's per-buffer setup would persist on the user's
+  -- previous working-tree buffer indefinitely.
+  it("detaches window b when the next entry's b is a different File instance", function()
+    for _, cls in ipairs({ Diff2HorPinned, Diff2VerPinned }) do
+      local detached = {}
+      local cur_b_file = { path = "alpha.txt" }
+      local next_b_file = { path = "beta.txt" }
+      local inst = setmetatable({
+        a = {
+          detach_file = function()
+            detached.a = true
+          end,
+        },
+        b = {
+          file = cur_b_file,
+          detach_file = function()
+            detached.b = true
+          end,
+        },
+      }, { __index = cls })
+
+      local next_entry = { layout = { b = { file = next_b_file } } }
+      inst:detach_files_for_swap(next_entry)
+
+      assert.True(detached.a)
+      assert.True(detached.b)
+    end
+  end)
+
+  -- Defensive: when the caller doesn't pass a next entry (e.g. legacy
+  -- callers, or any non-FH view that hasn't migrated), we don't know the
+  -- upcoming b-file. Treat that as "nothing to compare against" and skip
+  -- detaching b, mirroring the pre-fix behaviour for those code paths.
+  it("skips detaching b when no next_entry is passed", function()
+    for _, cls in ipairs({ Diff2HorPinned, Diff2VerPinned }) do
+      local detached = {}
+      local inst = setmetatable({
+        a = {
+          detach_file = function()
+            detached.a = true
+          end,
+        },
+        b = {
+          file = { path = "live.txt" },
+          detach_file = function()
+            detached.b = true
+          end,
+        },
+      }, { __index = cls })
+
+      inst:detach_files_for_swap()
+
+      assert.True(detached.a)
+      assert.is_nil(detached.b)
+    end
+  end)
+
+  -- Sanity-check that the pinned layouts still inherit the base
+  -- `detach_files()` (i.e. they no longer override it). On tab-leave /
+  -- view-close, both windows must be detached.
+  it("inherits detach_files() that detaches every window", function()
+    for _, cls in ipairs({ Diff2HorPinned, Diff2VerPinned }) do
+      local detached = {}
+      local win_a = {
+        detach_file = function()
+          detached.a = true
+        end,
+      }
+      local win_b = {
+        detach_file = function()
+          detached.b = true
+        end,
+      }
+      local inst = setmetatable({
+        a = win_a,
+        b = win_b,
+        windows = { win_a, win_b },
+      }, { __index = cls })
+
+      inst:detach_files()
+
+      assert.True(detached.a)
+      assert.True(detached.b)
+    end
+  end)
+end)
+
+describe("diffview.scene.layouts.diff_2_*_pinned use_entry inheritance", function()
+  local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+  local Diff2VerPinned = require("diffview.scene.layouts.diff_2_ver_pinned").Diff2VerPinned
+
+  ---Build a mock layout-like object that satisfies the `instanceof` check
+  ---inside `Layout.use_entry` without needing a fully constructed Diff2.
+  local function mock_layout(cls, a_file, b_file)
+    return setmetatable({
+      class = cls,
+      a = { file = a_file },
+      b = { file = b_file },
+    }, { __index = cls })
+  end
+
+  ---Build a mock pinned-layout instance whose `set_file_for` records the
+  ---swap. `is_valid` is forced to false so `use_entry` returns before the
+  ---`await(self:open_files())` branch.
+  local function mock_pinned(cls, set_files, b_file)
+    return setmetatable({
+      class = cls,
+      a = { file = nil },
+      b = { file = b_file },
+      symbols = cls.symbols,
+      set_file_for = function(_, sym, file)
+        set_files[sym] = file
+      end,
+      is_valid = function()
+        return false
+      end,
+    }, { __index = cls })
+  end
+
+  -- The pinned variants no longer override `use_entry`: with the view-owned
+  -- shared b-file, every entry's `layout.b.file` already IS the same
+  -- instance the cur_layout is holding, so the inherited
+  -- `Layout.use_entry` is a no-op assignment for b. Confirm the inherited
+  -- behaviour writes both symbols (the b-write is harmless because it's
+  -- the same File).
+  it("inherits Layout.use_entry which writes both symbols", function()
+    for _, cls in ipairs({ Diff2HorPinned, Diff2VerPinned }) do
+      local set_files = {}
+      local shared_b_file = { path = "foo/bar.txt" }
+      local new_a_file = { path = "old/foo/bar.txt" }
+
+      local entry = { layout = mock_layout(cls, new_a_file, shared_b_file) }
+      local inst = mock_pinned(cls, set_files, shared_b_file)
+
+      inst:use_entry(entry)
+
+      assert.equals(new_a_file, set_files.a)
+      assert.equals(shared_b_file, set_files.b)
+    end
+  end)
+end)
+
 describe("diffview.scene.layouts.diff_1_inline diffopt forwarding", function()
   local Diff1Inline_mod = require("diffview.scene.layouts.diff_1_inline")
   local effective_diffopt = Diff1Inline_mod._test.effective_diffopt
