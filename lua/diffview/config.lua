@@ -351,10 +351,12 @@ M.defaults = {
     ---@class DiffviewInlineConfig
     ---@field style DiffviewInlineStyle
     ---@field deletion_highlight DiffviewInlineDeletionHighlight
+    ---@field deletion_treesitter boolean
 
     ---@class DiffviewInlineConfig.user
     ---@field style? DiffviewInlineStyle Rendering style for `diff1_inline`. "unified" shows old lines as virt_lines above; "overleaf" renders deletions as inline strikethrough virt_text.
     ---@field deletion_highlight? DiffviewInlineDeletionHighlight Extent of the `DiffDelete` background on deleted virt_lines: `"text"` covers only the deleted chars, `"full_width"` pads to the row, `"hanging"` covers everything except the leading indent.
+    ---@field deletion_treesitter? boolean Layer tree-sitter syntax highlights over the deleted virt_lines so they read like the rest of the buffer. Falls back transparently when no parser is attached.
     -- Options specific to the `diff1_inline` layout.
     inline = {
       -- Rendering style. "unified": proper unified diff — old lines shown
@@ -369,6 +371,10 @@ M.defaults = {
       --   "hanging":    skip the leading indent, then highlight the rest of
       --                 the row.
       deletion_highlight = "text",
+      -- Layer tree-sitter syntax highlights over the deleted virt_lines so
+      -- they read like the rest of the buffer. No-op when no parser is
+      -- attached for the buffer's filetype.
+      deletion_treesitter = true,
     },
   },
 
@@ -1204,6 +1210,16 @@ function M.setup(user_config)
         )
       )
       view.inline.deletion_highlight = M.defaults.view.inline.deletion_highlight
+    end
+    if view.inline.deletion_treesitter == nil then
+      view.inline.deletion_treesitter = M.defaults.view.inline.deletion_treesitter
+    elseif type(view.inline.deletion_treesitter) ~= "boolean" then
+      utils.err(
+        ("Invalid value '%s' for 'view.inline.deletion_treesitter'! Must be a boolean."):format(
+          tostring(view.inline.deletion_treesitter)
+        )
+      )
+      view.inline.deletion_treesitter = M.defaults.view.inline.deletion_treesitter
     end
   end
 

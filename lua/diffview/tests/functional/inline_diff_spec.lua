@@ -95,6 +95,18 @@ describe("diffview.scene.inline_diff", function()
 
   local initial_winid
 
+  local function virt_line_chunks(marks)
+    local out = {}
+    for _, m in ipairs(marks) do
+      if m[4] and m[4].virt_lines then
+        for _, line in ipairs(m[4].virt_lines) do
+          out[#out + 1] = line
+        end
+      end
+    end
+    return out
+  end
+
   before_each(function()
     created_bufs = {}
     initial_winid = api.nvim_get_current_win()
@@ -383,18 +395,6 @@ describe("diffview.scene.inline_diff", function()
   end)
 
   describe("deletion_highlight", function()
-    local function virt_line_chunks(marks)
-      local out = {}
-      for _, m in ipairs(marks) do
-        if m[4] and m[4].virt_lines then
-          for _, line in ipairs(m[4].virt_lines) do
-            out[#out + 1] = line
-          end
-        end
-      end
-      return out
-    end
-
     -- Mirrors `DELETION_HL_WIDTH_CAP` in `inline_diff.lua`. Kept as a literal
     -- so a drift in the source value is caught here.
     local FULL_WIDTH_CAP = 500
@@ -876,7 +876,10 @@ describe("diffview.scene.inline_diff", function()
     it("falls back to block echo + line_hl in overleaf when char-level skips", function()
       -- When overleaf's char-level rendering is gated off, the paired
       -- modification would otherwise be invisible. Verify the fallback
-      -- emits a DiffChange line_hl and a virt_line with the old content.
+      -- emits a DiffChange line_hl and a virt_line with the old content
+      -- under the overleaf `del_hl` (so the strikethrough on
+      -- DiffviewDiffDeleteInline is preserved on the echoed line, not
+      -- silently downgraded to the unified DiffviewDiffDelete).
       local old = "This is a plain, singular window. This is available in case"
       local new = "This is a plain, singular window with no diff rendering —"
       local bufnr = fresh_buf({ new })
@@ -886,7 +889,7 @@ describe("diffview.scene.inline_diff", function()
       assert.are.same({ { row = 0, hl = "DiffviewDiffChange" } }, hls)
 
       local vls = virt_line_hls(extmarks(bufnr))
-      assert.are.same({ "DiffviewDiffDelete" }, vls)
+      assert.are.same({ "DiffviewDiffDeleteInline" }, vls)
     end)
   end)
 
@@ -1194,5 +1197,277 @@ describe("diffview.scene.inline_diff", function()
         assert.are.same({ "new string", "param" }, texts)
       end
     )
+  end)
+
+  describe("treesitter captures", function()
+    local captured_chunks = inline_diff._test.captured_chunks
+    local compute_old_line_captures = inline_diff._test.compute_old_line_captures
+
+    -- Probe whether the test environment has the `lua` parser; the end-to-end
+    -- TS tests below need it. When unavailable, the parser-dependent
+    -- assertions degrade to a no-op rather than fail the suite, since the
+    -- production code path also degrades silently.
+    local lua_parser_available = (function()
+      local ok = pcall(vim.treesitter.get_string_parser, "local x = 1\n", "lua")
+      return ok
+    end)()
+
+    it("captured_chunks falls back to a single chunk when no captures supplied", function()
+      assert.are.same(
+        { { "hello", "DiffviewDiffDelete" } },
+        captured_chunks("hello", nil, "DiffviewDiffDelete")
+      )
+      assert.are.same(
+        { { "hello", "DiffviewDiffDelete" } },
+        captured_chunks("hello", {}, "DiffviewDiffDelete")
+      )
+    end)
+
+    it("captured_chunks emits a single empty del_hl chunk for empty text", function()
+      -- Preserve the pre-TS shape so a deleted blank line still produces a
+      -- visible virt_line row (a zero-chunk list could be elided by Neovim's
+      -- renderer). Captures past `#text` are simply ignored.
+      assert.are.same(
+        { { "", "DiffviewDiffDelete" } },
+        captured_chunks("", { { 0, 5, "@string" } }, "DiffviewDiffDelete")
+      )
+    end)
+
+    it("captured_chunks layers a single capture over del_hl as stacked hl groups", function()
+      local chunks = captured_chunks("hello", { { 0, 5, "@string" } }, "DiffviewDiffDelete")
+      assert.are.equal(1, #chunks)
+      assert.are.equal("hello", chunks[1][1])
+      assert.are.same({ "DiffviewDiffDelete", "@string" }, chunks[1][2])
+    end)
+
+    it("captured_chunks splits text into per-capture segments around uncovered runs", function()
+      -- Cover only the middle "ll" so the outer "he"/"o" segments fall back
+      -- to plain del_hl.
+      local chunks = captured_chunks("hello", { { 2, 4, "@keyword" } }, "DiffviewDiffDelete")
+      assert.are.equal(3, #chunks)
+      assert.are.equal("he", chunks[1][1])
+      assert.are.equal("DiffviewDiffDelete", chunks[1][2])
+      assert.are.equal("ll", chunks[2][1])
+      assert.are.same({ "DiffviewDiffDelete", "@keyword" }, chunks[2][2])
+      assert.are.equal("o", chunks[3][1])
+      assert.are.equal("DiffviewDiffDelete", chunks[3][2])
+    end)
+
+    it("captured_chunks resolves overlapping captures to the latest applied", function()
+      -- Mirrors TS document order: a later capture overrides an earlier one
+      -- on the bytes they share. Outer "@variable" applies to all 5 bytes,
+      -- inner "@string" overrides bytes 1..3.
+      local chunks = captured_chunks(
+        "hello",
+        { { 0, 5, "@variable" }, { 1, 3, "@string" } },
+        "DiffviewDiffDelete"
+      )
+      -- Expect: [h:variable][el:string][lo:variable]
+      assert.are.equal(3, #chunks)
+      assert.are.same({ "DiffviewDiffDelete", "@variable" }, chunks[1][2])
+      assert.are.equal("h", chunks[1][1])
+      assert.are.same({ "DiffviewDiffDelete", "@string" }, chunks[2][2])
+      assert.are.equal("el", chunks[2][1])
+      assert.are.same({ "DiffviewDiffDelete", "@variable" }, chunks[3][2])
+      assert.are.equal("lo", chunks[3][1])
+    end)
+
+    it("captured_chunks clamps captures that extend past text end", function()
+      -- Off-by-one or stale captures past `#text` must not generate a phantom
+      -- chunk on the next iteration.
+      local chunks = captured_chunks("hi", { { 0, 100, "@string" } }, "DiffviewDiffDelete")
+      assert.are.equal(1, #chunks)
+      assert.are.equal("hi", chunks[1][1])
+      assert.are.same({ "DiffviewDiffDelete", "@string" }, chunks[1][2])
+    end)
+
+    it("captured_chunks bypasses per-byte resolution past the long-line cap", function()
+      -- Pathologically long lines (e.g. minified bundles) skip the
+      -- O(text_len) per-byte capture pass and fall back to a single
+      -- plain del_hl chunk, regardless of any captures supplied.
+      local long = string.rep("a", 5001)
+      local chunks = captured_chunks(long, { { 0, 5001, "@string" } }, "DiffviewDiffDelete")
+      assert.are.equal(1, #chunks)
+      assert.are.equal(long, chunks[1][1])
+      assert.are.equal("DiffviewDiffDelete", chunks[1][2])
+    end)
+
+    it("compute_old_line_captures returns empty table when filetype is unset", function()
+      local bufnr = fresh_buf({ "local x = 1" })
+      vim.api.nvim_set_option_value("filetype", "", { buf = bufnr })
+      assert.are.same({}, compute_old_line_captures({ "local x = 1" }, bufnr))
+    end)
+
+    it("compute_old_line_captures returns empty table for empty old_lines", function()
+      -- Empty `old_lines` short-circuits before any filetype/TS lookup, so the
+      -- buffer's filetype is irrelevant. Leave it unset to avoid triggering
+      -- ftplugins that might error out when their TS parser isn't installed.
+      local bufnr = fresh_buf({ "" })
+      assert.are.same({}, compute_old_line_captures({}, bufnr))
+    end)
+
+    it("compute_old_line_captures bails out past the source-size cap", function()
+      -- Past the cap, the function returns `{}` before any parse work runs,
+      -- so callers fall back to plain del_hl chunks rather than blocking
+      -- the UI on a synchronous parse over a large generated/minified
+      -- source. `noautocmd` keeps the bundled lua ftplugin (which calls
+      -- `vim.treesitter.start`) out of this path so the test stays
+      -- portable when the lua parser isn't installed in the runtime.
+      local bufnr = fresh_buf({ "" })
+      vim.api.nvim_buf_call(bufnr, function()
+        vim.cmd("noautocmd set filetype=lua")
+      end)
+      local oversized = string.rep("x", 100001)
+      assert.are.same({}, compute_old_line_captures({ "x" }, bufnr, oversized))
+    end)
+
+    if lua_parser_available then
+      it("compute_old_line_captures yields per-line captures for a known filetype", function()
+        local bufnr = fresh_buf({ "" })
+        vim.api.nvim_set_option_value("filetype", "lua", { buf = bufnr })
+        local result = compute_old_line_captures({ "local x = 1" }, bufnr)
+        -- Lua highlights query is rich: at minimum we expect captures on
+        -- line 1 (the only old line). Don't pin specific capture names —
+        -- the TS query catalog evolves between Nvim versions.
+        assert.is_table(result[1])
+        assert.is_true(#result[1] > 0)
+        for _, c in ipairs(result[1]) do
+          assert.is_number(c[1])
+          assert.is_number(c[2])
+          assert.is_string(c[3])
+          assert.is_truthy(c[3]:match("^@"))
+        end
+      end)
+
+      it("render layers TS captures over the deletion background", function()
+        local bufnr = fresh_buf({ "tail" })
+        vim.api.nvim_set_option_value("filetype", "lua", { buf = bufnr })
+        inline_diff.render(bufnr, { "local x = 1", "tail" }, { "tail" })
+
+        local lines = virt_line_chunks(extmarks(bufnr))
+        assert.are.equal(1, #lines)
+        local chunks = lines[1]
+        -- At least one chunk must be a stacked-hl chunk (TS layered over
+        -- del_hl). The plain-text fallback would emit a single chunk with
+        -- a string hl_group; once captures kick in we get multiple chunks
+        -- and at least one with a list-shaped hl_group.
+        local saw_stacked = false
+        for _, ch in ipairs(chunks) do
+          if type(ch[2]) == "table" then
+            assert.are.equal("DiffviewDiffDelete", ch[2][1])
+            saw_stacked = true
+          end
+        end
+        assert.is_true(saw_stacked, "expected at least one stacked TS+del_hl chunk")
+      end)
+
+      it("deletion_treesitter=false skips the TS layer", function()
+        local bufnr = fresh_buf({ "tail" })
+        vim.api.nvim_set_option_value("filetype", "lua", { buf = bufnr })
+        inline_diff.render(
+          bufnr,
+          { "local x = 1", "tail" },
+          { "tail" },
+          { deletion_treesitter = false }
+        )
+
+        local lines = virt_line_chunks(extmarks(bufnr))
+        assert.are.equal(1, #lines)
+        -- Without TS layering each line collapses to a single plain-text
+        -- chunk under `del_hl`, with no stacked hl_group.
+        for _, ch in ipairs(lines[1]) do
+          assert.are.equal("string", type(ch[2]))
+          assert.are.equal("DiffviewDiffDelete", ch[2])
+        end
+      end)
+
+      it("'hanging' offsets TS captures past the leading indent", function()
+        local bufnr = fresh_buf({ "tail" })
+        vim.api.nvim_set_option_value("filetype", "lua", { buf = bufnr })
+        inline_diff.render(
+          bufnr,
+          { "  local x = 1", "tail" },
+          { "tail" },
+          { deletion_highlight = "hanging" }
+        )
+
+        local lines = virt_line_chunks(extmarks(bufnr))
+        assert.are.equal(1, #lines)
+        local chunks = lines[1]
+        -- First chunk is the unhighlighted indent (no hl_group).
+        assert.are.equal("  ", chunks[1][1])
+        assert.is_nil(chunks[1][2])
+        -- Subsequent chunks must concatenate to the rest of the line and
+        -- carry stacked-hl groups for at least one of them.
+        local rest_text = ""
+        local saw_stacked = false
+        for i = 2, #chunks do
+          rest_text = rest_text .. chunks[i][1]
+          if type(chunks[i][2]) == "table" then
+            assert.are.equal("DiffviewDiffDelete", chunks[i][2][1])
+            saw_stacked = true
+          end
+        end
+        assert.are.equal("local x = 1", rest_text)
+        assert.is_true(saw_stacked, "expected at least one stacked TS+del_hl chunk in the rest")
+      end)
+
+      it("reuses captures across renders when old_lines content is unchanged", function()
+        -- _repaint flows re-call render with the same old-side content on
+        -- every TextChanged; the captures cache lets the TS parse run once
+        -- instead of per redraw. Cache key is content-based, so a fresh
+        -- table with equal content also hits.
+        local bufnr = fresh_buf({ "tail" })
+        vim.api.nvim_set_option_value("filetype", "lua", { buf = bufnr })
+        inline_diff.render(bufnr, { "local x = 1", "tail" }, { "tail" })
+        local first = inline_diff._captures_by_buf[bufnr]
+        assert.is_not_nil(first)
+
+        inline_diff.render(bufnr, { "local x = 1", "tail" }, { "tail" })
+        local second = inline_diff._captures_by_buf[bufnr]
+        assert.are.equal(first, second)
+      end)
+
+      it("recomputes captures when old_lines content changes", function()
+        local bufnr = fresh_buf({ "tail" })
+        vim.api.nvim_set_option_value("filetype", "lua", { buf = bufnr })
+        inline_diff.render(bufnr, { "local x = 1", "tail" }, { "tail" })
+        local first = inline_diff._captures_by_buf[bufnr]
+        assert.is_not_nil(first)
+
+        inline_diff.render(bufnr, { "local y = 2", "tail" }, { "tail" })
+        local second = inline_diff._captures_by_buf[bufnr]
+        assert.is_not_nil(second)
+        assert.are_not.equal(first, second)
+      end)
+
+      it("recomputes captures when old_lines is mutated in place", function()
+        -- Reference-equality keying would incorrectly reuse stale captures
+        -- when a caller mutates the same table between renders; the
+        -- content-based key invalidates correctly.
+        local bufnr = fresh_buf({ "tail" })
+        vim.api.nvim_set_option_value("filetype", "lua", { buf = bufnr })
+        local old_lines = { "local x = 1", "tail" }
+        inline_diff.render(bufnr, old_lines, { "tail" })
+        local first = inline_diff._captures_by_buf[bufnr]
+        assert.is_not_nil(first)
+
+        old_lines[1] = "local y = 2"
+        inline_diff.render(bufnr, old_lines, { "tail" })
+        local second = inline_diff._captures_by_buf[bufnr]
+        assert.is_not_nil(second)
+        assert.are_not.equal(first, second)
+      end)
+
+      it("detach() drops the cached captures entry", function()
+        local bufnr = fresh_buf({ "tail" })
+        vim.api.nvim_set_option_value("filetype", "lua", { buf = bufnr })
+        inline_diff.render(bufnr, { "local x = 1", "tail" }, { "tail" })
+        assert.is_not_nil(inline_diff._captures_by_buf[bufnr])
+
+        inline_diff.detach(bufnr)
+        assert.is_nil(inline_diff._captures_by_buf[bufnr])
+      end)
+    end
   end)
 end)

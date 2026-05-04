@@ -223,3 +223,35 @@ describe("view.inline.deletion_highlight", function()
     assert.equals("text", conf.view.inline.deletion_highlight)
   end)
 end)
+
+describe("view.inline.deletion_treesitter", function()
+  local original
+  local utils = require("diffview.utils")
+  local orig_err
+
+  before_each(function()
+    original = vim.deepcopy(config.get_config())
+    orig_err = utils.err
+    utils.err = function() end
+  end)
+
+  after_each(function()
+    config.setup(original)
+    utils.err = orig_err
+  end)
+
+  it("defaults to true", function()
+    local conf = setup_with({})
+    assert.equals(true, conf.view.inline.deletion_treesitter)
+  end)
+
+  it("accepts false", function()
+    local conf = setup_with({ view = { inline = { deletion_treesitter = false } } })
+    assert.equals(false, conf.view.inline.deletion_treesitter)
+  end)
+
+  it("rejects non-boolean values and falls back to the default", function()
+    local conf = setup_with({ view = { inline = { deletion_treesitter = "yes" } } })
+    assert.equals(true, conf.view.inline.deletion_treesitter)
+  end)
+end)

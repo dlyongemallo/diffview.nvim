@@ -893,6 +893,15 @@ view.inline                                     *diffview-config-view.inline*
                   highlight; the rest of the row carries
                   |hl-DiffDelete|.
 
+            {deletion_treesitter} (boolean)
+                Layer tree-sitter syntax highlights over the deleted
+                virtual lines so they read like the rest of the buffer.
+                Default: `true`. No-op when no parser is attached for
+                the buffer's filetype. Composes orthogonally with
+                {deletion_highlight}: the background extent is
+                unchanged, only the foreground colouring of the deleted
+                text is affected.
+
 file_panel                                      *diffview-config-file_panel*
         Type: `table`, Default: (see defaults)
 

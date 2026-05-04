@@ -592,6 +592,179 @@ local function render_char_highlights(bufnr, new_row, old_line, new_line, inline
   return "ok"
 end
 
+-- A single tree-sitter capture span on one line: `{col_start, col_end,
+-- hl_group}`, with byte-0-indexed columns and `hl_group` in `@<capture>`
+-- form.
+---@alias InlineDiff.LineCapture { [1]: integer, [2]: integer, [3]: string }
+
+-- Cap on the total source length (`#source`) above which
+-- `compute_old_line_captures` short-circuits to `{}` rather than parsing.
+-- A full TS parse + highlights-query iteration is synchronous and runs
+-- on every render that touches a deletion-bearing call site (modulo the
+-- `M._captures_by_buf` cache hit), so a large source — e.g. a deletion
+-- spanning a generated/minified file — would block the UI. The per-line
+-- `CAPTURED_CHUNKS_MAX_LEN` cap protects the chunk builder but does
+-- nothing about the parse cost, which is what this cap is for. Sized
+-- around the upper bound of a hand-written deletion block: a
+-- thousand-line file averaging 100 chars/line is ~100 KB, and anything
+-- larger is almost certainly generated content the user didn't expect
+-- to syntax-highlight.
+local CAPTURE_SOURCE_MAX_LEN = 100000
+
+-- Compute per-line tree-sitter captures for `old_lines` using the buffer's
+-- filetype to pick the parser. Returns a table mapping 1-based line index to
+-- a list of `InlineDiff.LineCapture` entries. Multi-line captures (e.g.
+-- multi-line strings or comments) are split into one entry per spanned line
+-- so the per-line chunk builder can apply them without crossing line
+-- boundaries. Returns an empty table whenever any required piece is missing
+-- — no filetype, no language mapping, parser not installed, parse failure,
+-- no highlights query, or source larger than `CAPTURE_SOURCE_MAX_LEN` — so
+-- callers can unconditionally treat the result as "captures or nothing."
+-- `source` is optional; when supplied (e.g. by `M.render`, which already
+-- joined `old_lines` for `vim.diff`), it's reused as the parser input,
+-- avoiding a second O(N) `table.concat`. A trailing newline is harmless.
+---@param old_lines string[]
+---@param bufnr integer
+---@param source? string Pre-joined `old_lines` (`"\n"`-separated). Computed if omitted.
+---@return table<integer, InlineDiff.LineCapture[]>
+local function compute_old_line_captures(old_lines, bufnr, source)
+  if #old_lines == 0 or not api.nvim_buf_is_valid(bufnr) then
+    return {}
+  end
+
+  local ft = vim.bo[bufnr].filetype
+  if not ft or ft == "" then
+    return {}
+  end
+
+  local lang = vim.treesitter.language.get_lang(ft)
+  if not lang then
+    return {}
+  end
+
+  source = source or table.concat(old_lines, "\n")
+  if #source > CAPTURE_SOURCE_MAX_LEN then
+    return {}
+  end
+  -- `get_string_parser` loads the parser shared library on first use; pcall
+  -- catches the "parser not installed" path so we degrade silently rather
+  -- than surfacing a stack trace through every render.
+  local ok_parser, parser = pcall(vim.treesitter.get_string_parser, source, lang)
+  if not ok_parser or not parser then
+    return {}
+  end
+
+  -- Wrap parse + capture iteration in pcall: injection-language failures,
+  -- malformed queries, or runtime errors inside predicates can throw, and
+  -- a render-time exception would be more disruptive than missing colour.
+  local ok, result = pcall(function()
+    local trees = parser:parse(true)
+    if not trees or not trees[1] then
+      return nil
+    end
+    local root = trees[1]:root()
+
+    local query = vim.treesitter.query.get(lang, "highlights")
+    if not query then
+      return nil
+    end
+
+    local out = {}
+    local function add(line_idx, col_start, col_end, hl)
+      out[line_idx] = out[line_idx] or {}
+      out[line_idx][#out[line_idx] + 1] = { col_start, col_end, hl }
+    end
+
+    for id, node in query:iter_captures(root, source) do
+      local capture = query.captures[id]
+      -- Underscore-prefixed captures are TS-internal scratch names used by
+      -- predicates; they don't map to highlight groups.
+      if not capture:match("^_") then
+        local sr, sc, er, ec = node:range()
+        local hl = "@" .. capture
+        if sr == er then
+          add(sr + 1, sc, ec, hl)
+        else
+          -- Multi-line capture: emit one entry per spanned line. Line `sr`
+          -- runs from `sc` to end-of-line; intermediate lines span the full
+          -- line; line `er` runs from 0 to `ec`.
+          add(sr + 1, sc, #(old_lines[sr + 1] or ""), hl)
+          for k = sr + 1, er - 1 do
+            add(k + 1, 0, #(old_lines[k + 1] or ""), hl)
+          end
+          add(er + 1, 0, ec, hl)
+        end
+      end
+    end
+
+    return out
+  end)
+
+  if not ok or not result then
+    return {}
+  end
+  return result
+end
+
+-- Cap on `text` length above which `captured_chunks` skips per-byte capture
+-- resolution and emits the plain `{ {text, del_hl} }` chunk. The per-byte
+-- pass is O(text_len) in time and memory, which gets pathological on
+-- minified-bundle lines (10s of KB). Mirrors the spirit of `'synmaxcol'`
+-- (Neovim's syntax-highlighting cutoff) with a higher bound, since this
+-- runs once per render rather than per redraw.
+local CAPTURED_CHUNKS_MAX_LEN = 5000
+
+-- Build virt_line chunks for `text`, layering tree-sitter captures on top of
+-- `del_hl` so deletions keep their background while showing TS colours on
+-- top. `caps` is a list of `{col_start, col_end, hl}` whose columns reference
+-- `text` directly — slice callers (e.g. the "hanging" extent) must offset
+-- before calling. Each output chunk uses `{del_hl, ts_hl}` so Neovim's
+-- left-to-right hl-group merging stacks the foreground over the background.
+-- With no captures (or `text` over `CAPTURED_CHUNKS_MAX_LEN`), returns the
+-- same `{ {text, del_hl} }` the pre-TS code produced. Empty `text` returns
+-- `{ { "", del_hl } }` rather than `{}` so a deleted blank line still
+-- renders as a virt_line row instead of being elided to nothing.
+---@param text string
+---@param caps InlineDiff.LineCapture[]?
+---@param del_hl string
+---@return table[]
+local function captured_chunks(text, caps, del_hl)
+  if text == "" or not caps or #caps == 0 or #text > CAPTURED_CHUNKS_MAX_LEN then
+    return { { text, del_hl } }
+  end
+
+  local len = #text
+  -- Resolve the most-specific (latest-applied) capture per byte. TS emits
+  -- captures in document order with later overriding earlier; mirroring
+  -- that here keeps the inline rendering consistent with how the same
+  -- buffer would highlight under `vim.treesitter.start`.
+  local hl_at = {}
+  for _, c in ipairs(caps) do
+    local sc, ec, hl = c[1], c[2], c[3]
+    -- Clamp to `len` so a stale or off-by-one capture can't write past
+    -- the string end and create a phantom chunk on the next iteration.
+    local stop = math.min(ec, len)
+    for i = sc + 1, stop do
+      hl_at[i] = hl
+    end
+  end
+
+  local chunks = {}
+  local segment_start = 1
+  local current = hl_at[1]
+  for i = 2, len do
+    if hl_at[i] ~= current then
+      local groups = current and { del_hl, current } or del_hl
+      chunks[#chunks + 1] = { text:sub(segment_start, i - 1), groups }
+      segment_start = i
+      current = hl_at[i]
+    end
+  end
+  local groups = current and { del_hl, current } or del_hl
+  chunks[#chunks + 1] = { text:sub(segment_start, len), groups }
+  return chunks
+end
+
 -- Attach a block of deleted lines as virtual lines near `new_start`. The
 -- `extent` argument controls how far the `del_hl` background reaches:
 --   • `"text"`:       only the deleted characters carry `del_hl`.
@@ -601,6 +774,10 @@ end
 --                     target is `full_width_target(bufnr)`.
 --   • `"hanging"`:    leading whitespace is emitted unhighlighted; the
 --                     remainder of the line carries `del_hl`.
+-- When `line_captures` is supplied, foreground tree-sitter highlights are
+-- layered on each line's chunks so the deleted text reads with syntax
+-- colour even though the lines themselves are virtual (and so unparsable
+-- by the buffer's own TS attachment).
 ---@param bufnr integer
 ---@param old_lines string[]
 ---@param old_from integer 1-based start index into `old_lines`.
@@ -611,6 +788,7 @@ end
 ---@param del_hl? string Highlight group for the deleted text. Default: `DiffviewDiffDelete`.
 ---@param extent? "text"|"full_width"|"hanging" Default: `"text"`.
 ---@param fw_target? integer Pad target for `extent == "full_width"`. Default: 0 (no padding).
+---@param line_captures? table<integer, InlineDiff.LineCapture[]> Per-`old_lines` index TS captures from `compute_old_line_captures`.
 local function render_deleted_block(
   bufnr,
   old_lines,
@@ -621,7 +799,8 @@ local function render_deleted_block(
   above,
   del_hl,
   extent,
-  fw_target
+  fw_target,
+  line_captures
 )
   del_hl = del_hl or "DiffviewDiffDelete"
   extent = extent or "text"
@@ -633,9 +812,10 @@ local function render_deleted_block(
   api.nvim_buf_call(bufnr, function()
     for k = old_from, old_to do
       local text = old_lines[k] or ""
+      local caps = line_captures and line_captures[k] or nil
       local chunks
       if extent == "full_width" then
-        chunks = { { text, del_hl } }
+        chunks = captured_chunks(text, caps, del_hl)
         local pad = fw_target - vim.fn.strdisplaywidth(text)
         if pad > 0 then
           chunks[#chunks + 1] = { string.rep(" ", pad), del_hl }
@@ -647,7 +827,26 @@ local function render_deleted_block(
           if indent ~= "" then
             chunks[#chunks + 1] = { indent }
           end
-          chunks[#chunks + 1] = { rest, del_hl }
+          -- Captures reference offsets in `text`; shift them to `rest`'s
+          -- coordinate space and drop entries that fell entirely inside
+          -- the unhighlighted indent.
+          local rest_caps
+          if caps then
+            local indent_len = #indent
+            rest_caps = {}
+            for _, c in ipairs(caps) do
+              if c[2] > indent_len then
+                rest_caps[#rest_caps + 1] = {
+                  math.max(0, c[1] - indent_len),
+                  c[2] - indent_len,
+                  c[3],
+                }
+              end
+            end
+          end
+          for _, rc in ipairs(captured_chunks(rest, rest_caps, del_hl)) do
+            chunks[#chunks + 1] = rc
+          end
         else
           -- Empty or all-whitespace line: no "rest" to highlight without
           -- making the row invisible. Fall back to highlighting the whole
@@ -655,7 +854,7 @@ local function render_deleted_block(
           chunks = { { text, del_hl } }
         end
       else
-        chunks = { { text, del_hl } }
+        chunks = captured_chunks(text, caps, del_hl)
       end
       virt_lines[#virt_lines + 1] = chunks
     end
@@ -696,6 +895,18 @@ end
 ---@type table<integer, integer[][]>
 M._hunks_by_buf = {}
 
+-- Per-buffer cache of tree-sitter captures for the old side. Survives
+-- `M.clear`/`M.render` so `_repaint`-style flows (where `old_lines` is held
+-- by the caller and reused unchanged) skip the parse on every redraw. The
+-- entry is matched by filetype + content equality on the joined old-side
+-- string `old`, so an in-place mutation of `old_lines` still invalidates
+-- (the next render rebuilds `old` and the comparison fails). String
+-- equality on `old` is O(N) but always cheaper than re-parsing + running
+-- the highlights query. Cleared by `M.detach` and by the same
+-- buffer-lifecycle autocmd as `_hunks_by_buf`.
+---@type table<integer, { ft: string, old: string, captures: table<integer, InlineDiff.LineCapture[]> }>
+M._captures_by_buf = {}
+
 -- Track which buffers already have a cleanup autocmd so we don't register
 -- duplicates across repeated render passes on the same buffer.
 ---@type table<integer, true>
@@ -724,6 +935,7 @@ local function register_cache_cleanup(bufnr)
     once = true,
     callback = function(args)
       M._hunks_by_buf[args.buf] = nil
+      M._captures_by_buf[args.buf] = nil
       cache_cleanup_registered[args.buf] = nil
       -- Buffer-scoped autocmds on the scroll-adjuster group are dropped by
       -- Neovim when the buffer is wiped, so only the registration flag needs
@@ -884,6 +1096,7 @@ function M.detach(bufnr)
   if not bufnr then
     return
   end
+  M._captures_by_buf[bufnr] = nil
   if scroll_adjuster_registered[bufnr] then
     scroll_adjuster_registered[bufnr] = nil
     if api.nvim_buf_is_valid(bufnr) then
@@ -995,6 +1208,7 @@ end
 ---@field ignore_blank_lines? boolean
 ---@field style? "unified"|"overleaf" Default: `"unified"`.
 ---@field deletion_highlight? "text"|"full_width"|"hanging" Extent of the `del_hl` background on virt_line deletions. Default: `"text"`.
+---@field deletion_treesitter? boolean Layer TS captures over deleted virt_lines. Default: `true`.
 
 ---@class InlineDiffStyle
 ---@field del_hl string Highlight group for virt_line deletions.
@@ -1095,6 +1309,49 @@ function M.render(bufnr, old_lines, new_lines, opts)
   -- traversal per block.
   local fw_target = extent == "full_width" and full_width_target(bufnr) or 0
 
+  -- TS captures for the entire old side, computed lazily and memoized:
+  -- the data is shared across every `render_deleted_block` call below
+  -- (each pure deletion or unified-style echo of an old line indexes
+  -- into it), so a single parse covers the render. Hunks with no
+  -- deletion-bearing call sites (e.g. pure-addition diffs, or overleaf
+  -- runs that take only the inline-strikethrough path) skip the parse
+  -- entirely. `compute_old_line_captures` returns an empty table when
+  -- TS is unavailable, which the chunk builder handles transparently.
+  --
+  -- The result is also cached across renders in `M._captures_by_buf`
+  -- so `_repaint`-style flows (re-render on `TextChanged` while
+  -- `old_lines` is held by the caller and reused) skip the parse on
+  -- every redraw. The cache is keyed by filetype + content equality
+  -- on the joined `old` string, so an in-place mutation of `old_lines`
+  -- still invalidates correctly on the next lookup.
+  --
+  -- Disabled when `opts.deletion_treesitter == false`: skip the parse
+  -- altogether and pass `nil` to `render_deleted_block`, which then
+  -- emits a single `del_hl` chunk per line.
+  local ts_enabled = opts.deletion_treesitter ~= false
+  local line_captures
+  local function get_line_captures()
+    if not ts_enabled then
+      return nil
+    end
+    if line_captures then
+      return line_captures
+    end
+    local ft = api.nvim_buf_is_valid(bufnr) and vim.bo[bufnr].filetype or ""
+    local entry = M._captures_by_buf[bufnr]
+    if entry and entry.ft == ft and entry.old == old then
+      line_captures = entry.captures
+    else
+      line_captures = compute_old_line_captures(old_lines, bufnr, old)
+      M._captures_by_buf[bufnr] = {
+        ft = ft,
+        old = old,
+        captures = line_captures,
+      }
+    end
+    return line_captures
+  end
+
   for _, h in ipairs(hunks) do
     local old_start, old_count, new_start, new_count = h[1], h[2], h[3], h[4]
 
@@ -1119,7 +1376,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
         nil,
         style.del_hl,
         extent,
-        fw_target
+        fw_target,
+        get_line_captures()
       )
     elseif old_count > 0 and new_count > 0 then
       -- Modification: unified and overleaf diverge on how deletions are
@@ -1140,7 +1398,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
           true,
           style.del_hl,
           extent,
-          fw_target
+          fw_target,
+          get_line_captures()
         )
       elseif old_count > paired then
         -- Overleaf: overflow old lines still get a virt_line above.
@@ -1155,7 +1414,8 @@ function M.render(bufnr, old_lines, new_lines, opts)
           false,
           style.del_hl,
           extent,
-          fw_target
+          fw_target,
+          get_line_captures()
         )
       end
 
@@ -1181,7 +1441,10 @@ function M.render(bufnr, old_lines, new_lines, opts)
 
         -- Overleaf fallback: when char-level was skipped and we're not
         -- already echoing old lines, show this paired old line above the
-        -- new one so the reader can see what changed.
+        -- new one so the reader can see what changed. Use the style's
+        -- own `del_hl` so the echoed line keeps the overleaf look (e.g.
+        -- the strikethrough on `DiffviewDiffDeleteInline`) rather than
+        -- silently downgrading to the unified `DiffviewDiffDelete`.
         if not style.echo_paired_old and char_result == "skipped" and ol ~= nl then
           render_deleted_block(
             bufnr,
@@ -1191,9 +1454,10 @@ function M.render(bufnr, old_lines, new_lines, opts)
             new_start + k,
             row,
             true,
-            "DiffviewDiffDelete",
+            style.del_hl,
             extent,
-            fw_target
+            fw_target,
+            get_line_captures()
           )
         end
       end
@@ -1229,6 +1493,8 @@ M._test = {
   diff_units = diff_units,
   refinement_safe = refinement_safe,
   INTRALINE_MAX_HUNKS = INTRALINE_MAX_HUNKS,
+  compute_old_line_captures = compute_old_line_captures,
+  captured_chunks = captured_chunks,
 }
 
 return M
