@@ -38,12 +38,18 @@ end
 -- supplies a pre-built `pinned_b_file`), so `try_should_null` never reaches
 -- this code with `sym == "b"`; we leave the LOCAL/STAGE branches to the
 -- parent.
+--
+-- The synthetic top-of-history "Working tree" entry is the exception: its
+-- `revs.a` is HEAD (parent-of-working-tree), and its statuses come from
+-- `diff HEAD`, so the standard parent-vs-child semantics apply. The adapter
+-- tags that rev with `pin_local_synthetic`, which routes us back to
+-- `Diff2.should_null` for the a-side as well.
 ---@override
 ---@param rev Rev
 ---@param status string
 ---@param sym Diff2.WindowSymbol
 function Diff2HorPinned.should_null(rev, status, sym)
-  if sym == "a" and rev.type == RevType.COMMIT then
+  if sym == "a" and rev.type == RevType.COMMIT and not rev.pin_local_synthetic then
     return status == "D"
   end
 

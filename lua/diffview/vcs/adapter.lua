@@ -272,6 +272,82 @@ end
 
 ---@diagnostic enable: unused-local, missing-return
 
+---Build a synthetic LogEntry representing the working tree as a top-of-log
+---"commit" paired with `revs.a = HEAD` on each FileEntry. Used to render the
+---working tree as a navigable entry in file-history when `pin_local` is true.
+---Returns nil when the working tree has no path-arg-relevant changes, when
+---the adapter has no working-tree concept, or when HEAD cannot be resolved
+---(e.g. a fresh repo with no commits). The default implementation returns
+---nil; git and hg adapters override.
+---@param opt { path_args: string[], layout_opt: vcs.adapter.LayoutOpt, single_file: boolean }
+---@return LogEntry?
+function VCSAdapter:build_local_log_entry(opt) ---@diagnostic disable-line: unused-local
+  return nil
+end
+
+---@class vcs.adapter.HistoryScope
+---@field single_file boolean # Whether the resulting history is logically scoped to one file.
+---@field path? string # The scoped working-tree path when `single_file` is true. Drives `pin_local`'s rename anchor and the synthetic entry's path filter.
+
+---@class vcs.adapter.PinLocalFileEntryOpt
+---@field layout_class Layout (class)
+---@field layout_opt vcs.adapter.LayoutOpt
+---@field path string # Working-tree path emitted for this row.
+---@field oldpath? string # Rename old name. Caller is responsible for nilling it when `revs.a` is the commit being browsed (pin_local non-synth case); the helper passes it through unchanged.
+---@field rev_a Rev
+---@field rev_b Rev
+---@field status? string
+---@field stats? GitStats
+---@field commit Commit
+---@field single_file boolean # The history's single-file scope, computed via `history_scope`. Drives the b-side cache key.
+
+---Build a `FileEntry` that respects the pin_local invariants. Centralises
+---the rules `parse_fh_data` and `build_local_log_entry` were both
+---duplicating: in pin_local mode the b-side `vcs.File` is resolved through
+---`layout_opt.pinned_b_file_for` keyed by `pinned_path` in single-file
+---mode and `opt.path` otherwise, so the synthetic top-of-history entry
+---and the streamed entries share the same view-owned File for a given
+---path. Each call site computes its own `rev_a` / `rev_b` / `oldpath`
+---(those differ between streamed and synthetic entries) and passes them
+---in.
+---@param opt vcs.adapter.PinLocalFileEntryOpt
+---@return FileEntry
+function VCSAdapter:build_pin_local_file_entry(opt)
+  local FileEntry = lazy.access("diffview.scene.file_entry", "FileEntry").__get()
+
+  local pin_local = opt.layout_opt.pin_local == true
+  local pinned_b_file
+  if pin_local and opt.layout_opt.pinned_b_file_for then
+    local b_path = (opt.single_file and opt.layout_opt.pinned_path) or opt.path
+    pinned_b_file = opt.layout_opt.pinned_b_file_for(b_path)
+  end
+
+  return FileEntry.with_layout(opt.layout_class, {
+    adapter = self,
+    path = opt.path,
+    oldpath = opt.oldpath,
+    status = opt.status,
+    stats = opt.stats,
+    kind = "working",
+    commit = opt.commit,
+    revs = { a = opt.rev_a, b = opt.rev_b },
+    pinned_b_file = pinned_b_file,
+  })
+end
+
+---Resolve the history's working-tree scope. Single source of truth for
+---"is this single-file?" and "what file?", consulted by `pin_local`'s
+---`pinned_path` seed, the synthetic entry's `single_file` field, and the
+---synth's `git diff` path filter. Adapters override to handle their own
+---history modes (git's `-L` line-trace adds a path that doesn't live in
+---`path_args`). Default: multi-file (no scoped path).
+---@param path_args string[]
+---@param log_options table
+---@return vcs.adapter.HistoryScope
+function VCSAdapter:history_scope(path_args, log_options) ---@diagnostic disable-line: unused-local
+  return { single_file = false }
+end
+
 ---@return string cmd The VCS binary.
 function VCSAdapter:bin()
   return self:get_command()[1]

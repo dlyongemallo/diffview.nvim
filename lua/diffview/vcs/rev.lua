@@ -17,6 +17,7 @@ local RevType = oop.enum({
 ---@field commit? string A commit SHA.
 ---@field stage? integer A stage number.
 ---@field track_head boolean If true, indicates that the rev should be updated when HEAD changes.
+---@field pin_local_synthetic? boolean Set on the a-side rev of the synthetic top-of-history entry built by `VCSAdapter:build_local_log_entry`. Tells the pinned `Diff2` layout's `should_null` to fall back to standard parent-vs-child semantics for that entry, since revs.a is HEAD (not the commit being browsed).
 local Rev = oop.create_class("Rev")
 
 ---Rev constructor

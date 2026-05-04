@@ -626,6 +626,24 @@ describe("diffview.scene.layouts.diff_2_*_pinned should_null", function()
       assert.False(cls.should_null(commit, "?", "a"))
     end
   end)
+
+  -- The synthetic top-of-history entry built by `build_local_log_entry`
+  -- has `revs.a = HEAD` (parent of the working tree, not the changeset
+  -- being browsed) with statuses from `diff HEAD`, so standard
+  -- parent-vs-child semantics apply: an added file nulls the a-side
+  -- because HEAD doesn't have it; a deleted file does NOT null the a-side
+  -- because HEAD still has it. The adapter tags `revs.a` with
+  -- `pin_local_synthetic` so the pinned override defers to `Diff2.should_null`.
+  it("defers to Diff2 for the synthetic working-tree entry (pin_local_synthetic)", function()
+    local synthetic = { type = RevType.COMMIT, pin_local_synthetic = true }
+    for _, cls in ipairs({ Diff2HorPinned, Diff2VerPinned }) do
+      assert.True(cls.should_null(synthetic, "A", "a"))
+      assert.True(cls.should_null(synthetic, "?", "a"))
+      assert.False(cls.should_null(synthetic, "D", "a"))
+      assert.False(cls.should_null(synthetic, "M", "a"))
+      assert.False(cls.should_null(synthetic, "R", "a"))
+    end
+  end)
 end)
 
 describe("diffview.scene.layouts.diff_2_*_pinned ownership", function()

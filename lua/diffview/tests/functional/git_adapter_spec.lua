@@ -740,4 +740,525 @@ describe("diffview.vcs.adapters.git", function()
       end)
     )
   end)
+
+  describe("build_local_log_entry", function()
+    it(
+      "returns nil on a clean working tree",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          local log_entry = adapter:build_local_log_entry({
+            path_args = {},
+            layout_opt = { default_layout = Diff2 },
+            single_file = false,
+          })
+
+          assert.is_nil(log_entry)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "builds a synthetic LogEntry with revs.b = LOCAL when the tree is dirty",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Modify the init file so `git diff --name-status HEAD` reports it.
+          local f = assert(io.open(repo .. "/init.txt", "w"))
+          f:write("changed\n")
+          f:close()
+
+          local log_entry = adapter:build_local_log_entry({
+            path_args = {},
+            layout_opt = { default_layout = Diff2 },
+            single_file = false,
+          })
+
+          assert.is_not_nil(log_entry)
+          ---@cast log_entry LogEntry
+          assert.is_nil(log_entry.commit.hash)
+          assert.equals("Working tree", log_entry.commit.subject)
+          assert.equals("now", log_entry.commit.rel_date)
+          -- The synthetic commit must populate `iso_date` (and the
+          -- `time_offset` fallback that feeds it). `render.lua` concatenates
+          -- `iso_date` into the panel header when `date_format = "iso"` (and
+          -- in the `auto` branch for older commits), so a nil here would
+          -- abort the file-history panel render. The synth is constructed
+          -- via the adapter's `Commit` alias (`GitCommit`/`HgCommit`), whose
+          -- `init` derives `iso_date` from `time` regardless of whether
+          -- `time_offset` was provided.
+          assert.is_string(log_entry.commit.iso_date)
+          assert.equals(0, log_entry.commit.time_offset)
+          assert.equals(1, #log_entry.files)
+
+          local file = log_entry.files[1]
+          assert.equals("init.txt", file.path)
+          assert.equals("M", file.status)
+          assert.equals(RevType.LOCAL, file.revs.b.type)
+          assert.equals(RevType.COMMIT, file.revs.a.type)
+          -- Without this flag, the pinned `Diff2` layout's `should_null`
+          -- would invert the standard semantics for revs.a (treating it as
+          -- the commit being browsed) and mishandle added/deleted files in
+          -- the synthetic entry. See `Diff2HorPinned.should_null`.
+          assert.is_true(file.revs.a.pin_local_synthetic)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    -- The synth's b-side cache key must match `parse_fh_data`'s key in
+    -- single-file mode (`layout_opt.pinned_path`), otherwise an absolute
+    -- or non-canonical pathspec produces different `vcs.File` instances
+    -- for the synth and the streamed entries, breaking pinned-buffer reuse.
+    it(
+      "keys b-side by layout_opt.pinned_path in single-file mode",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          local f = assert(io.open(repo .. "/init.txt", "w"))
+          f:write("changed\n")
+          f:close()
+
+          local lookups = {}
+          local shared = { path = "shared.txt", rev = adapter.Rev(RevType.LOCAL) }
+          local log_entry = adapter:build_local_log_entry({
+            path_args = { "init.txt" },
+            -- pinned_path is the user's working-tree spelling; entry.name
+            -- here is git's emitted relative name. Use a deliberately
+            -- different value so the test catches the mismatch.
+            layout_opt = {
+              default_layout = Diff2,
+              pin_local = true,
+              pinned_path = repo .. "/init.txt",
+              pinned_b_file_for = function(path)
+                table.insert(lookups, path)
+                return shared
+              end,
+            },
+            single_file = true,
+          })
+
+          assert.is_not_nil(log_entry)
+          ---@cast log_entry LogEntry
+          -- The cache key matches what `parse_fh_data` would use for real
+          -- entries in single-file mode; both feed the same `vcs.File`.
+          assert.same({ repo .. "/init.txt" }, lookups)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "respects path_args, omitting unmodified paths",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Add a second tracked file, then modify only `init.txt`.
+          local g = assert(io.open(repo .. "/other.txt", "w"))
+          g:write("other\n")
+          g:close()
+          run({ "git", "add", "other.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "add other" }, repo)
+
+          local f = assert(io.open(repo .. "/init.txt", "w"))
+          f:write("changed\n")
+          f:close()
+
+          -- Pass only `other.txt` as path_args; `init.txt` should be ignored.
+          local log_entry = adapter:build_local_log_entry({
+            path_args = { "other.txt" },
+            layout_opt = { default_layout = Diff2 },
+            single_file = true,
+          })
+
+          assert.is_nil(log_entry, "expected nil for clean path filter")
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "builds entries for multiple modified paths",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          local g = assert(io.open(repo .. "/other.txt", "w"))
+          g:write("other\n")
+          g:close()
+          run({ "git", "add", "other.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "add other" }, repo)
+
+          for _, name in ipairs({ "init.txt", "other.txt" }) do
+            local f = assert(io.open(repo .. "/" .. name, "w"))
+            f:write("changed\n")
+            f:close()
+          end
+
+          local log_entry = adapter:build_local_log_entry({
+            path_args = { "init.txt", "other.txt" },
+            layout_opt = { default_layout = Diff2 },
+            single_file = false,
+          })
+
+          assert.is_not_nil(log_entry)
+          ---@cast log_entry LogEntry
+          assert.equals(2, #log_entry.files)
+          assert.is_false(log_entry.single_file)
+
+          local paths = {}
+          for _, file in ipairs(log_entry.files) do
+            paths[file.path] = true
+            assert.equals(RevType.LOCAL, file.revs.b.type)
+          end
+          assert.is_true(paths["init.txt"])
+          assert.is_true(paths["other.txt"])
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    -- A single directory pathspec produces a multi-file history (the
+    -- streaming adapter uses `is_single_file` to decide); the synthetic
+    -- entry must follow the same rule, otherwise `panel.single_file`
+    -- gets set to `true` from the synth and the rest of the panel
+    -- (folding, navigation, header rendering) is rendered in the wrong
+    -- mode.
+    it(
+      "marks single_file=false for a single-directory pathspec",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          assert.equals(1, vim.fn.mkdir(repo .. "/sub", "p"))
+          local g = assert(io.open(repo .. "/sub/a.txt", "w"))
+          g:write("a\n")
+          g:close()
+          local h = assert(io.open(repo .. "/sub/b.txt", "w"))
+          h:write("b\n")
+          h:close()
+          run({ "git", "add", "sub" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "add sub" }, repo)
+
+          for _, name in ipairs({ "sub/a.txt", "sub/b.txt" }) do
+            local f = assert(io.open(repo .. "/" .. name, "w"))
+            f:write("changed\n")
+            f:close()
+          end
+
+          -- Use the absolute path so the directory check inside
+          -- `build_local_log_entry` doesn't depend on the test runner's
+          -- cwd (real callers usually invoke from the repo root, where a
+          -- relative pathspec would also resolve).
+          local log_entry = adapter:build_local_log_entry({
+            path_args = { repo .. "/sub" },
+            layout_opt = { default_layout = Diff2 },
+            single_file = false,
+          })
+
+          assert.is_not_nil(log_entry)
+          ---@cast log_entry LogEntry
+          -- `#path_args == 1` would have wrongly returned `true` here
+          -- because the pathspec is a single argument; the directory
+          -- check downgrades to multi-file.
+          assert.is_false(log_entry.single_file)
+          assert.equals(2, #log_entry.files)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+  end)
+
+  -- `history_scope` is the single source of truth for "is this history
+  -- single-file, and if so, which path?". Three call sites consult it
+  -- (pin_local's `pinned_path` seed, the synthetic entry's `single_file`
+  -- field, and the synth's `git diff` path filter) so each scope question
+  -- now has one answer instead of three near-duplicates.
+  describe("history_scope", function()
+    it(
+      "recognises a single file pathspec",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          local scope = adapter:history_scope({ "init.txt" }, {})
+          assert.equals(true, scope.single_file)
+          assert.equals("init.txt", scope.path)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "downgrades a single-directory pathspec to multi-file",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          assert.equals(1, vim.fn.mkdir(repo .. "/sub", "p"))
+          local scope = adapter:history_scope({ repo .. "/sub" }, {})
+          assert.equals(false, scope.single_file)
+          assert.is_nil(scope.path)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    -- Line-trace history: the path lives in the L spec, not in
+    -- `path_args` (which is empty in `-L` mode). Without this branch,
+    -- `pin_local`'s rename anchor would fall back to each commit's
+    -- `entry.path_new` and stop following the working-tree path.
+    it(
+      "extracts the path from a single -L spec",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          local scope = adapter:history_scope(
+            {},
+            { L = { "10,20:src/foo.lua" } } --[[@as GitLogOptions ]]
+          )
+          assert.equals(true, scope.single_file)
+          assert.equals("src/foo.lua", scope.path)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "downgrades multiple -L specs targeting different paths",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          local scope = adapter:history_scope({}, {
+            L = { ":sym:src/a.lua", ":sym:src/b.lua" },
+          } --[[@as GitLogOptions ]])
+          assert.equals(false, scope.single_file)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    -- A malformed L spec (no `:`, or empty path after the last `:`) used
+    -- to fall through and return `{ single_file = true, path = nil }`,
+    -- which then seeded `pinned_path` with nil and broke downstream
+    -- cache-key resolution. The scope must downgrade to multi-file so
+    -- pin_local doesn't try to anchor on a missing path.
+    it(
+      "downgrades a malformed -L spec to multi-file",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          local no_colon = adapter:history_scope({}, { L = { "garbage" } } --[[@as GitLogOptions ]])
+          assert.equals(false, no_colon.single_file)
+          assert.is_nil(no_colon.path)
+
+          local empty_path = adapter:history_scope(
+            {},
+            { L = { "10,20:" } } --[[@as GitLogOptions ]]
+          )
+          assert.equals(false, empty_path.single_file)
+          assert.is_nil(empty_path.path)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    -- Pathspec resolution: a single argument like `*.txt` or
+    -- `:(glob)**/*.txt` isn't a literal path, so using it raw as
+    -- `pinned_path` would key the pin_local cache by the pattern and
+    -- the RHS would try to open a LOCAL file named after the pattern.
+    -- `history_scope` resolves through `git ls-files` to git's emitted
+    -- relative name when exactly one tracked file matches.
+    it(
+      "resolves a glob pathspec to the matched file when exactly one matches",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          local scope = adapter:history_scope({ "*.txt" }, {})
+          -- `init.txt` is the only tracked file in `make_repo_and_adapter`.
+          assert.equals(true, scope.single_file)
+          assert.equals("init.txt", scope.path)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "downgrades a glob pathspec that matches multiple files",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          -- Add a second tracked file so `*.txt` matches both.
+          local f = assert(io.open(repo .. "/other.txt", "w"))
+          f:write("other\n")
+          f:close()
+          run({ "git", "add", "other.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "add other" }, repo)
+
+          local scope = adapter:history_scope({ "*.txt" }, {})
+          assert.equals(false, scope.single_file)
+          assert.is_nil(scope.path)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    -- A single-pathspec history whose path isn't tracked today (deleted /
+    -- renamed away / never added) is still single-file: `is_single_file()`
+    -- returns true for `<2` matches, so `history_scope` must agree or
+    -- pin_local stops seeding `pinned_path` for valid single-path
+    -- histories of removed files.
+    it(
+      "treats a single pathspec with zero matches as single-file with the literal path",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          local scope = adapter:history_scope({ "deleted.txt" }, {})
+          assert.equals(true, scope.single_file)
+          assert.equals("deleted.txt", scope.path)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    -- An absolute path canonicalises through `ls-files` to git's
+    -- emitted relative spelling. Both spellings then key the pin_local
+    -- cache the same way, so the synth and streamed entries share one
+    -- view-owned `vcs.File`.
+    it(
+      "canonicalises absolute paths to git's relative emission",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          local scope = adapter:history_scope({ repo .. "/init.txt" }, {})
+          assert.equals(true, scope.single_file)
+          assert.equals("init.txt", scope.path)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "returns multi-file for an empty path_args (no -L)",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+        local ok, err = pcall(function()
+          local scope = adapter:history_scope({}, {})
+          assert.equals(false, scope.single_file)
+        end)
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+  end)
 end)

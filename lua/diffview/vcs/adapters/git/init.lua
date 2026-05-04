@@ -164,6 +164,22 @@ function GitAdapter.get_repo_paths(path_args, cpath)
   return paths, top_indicators
 end
 
+---Extract the working-tree path from a git `-L` spec. Each spec is shaped
+---`<line-spec>:<path>`, where `<line-spec>` is one of `<start>,<end>`,
+---`:<funcname>`, or `:<regex>:`. We take the suffix after the last `:` to
+---match git's own parsing (`strrchr(spec, ':')` in `line-log.c`); paths
+---containing `:` are ambiguous to git itself. Returns nil when the spec
+---is malformed or has no path so callers can downgrade safely.
+---@param spec string
+---@return string?
+local function l_spec_path(spec)
+  local path = spec:match(".*:(.*)")
+  if path == nil or path == "" then
+    return nil
+  end
+  return path
+end
+
 local has_cygpath ---@type boolean?
 ---@type table<string, string>
 local cygpath_cache = {}
@@ -618,14 +634,74 @@ function GitAdapter:stream_line_trace_data(state)
   return stream
 end
 
+---@override
 ---@param path_args string[]
----@param lflags string[]
+---@param log_options GitLogOptions
+---@return vcs.adapter.HistoryScope
+function GitAdapter:history_scope(path_args, log_options)
+  local lflags = log_options and log_options.L or {}
+  if #lflags > 0 then
+    -- Line-trace history: each `L` spec is `<line-spec>:<path>`. The
+    -- working-tree path lives there, not in `path_args` (which is empty
+    -- in `-L` mode). A malformed spec (no `:`, empty path) downgrades
+    -- the whole scope to multi-file rather than seeding `pinned_path`
+    -- with nil/empty downstream.
+    local first_path = l_spec_path(lflags[1])
+    if not first_path then
+      return { single_file = false }
+    end
+    for i = 2, #lflags do
+      if l_spec_path(lflags[i]) ~= first_path then
+        return { single_file = false }
+      end
+    end
+    return { single_file = true, path = first_path }
+  end
+
+  if not (path_args and #path_args == 1 and self.ctx.toplevel) then
+    return { single_file = false }
+  end
+  if pl:is_dir(path_args[1]) then
+    return { single_file = false }
+  end
+  -- Resolve the pathspec to the actual tracked file. `path_args[1]` may
+  -- be a glob / magic pathspec (`*.lua`, `:(glob)**/*.lua`, ...) rather
+  -- than a literal path; using it raw as `pinned_path` would key the
+  -- pin_local cache by the pathspec instead of the matched filename and
+  -- the RHS would try to open a LOCAL file named after the pattern. The
+  -- ls-files call canonicalises to git's relative emission, so absolute
+  -- and relative spellings of the same file also share a cache key.
+  local out = self:exec_sync(
+    utils.vec_join("-c", "core.quotePath=false", "ls-files", "--", path_args),
+    self.ctx.toplevel
+  )
+  if #out == 1 then
+    return { single_file = true, path = out[1] }
+  end
+  if #out == 0 then
+    -- Match `is_single_file`'s `< 2` semantics: a single-pathspec history
+    -- whose path isn't tracked today (deleted, renamed away, etc.) is still
+    -- single-file and may have history. Fall back to the literal pathspec
+    -- as the rename anchor; a magic pathspec that resolves to nothing also
+    -- has empty history, so the approximation is harmless there.
+    return { single_file = true, path = path_args[1] }
+  end
+  return { single_file = false }
+end
+
+---@param path_args string[]
+---@param lflags? string[]
 ---@return boolean
 function GitAdapter:is_single_file(path_args, lflags)
   if lflags and #lflags > 0 then
     local seen = {}
     for i, v in ipairs(lflags) do
-      local path = v:match(".*:(.*)")
+      local path = l_spec_path(v)
+      if not path then
+        -- Malformed L spec: fall back to multi-file rather than indexing
+        -- `seen` with nil (which would error).
+        return false
+      end
       if i > 1 and not seen[path] then
         return false
       end
@@ -1105,38 +1181,21 @@ function GitAdapter:parse_fh_data(data, commit, state)
       rev_b = state.prepared_log_opts.base or GitRev(RevType.COMMIT, data.right_hash)
     end
 
-    -- pin_local: every entry's b-window references the view-owned
-    -- `vcs.File` for the resolved working-tree path. The cache keys by
-    -- path, so a single-file history shares one File per path across all
-    -- entries and refreshes; the view destroys them in `close()`. Only
-    -- single-file mode honours `pinned_path` (the rename anchor that keeps
-    -- the b-side bound to the user's working-tree name even when older
-    -- commits used a renamed name); in multi-file mode `pinned_path`
-    -- tracks the cursor's last file row and would otherwise route every
-    -- entry's b-side to that one file.
-    local pinned_b_file
-    if pin_local and state.layout_opt.pinned_b_file_for then
-      local b_path = (state.single_file and state.layout_opt.pinned_path) or entry.name
-      pinned_b_file = state.layout_opt.pinned_b_file_for(b_path)
-    end
-
     table.insert(
       files,
-      FileEntry.with_layout(state.layout_opt.default_layout or Diff2Hor, {
-        adapter = self,
+      self:build_pin_local_file_entry({
+        layout_class = state.layout_opt.default_layout or Diff2Hor,
+        layout_opt = state.layout_opt,
         path = entry.name,
         -- In pin_local mode revs.a is the commit itself, so the parent's
         -- old name doesn't apply; entry.name lives in this commit's tree.
         oldpath = (not pin_local) and entry.oldname or nil,
         status = entry.status,
         stats = entry.stats,
-        kind = "working",
         commit = commit,
-        revs = {
-          a = rev_a,
-          b = rev_b,
-        },
-        pinned_b_file = pinned_b_file,
+        rev_a = rev_a,
+        rev_b = rev_b,
+        single_file = state.single_file,
       })
     )
   end
@@ -1193,30 +1252,23 @@ function GitAdapter:parse_fh_line_trace_data(data, commit, state)
       rev_b = state.prepared_log_opts.base or GitRev(RevType.COMMIT, data.right_hash)
     end
 
-    -- See `parse_fh_data` for the pinned_b_file rationale. `entry.path_new`
-    -- is typed `string?` upstream; the line-trace pipeline only emits
-    -- entries with a real path, but the type system needs the explicit
-    -- guard to know we never pass nil into `pinned_b_file_for`. Line trace
-    -- is single-file by construction, so `pinned_path` always applies.
-    local pinned_b_file
-    local b_path = state.layout_opt.pinned_path or entry.path_new
-    if pin_local and state.layout_opt.pinned_b_file_for and b_path then
-      pinned_b_file = state.layout_opt.pinned_b_file_for(b_path)
-    end
-
+    -- Line-trace is single-file by construction, so the helper's
+    -- `single_file = true` resolves the b-side cache key through
+    -- `pinned_path` (the rename anchor) -- mirroring `parse_fh_data`.
+    -- `entry.path_new` is typed `string?` upstream; the line-trace
+    -- pipeline only emits entries with a real path, so casting here is
+    -- safe.
     table.insert(
       files,
-      FileEntry.with_layout(state.layout_opt.default_layout or Diff2Hor, {
-        adapter = self,
-        path = entry.path_new,
+      self:build_pin_local_file_entry({
+        layout_class = state.layout_opt.default_layout or Diff2Hor,
+        layout_opt = state.layout_opt,
+        path = entry.path_new --[[@as string ]],
         oldpath = (not pin_local) and oldpath or nil,
-        kind = "working",
         commit = commit,
-        revs = {
-          a = rev_a,
-          b = rev_b,
-        },
-        pinned_b_file = pinned_b_file,
+        rev_a = rev_a,
+        rev_b = rev_b,
+        single_file = true,
       })
     )
   end
@@ -1234,6 +1286,109 @@ function GitAdapter:parse_fh_line_trace_data(data, commit, state)
   logger:debug("[GitAdapter:parse_fh_data] Encountered commit with no file data:", data)
 
   return false, "Missing file data!"
+end
+
+---@override
+---@param opt { path_args: string[], layout_opt: vcs.adapter.LayoutOpt, single_file: boolean }
+---@return LogEntry?
+function GitAdapter:build_local_log_entry(opt)
+  local path_args = opt.path_args or {}
+  local layout_opt = opt.layout_opt
+
+  local head = self:head_rev()
+  if not head then
+    return nil
+  end
+
+  -- Mark this rev as the synthetic entry's a-side. The pinned layout's
+  -- `should_null` inverts the standard semantics for the normal pin_local
+  -- case (where revs.a is the commit being browsed, so `A` means present
+  -- and `D` means absent on the a-side). Here revs.a is HEAD and the
+  -- statuses come from `diff HEAD` (parent-perspective), so the standard
+  -- `Diff2.should_null` applies; the flag tells the override to defer.
+  head.pin_local_synthetic = true
+
+  -- `--raw --numstat HEAD` mirrors the format `parse_fh_data` already
+  -- consumes, so namestat parsing can reuse `git_parser.parse_namestat_entry`.
+  -- `core.quotePath=false` matches the streamed file-history invocations so
+  -- non-ASCII (or otherwise C-quotable) paths arrive as raw bytes here too;
+  -- without it the synthetic entry's path would not match the pinned-path
+  -- cache that's keyed on the streamed (unquoted) path.
+  local args = utils.vec_join(
+    { "-c", "core.quotePath=false", "diff", "--raw", "--numstat", "HEAD", "--" },
+    path_args
+  )
+  local out, code = self:exec_sync(args, self.ctx.toplevel)
+  if code ~= 0 or not out then
+    return nil
+  end
+
+  local namestat, numstat = git_parser.structure_stat_data(out, 1)
+  if #namestat == 0 then
+    return nil
+  end
+
+  local user_out = self:exec_sync(
+    { "config", "user.name" },
+    { cwd = self.ctx.toplevel, silent = true }
+  )
+  local author = (user_out and user_out[1] and vim.trim(user_out[1])) or ""
+  if author == "" then
+    author = "Working tree"
+  end
+
+  -- `Commit` here is `GitCommit` (see the alias at the top of this file),
+  -- whose `init` derives `iso_date` from `time` and defaults `time_offset`
+  -- to 0. Both fields are required by `render.lua` when the panel's
+  -- `date_format` is `iso` (and in the `auto` branch for older commits);
+  -- a nil `iso_date` would abort the panel render, so we rely on the
+  -- subclass init populating them rather than passing them explicitly.
+  local commit = Commit({
+    hash = nil,
+    author = author,
+    time = os.time(),
+    rel_date = "now",
+    subject = "Working tree",
+    ref_names = nil,
+  })
+
+  local layout_class = layout_opt.default_layout or Diff2Hor
+  local files = {}
+
+  for i = 1, #namestat do
+    local entry = git_parser.parse_namestat_entry(namestat[i], numstat[i] or "0\t0\t")
+
+    -- Synthetic working-tree entry. `oldpath` IS retained: revs.a is HEAD
+    -- (parent of the working tree), so the rename detected by
+    -- `git diff HEAD` is meaningful for reading the file at HEAD.
+    table.insert(
+      files,
+      self:build_pin_local_file_entry({
+        layout_class = layout_class,
+        layout_opt = layout_opt,
+        path = entry.name,
+        oldpath = entry.oldname,
+        status = entry.status,
+        stats = entry.stats,
+        commit = commit,
+        rev_a = head,
+        rev_b = self.Rev(RevType.LOCAL),
+        single_file = opt.single_file,
+      })
+    )
+  end
+
+  return LogEntry({
+    path_args = path_args,
+    commit = commit,
+    files = files,
+    -- Mirror the scope decision the caller already made via
+    -- `history_scope`. Recomputing from `#path_args == 1` here would
+    -- mismark single-arg multi-file pathspecs (e.g. `*.txt` matching
+    -- multiple files) as single-file, which would force the whole
+    -- panel into single-file mode because the synth is prepended.
+    single_file = opt.single_file,
+  })
 end
 
 ---@param argo ArgObject

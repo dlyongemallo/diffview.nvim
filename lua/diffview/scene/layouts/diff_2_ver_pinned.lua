@@ -19,12 +19,14 @@ function Diff2VerPinned:init(opt)
   self:super(opt)
 end
 
+-- See `Diff2HorPinned.should_null` for the rationale, including why the
+-- synthetic top-of-history entry's a-side is routed back to `Diff2.should_null`.
 ---@override
 ---@param rev Rev
 ---@param status string
 ---@param sym Diff2.WindowSymbol
 function Diff2VerPinned.should_null(rev, status, sym)
-  if sym == "a" and rev.type == RevType.COMMIT then
+  if sym == "a" and rev.type == RevType.COMMIT and not rev.pin_local_synthetic then
     return status == "D"
   end
 
