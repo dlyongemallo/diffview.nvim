@@ -1082,6 +1082,7 @@ end)
 ---@return LogEntry|string ret
 function GitAdapter:parse_fh_data(data, commit, state)
   local files = {}
+  local pin_local = state.layout_opt.pin_local == true
 
   for i = 1, #data.numstat do
     local entry = git_parser.parse_namestat_entry(data.namestat[i], data.numstat[i])
@@ -1090,20 +1091,52 @@ function GitAdapter:parse_fh_data(data, commit, state)
       state.old_path = entry.oldname
     end
 
+    local rev_a, rev_b
+    if pin_local then
+      -- pin_local diffs each commit against the working tree, so the a-side
+      -- reads from this commit (not its parent) and the b-side from LOCAL.
+      -- This matches the synthetic top-of-history "Working tree" entry
+      -- (HEAD vs LOCAL) and the documented "diff each commit against your
+      -- live file" behaviour.
+      rev_a = GitRev(RevType.COMMIT, data.right_hash)
+      rev_b = self.Rev(RevType.LOCAL)
+    else
+      rev_a = data.left_hash and GitRev(RevType.COMMIT, data.left_hash) or GitRev.new_null_tree()
+      rev_b = state.prepared_log_opts.base or GitRev(RevType.COMMIT, data.right_hash)
+    end
+
+    -- pin_local: every entry's b-window references the view-owned
+    -- `vcs.File` for the resolved working-tree path. The cache keys by
+    -- path, so a single-file history shares one File per path across all
+    -- entries and refreshes; the view destroys them in `close()`. Only
+    -- single-file mode honours `pinned_path` (the rename anchor that keeps
+    -- the b-side bound to the user's working-tree name even when older
+    -- commits used a renamed name); in multi-file mode `pinned_path`
+    -- tracks the cursor's last file row and would otherwise route every
+    -- entry's b-side to that one file.
+    local pinned_b_file
+    if pin_local and state.layout_opt.pinned_b_file_for then
+      local b_path = (state.single_file and state.layout_opt.pinned_path) or entry.name
+      pinned_b_file = state.layout_opt.pinned_b_file_for(b_path)
+    end
+
     table.insert(
       files,
       FileEntry.with_layout(state.layout_opt.default_layout or Diff2Hor, {
         adapter = self,
         path = entry.name,
-        oldpath = entry.oldname,
+        -- In pin_local mode revs.a is the commit itself, so the parent's
+        -- old name doesn't apply; entry.name lives in this commit's tree.
+        oldpath = (not pin_local) and entry.oldname or nil,
         status = entry.status,
         stats = entry.stats,
         kind = "working",
         commit = commit,
         revs = {
-          a = data.left_hash and GitRev(RevType.COMMIT, data.left_hash) or GitRev.new_null_tree(),
-          b = state.prepared_log_opts.base or GitRev(RevType.COMMIT, data.right_hash),
+          a = rev_a,
+          b = rev_b,
         },
+        pinned_b_file = pinned_b_file,
       })
     )
   end
@@ -1140,6 +1173,7 @@ end
 ---@return LogEntry|string ret
 function GitAdapter:parse_fh_line_trace_data(data, commit, state)
   local files = {}
+  local pin_local = state.layout_opt.pin_local == true
 
   for _, entry in ipairs(data.diff) do
     local oldpath = entry.path_old ~= entry.path_new and entry.path_old or nil
@@ -1148,18 +1182,41 @@ function GitAdapter:parse_fh_line_trace_data(data, commit, state)
       state.old_path = oldpath
     end
 
+    local rev_a, rev_b
+    if pin_local then
+      -- See `parse_fh_data` for the rationale: pin_local diffs each commit
+      -- against the working tree, so a-side reads from this commit.
+      rev_a = GitRev(RevType.COMMIT, data.right_hash)
+      rev_b = self.Rev(RevType.LOCAL)
+    else
+      rev_a = data.left_hash and GitRev(RevType.COMMIT, data.left_hash) or GitRev.new_null_tree()
+      rev_b = state.prepared_log_opts.base or GitRev(RevType.COMMIT, data.right_hash)
+    end
+
+    -- See `parse_fh_data` for the pinned_b_file rationale. `entry.path_new`
+    -- is typed `string?` upstream; the line-trace pipeline only emits
+    -- entries with a real path, but the type system needs the explicit
+    -- guard to know we never pass nil into `pinned_b_file_for`. Line trace
+    -- is single-file by construction, so `pinned_path` always applies.
+    local pinned_b_file
+    local b_path = state.layout_opt.pinned_path or entry.path_new
+    if pin_local and state.layout_opt.pinned_b_file_for and b_path then
+      pinned_b_file = state.layout_opt.pinned_b_file_for(b_path)
+    end
+
     table.insert(
       files,
       FileEntry.with_layout(state.layout_opt.default_layout or Diff2Hor, {
         adapter = self,
         path = entry.path_new,
-        oldpath = oldpath,
+        oldpath = (not pin_local) and oldpath or nil,
         kind = "working",
         commit = commit,
         revs = {
-          a = data.left_hash and GitRev(RevType.COMMIT, data.left_hash) or GitRev.new_null_tree(),
-          b = state.prepared_log_opts.base or GitRev(RevType.COMMIT, data.right_hash),
+          a = rev_a,
+          b = rev_b,
         },
+        pinned_b_file = pinned_b_file,
       })
     )
   end

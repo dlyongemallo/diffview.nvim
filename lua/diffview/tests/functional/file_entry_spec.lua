@@ -176,6 +176,42 @@ describe("diffview.scene.file_entry", function()
     end)
   end)
 
+  -- Identity contract: when an adapter passes a pre-built `pinned_b_file`,
+  -- `with_layout` reuses that exact `vcs.File` instance for the b-side
+  -- instead of constructing a new one from `opt.path`/`opt.pinned_path`.
+  -- This is what lets every pinned-mode FileEntry across the view share
+  -- the same working-tree File (see `Diff2*Pinned.shared_symbols`).
+  it("with_layout reuses the supplied pinned_b_file for the b-side", function()
+    local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+
+    local shared = { path = "foo.txt" } --[[@as vcs.File ]]
+    local fake_adapter = { ctx = { toplevel = "/" } }
+    -- Real Rev would require adapter wiring; mock just the method `vcs.File`
+    -- pulls during winbar construction (`object_name`).
+    local rev_a = {
+      type = RevType.COMMIT,
+      commit = "abc1234567",
+      object_name = function(_, n)
+        return ("abc1234567"):sub(1, n or 10)
+      end,
+    }
+    local rev_b = { type = RevType.LOCAL }
+
+    local entry = FileEntry.with_layout(Diff2HorPinned, {
+      adapter = fake_adapter,
+      path = "old/foo.txt",
+      oldpath = nil,
+      status = "M",
+      kind = "working",
+      revs = { a = rev_a, b = rev_b },
+      pinned_b_file = shared,
+    })
+
+    assert.equals(shared, entry.layout.b.file)
+    assert.is_not_nil(entry.layout.a.file)
+    assert.are_not.equal(shared, entry.layout.a.file)
+  end)
+
   it("forwards force flag to contained files when destroyed", function()
     local seen = {}
     local layout_destroyed = false

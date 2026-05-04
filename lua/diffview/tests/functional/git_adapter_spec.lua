@@ -536,4 +536,208 @@ describe("diffview.vcs.adapters.git", function()
       assert.True(found_custom, "Custom env var must also be present")
     end)
   end)
+
+  describe("parse_fh_data pin_local", function()
+    -- Build a (state, data, commit) triple that exercises a single-file
+    -- modification commit. The namestat/numstat strings mirror what
+    -- `git log --raw --numstat` emits for `:100644 100644 <a> <b> M\tfoo.txt`.
+    local function setup_state_and_data(adapter, layout_opt)
+      local state = {
+        path_args = { "foo.txt" },
+        log_options = { L = {} },
+        prepared_log_opts = { base = nil },
+        layout_opt = layout_opt,
+        single_file = true,
+      }
+
+      local data = {
+        left_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        right_hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        namestat = { ":100644 100644 aaaaaaa bbbbbbb M\tfoo.txt" },
+        numstat = { "1\t1\tfoo.txt" },
+      }
+
+      -- A bare table is enough; parse_fh_data only forwards `commit` into
+      -- the LogEntry it produces, never reads any field.
+      local commit = {}
+
+      return state, data, commit
+    end
+
+    it(
+      "uses commit-side rev for b when pin_local is unset",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          local state, data, commit = setup_state_and_data(adapter, {
+            default_layout = Diff2,
+          })
+
+          local success, log_entry = adapter:parse_fh_data(data, commit, state)
+          assert.True(success)
+          ---@cast log_entry LogEntry
+
+          local b_rev = log_entry.files[1].layout.b.file.rev
+          assert.equals(RevType.COMMIT, b_rev.type)
+          assert.equals(data.right_hash, b_rev.commit)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "sets revs.b to LOCAL when state.layout_opt.pin_local is true",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          local state, data, commit = setup_state_and_data(adapter, {
+            default_layout = Diff2,
+            pin_local = true,
+          })
+
+          local success, log_entry = adapter:parse_fh_data(data, commit, state)
+          assert.True(success)
+          ---@cast log_entry LogEntry
+
+          local b_file = log_entry.files[1].layout.b.file
+          assert.equals(RevType.LOCAL, b_file.rev.type)
+          -- Without `pinned_path` the b-side falls back to the entry path,
+          -- which is still the working-tree file in the no-rename case.
+          assert.equals("foo.txt", b_file.path)
+
+          -- pin_local diffs each commit against the working tree, so the
+          -- a-side reads from this commit (not its parent).
+          local a_rev = log_entry.files[1].layout.a.file.rev
+          assert.equals(RevType.COMMIT, a_rev.type)
+          assert.equals(data.right_hash, a_rev.commit)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "reuses the layout_opt.pinned_b_file_for File for the b-side",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Stand-in for the view's pin_local cache: hand out a single
+          -- distinguishable `vcs.File`-like instance regardless of path so
+          -- we can assert it's the b-side that the FileEntry ended up with.
+          -- Identity equality is what `Diff2*Pinned.shared_symbols` and
+          -- the view's destruction path rely on.
+          local shared = { path = "shared.txt", rev = adapter.Rev(RevType.LOCAL) }
+          local lookups = {}
+          local state, data, commit = setup_state_and_data(adapter, {
+            default_layout = Diff2,
+            pin_local = true,
+            pinned_path = "renamed/foo.txt",
+            pinned_b_file_for = function(path)
+              table.insert(lookups, path)
+              return shared
+            end,
+          })
+
+          local success, log_entry = adapter:parse_fh_data(data, commit, state)
+          assert.True(success)
+          ---@cast log_entry LogEntry
+
+          assert.equals(shared, log_entry.files[1].layout.b.file)
+          -- Adapter resolves the path through pinned_path (when set) before
+          -- asking the view for the File, so the view's cache stays keyed
+          -- by working-tree paths.
+          assert.same({ "renamed/foo.txt" }, lookups)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    -- In multi-file pin_local (`state.single_file = false`), `pinned_path`
+    -- tracks the cursor's last file row -- not a per-entry rename anchor --
+    -- so it must NOT route every entry's b-side to that one path. Each file
+    -- must resolve its own working-tree File, otherwise switching rows in
+    -- multi-file history would diff a different file's commit-side contents
+    -- against the previously cursored working-tree file.
+    it(
+      "ignores layout_opt.pinned_path in multi-file mode (uses each entry's name)",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          local lookups = {}
+          local state = {
+            path_args = { "alpha.txt", "beta.txt" },
+            log_options = { L = {} },
+            prepared_log_opts = { base = nil },
+            layout_opt = {
+              default_layout = Diff2,
+              pin_local = true,
+              pinned_path = "alpha.txt",
+              pinned_b_file_for = function(path)
+                table.insert(lookups, path)
+                return { path = path, rev = adapter.Rev(RevType.LOCAL) }
+              end,
+            },
+            single_file = false,
+          }
+          local data = {
+            left_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            right_hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            namestat = {
+              ":100644 100644 aaaaaaa bbbbbbb M\talpha.txt",
+              ":100644 100644 ccccccc ddddddd M\tbeta.txt",
+            },
+            numstat = { "1\t1\talpha.txt", "2\t2\tbeta.txt" },
+          }
+
+          local success, log_entry = adapter:parse_fh_data(data, {}, state)
+          assert.True(success)
+          ---@cast log_entry LogEntry
+
+          assert.equals(2, #log_entry.files)
+          -- Lookups happen in entry order; the universal pinned_path would
+          -- have produced { "alpha.txt", "alpha.txt" } -- both routed to
+          -- alpha's working-tree file. The fix uses each entry's name.
+          assert.same({ "alpha.txt", "beta.txt" }, lookups)
+          assert.equals("alpha.txt", log_entry.files[1].layout.b.file.path)
+          assert.equals("beta.txt", log_entry.files[2].layout.b.file.path)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+  end)
 end)

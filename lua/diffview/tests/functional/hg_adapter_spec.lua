@@ -228,4 +228,115 @@ describe("diffview.vcs.adapters.hg", function()
       end)
     )
   end)
+
+  describe("parse_fh_data pin_local", function()
+    -- Construct an HgAdapter without invoking `hg`. parse_fh_data only
+    -- shells out via state.layout_opt.default_layout, which we control,
+    -- so a tempdir toplevel and stubbed bootstrap state are sufficient.
+    local function make_adapter()
+      local repo = vim.fn.tempname()
+      vim.fn.mkdir(repo, "p")
+
+      HgAdapter.bootstrap.done = true
+      HgAdapter.bootstrap.ok = true
+
+      return HgAdapter({ toplevel = repo, path_args = {} }), repo
+    end
+
+    -- Mercurial's parse_fh_data iterates `#numstat - 1` times, so the
+    -- numstat array carries a sentinel trailing entry. Status character
+    -- comes from the first character of the matching `namestat[i]`.
+    local function setup_state_and_data(layout_opt)
+      local state = {
+        path_args = { "foo.txt" },
+        log_options = {},
+        prepared_log_opts = { base = nil },
+        layout_opt = layout_opt,
+        single_file = true,
+      }
+
+      local data = {
+        left_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        right_hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        namestat = { "M foo.txt" },
+        numstat = { "foo.txt | 2 +-", "" },
+      }
+
+      local commit = {}
+
+      return state, data, commit
+    end
+
+    it("uses commit-side rev for b when pin_local is unset", function()
+      local adapter, repo = make_adapter()
+
+      local state, data, commit = setup_state_and_data({
+        default_layout = Diff2,
+      })
+
+      local success, log_entry = adapter:parse_fh_data(data, commit, state)
+      assert.True(success)
+      ---@cast log_entry LogEntry
+
+      local b_rev = log_entry.files[1].layout.b.file.rev
+      assert.equals(RevType.COMMIT, b_rev.type)
+      assert.equals(data.right_hash, b_rev.commit)
+
+      pcall(vim.fn.delete, repo, "rf")
+    end)
+
+    it("sets revs.b to LOCAL when state.layout_opt.pin_local is true", function()
+      local adapter, repo = make_adapter()
+
+      local state, data, commit = setup_state_and_data({
+        default_layout = Diff2,
+        pin_local = true,
+      })
+
+      local success, log_entry = adapter:parse_fh_data(data, commit, state)
+      assert.True(success)
+      ---@cast log_entry LogEntry
+
+      local b_file = log_entry.files[1].layout.b.file
+      assert.equals(RevType.LOCAL, b_file.rev.type)
+      assert.equals("foo.txt", b_file.path)
+
+      -- pin_local diffs each changeset against the working tree, so the
+      -- a-side reads from this changeset (not its parent).
+      local a_rev = log_entry.files[1].layout.a.file.rev
+      assert.equals(RevType.COMMIT, a_rev.type)
+      assert.equals(data.right_hash, a_rev.commit)
+
+      pcall(vim.fn.delete, repo, "rf")
+    end)
+
+    it("reuses the layout_opt.pinned_b_file_for File for the b-side", function()
+      local adapter, repo = make_adapter()
+
+      -- See `git_adapter_spec`'s mirror test for the rationale: the adapter
+      -- looks up the b-side `vcs.File` through the view's cache (resolved
+      -- via `pinned_path` when set), so identity is preserved across every
+      -- entry the view will ever build.
+      local shared = { path = "shared.txt", rev = adapter.Rev(RevType.LOCAL) }
+      local lookups = {}
+      local state, data, commit = setup_state_and_data({
+        default_layout = Diff2,
+        pin_local = true,
+        pinned_path = "renamed/foo.txt",
+        pinned_b_file_for = function(path)
+          table.insert(lookups, path)
+          return shared
+        end,
+      })
+
+      local success, log_entry = adapter:parse_fh_data(data, commit, state)
+      assert.True(success)
+      ---@cast log_entry LogEntry
+
+      assert.equals(shared, log_entry.files[1].layout.b.file)
+      assert.same({ "renamed/foo.txt" }, lookups)
+
+      pcall(vim.fn.delete, repo, "rf")
+    end)
+  end)
 end)

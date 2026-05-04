@@ -266,15 +266,30 @@ end
 ---@class FileEntry.with_layout.Opt : FileEntry.init.Opt
 ---@field nulled? boolean
 ---@field get_data? git.FileDataProducer
+---@field pinned_path? string # Deprecated: when `pinned_b_file` is supplied the layout takes its b-side from that shared File and `pinned_path` is ignored. Retained as a fallback for adapters that haven't been wired to the view's pin_local cache yet.
+---@field pinned_b_file? vcs.File # The view-owned, shared working-tree `vcs.File` for `pin_local` mode. When set, the layout's b-side reuses this exact instance instead of constructing a fresh one, so identity is preserved across every entry the view ever shows. The instance outlives entry teardown via the layout's `shared_symbols`, and is destroyed by `FileHistoryView:close()`.
 
 ---@param layout_class Layout (class)
 ---@param opt FileEntry.with_layout.Opt
 ---@return FileEntry
 function FileEntry.with_layout(layout_class, opt)
   local function create_file(rev, symbol)
+    if symbol == "b" and opt.pinned_b_file then
+      return opt.pinned_b_file
+    end
+
+    local path
+    if symbol == "a" then
+      path = opt.oldpath or opt.path
+    elseif symbol == "b" and opt.pinned_path then
+      path = opt.pinned_path
+    else
+      path = opt.path
+    end
+
     return File({
       adapter = opt.adapter,
-      path = symbol == "a" and opt.oldpath or opt.path,
+      path = path,
       kind = opt.kind,
       commit = opt.commit,
       get_data = opt.get_data,

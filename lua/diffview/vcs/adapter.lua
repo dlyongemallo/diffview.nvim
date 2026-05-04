@@ -20,6 +20,9 @@ local M = {}
 ---@class vcs.adapter.LayoutOpt
 ---@field default_layout Layout
 ---@field merge_layout? Layout
+---@field pin_local? boolean # When true, file-history entries are constructed with revs.b = LOCAL so the b-window can pin to the working-tree file.
+---@field pinned_path? string # Working-tree path used for the b-side File when `pin_local` is true for a single-file history; preserves the pin across renames in older commits.
+---@field pinned_b_file_for? fun(path: string): vcs.File # Resolves the shared, view-owned working-tree File for a given path. Set by `FileHistoryPanel` when `pin_local` is active so adapters can hand the same `vcs.File` instance to every entry's b-side; see `FileHistoryView:get_pinned_b_file`. The returned file outlives entry/log destruction (its layout symbol lives in `Diff2*Pinned.shared_symbols`), so adapters must not destroy it.
 
 ---@class vcs.adapter.VCSAdapter.Bootstrap
 ---@field done boolean # Did the bootstrapping

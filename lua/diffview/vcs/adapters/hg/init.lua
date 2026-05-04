@@ -691,6 +691,7 @@ end)
 ---@return LogEntry|string ret
 function HgAdapter:parse_fh_data(data, commit, state)
   local files = {}
+  local pin_local = state.layout_opt.pin_local == true
 
   for i = 1, #data.numstat - 1 do
     local status = data.namestat[i]:sub(1, 1):gsub("%s", " ")
@@ -714,20 +715,44 @@ function HgAdapter:parse_fh_data(data, commit, state)
       status = "R"
     end
 
+    local rev_a, rev_b
+    if pin_local then
+      -- pin_local diffs each changeset against the working tree, so the
+      -- a-side reads from this changeset (not its parent) and the b-side
+      -- from LOCAL. This matches the synthetic top-of-history "Working
+      -- tree" entry (HEAD vs LOCAL) and the documented behaviour.
+      rev_a = HgRev(RevType.COMMIT, data.right_hash)
+      rev_b = self.Rev(RevType.LOCAL)
+    else
+      rev_a = data.left_hash and HgRev(RevType.COMMIT, data.left_hash) or HgRev.new_null_tree()
+      rev_b = state.prepared_log_opts.base or HgRev(RevType.COMMIT, data.right_hash)
+    end
+
+    -- See `GitAdapter:parse_fh_data` for the pinned_b_file rationale,
+    -- including why `pinned_path` only applies in single-file mode.
+    local pinned_b_file
+    if pin_local and state.layout_opt.pinned_b_file_for then
+      local b_path = (state.single_file and state.layout_opt.pinned_path) or name
+      pinned_b_file = state.layout_opt.pinned_b_file_for(b_path)
+    end
+
     table.insert(
       files,
       FileEntry.with_layout(state.layout_opt.default_layout or Diff2Hor, {
         adapter = self,
         path = name,
-        oldpath = oldname,
+        -- In pin_local mode revs.a is the changeset itself, so the parent's
+        -- old name doesn't apply; `name` lives in this changeset's tree.
+        oldpath = (not pin_local) and oldname or nil,
         status = status,
         stats = stats,
         kind = "working",
         commit = commit,
         revs = {
-          a = data.left_hash and HgRev(RevType.COMMIT, data.left_hash) or HgRev.new_null_tree(),
-          b = state.prepared_log_opts.base or HgRev(RevType.COMMIT, data.right_hash),
+          a = rev_a,
+          b = rev_b,
         },
+        pinned_b_file = pinned_b_file,
       })
     )
   end
