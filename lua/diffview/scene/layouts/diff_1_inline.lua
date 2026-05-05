@@ -336,6 +336,13 @@ Diff1Inline._render_inline = async.void(function(self)
 
   local new_lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
   inline_diff.render(bufnr, old_lines, new_lines, render_opts())
+  -- Confine the inline-diff highlights to this window so they don't
+  -- leak into other windows that happen to display the same buffer
+  -- (e.g. a working-tree file the user already has open in a normal
+  -- tab — issue #156). Idempotent across repeated renders on the
+  -- same window, and a no-op on Neovim < 0.11 where window-scoped
+  -- namespaces aren't available.
+  inline_diff.attach_to_window(bufnr, winid)
   register_repaint_autocmds(self, bufnr)
 end)
 

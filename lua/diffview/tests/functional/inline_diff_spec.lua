@@ -114,6 +114,10 @@ describe("diffview.scene.inline_diff", function()
 
   after_each(function()
     for _, b in ipairs(created_bufs) do
+      -- Detach explicitly: tests that bypass `render` never register
+      -- the BufWipeout cleanup autocmd, so per-buffer module tables
+      -- would otherwise survive the buf delete. Idempotent.
+      pcall(inline_diff.detach, b)
       pcall(api.nvim_buf_delete, b, { force = true })
     end
     -- Close any windows the test opened so a leak (e.g. from a failing
@@ -1469,5 +1473,170 @@ describe("diffview.scene.inline_diff", function()
         assert.is_nil(inline_diff._captures_by_buf[bufnr])
       end)
     end
+  end)
+
+  describe("window scoping", function()
+    -- Mirror `WIN_SCOPE_SUPPORTED` exactly so the test gate doesn't
+    -- disagree with the implementation on edge builds that ship only
+    -- one half of the stable pair. The leak-warning path is covered
+    -- by a separate test. Bracket-index `nvim__ns_set` to keep
+    -- `type-check-tests` clean of `undefined-field`.
+    local supported = (api.nvim_win_add_ns ~= nil and api.nvim_win_remove_ns ~= nil)
+      or api["nvim__ns_set"] ~= nil
+
+    if supported then
+      it("attach_to_window records the scoped winid in _scoped_wins_by_buf", function()
+        local bufnr = fresh_buf({ "a", "b" })
+        inline_diff.attach_to_window(bufnr, initial_winid)
+        local set = inline_diff._scoped_wins_by_buf[bufnr]
+        assert.is_not_nil(set)
+        assert.is_true(set[initial_winid])
+      end)
+
+      it("attach_to_window is idempotent across repeated calls", function()
+        local bufnr = fresh_buf({ "a" })
+        inline_diff.attach_to_window(bufnr, initial_winid)
+        inline_diff.attach_to_window(bufnr, initial_winid)
+        local set = inline_diff._scoped_wins_by_buf[bufnr]
+        local count = 0
+        for _ in pairs(set) do
+          count = count + 1
+        end
+        assert.are.equal(1, count)
+      end)
+
+      it("detach() clears the scoped-windows entry", function()
+        local bufnr = fresh_buf({ "a" })
+        inline_diff.attach_to_window(bufnr, initial_winid)
+        assert.is_not_nil(inline_diff._scoped_wins_by_buf[bufnr])
+
+        inline_diff.detach(bufnr)
+        assert.is_nil(inline_diff._scoped_wins_by_buf[bufnr])
+      end)
+
+      it("BufWipeout drops the scoped-windows entry via the cleanup autocmd", function()
+        local bufnr = fresh_buf({ "a" })
+        -- `inline_diff.render` registers the BufWipeout/BufDelete
+        -- cleanup autocmd; the `attach_to_window` call seeds the
+        -- scoped-windows entry so the cleanup has something to drop.
+        inline_diff.render(bufnr, { "old" }, { "a" })
+        inline_diff.attach_to_window(bufnr, initial_winid)
+        assert.is_not_nil(inline_diff._scoped_wins_by_buf[bufnr])
+
+        api.nvim_buf_delete(bufnr, { force = true })
+        assert.is_nil(inline_diff._scoped_wins_by_buf[bufnr])
+      end)
+
+      it("a buffer shown in two windows only highlights the attached one", function()
+        local bufnr = fresh_buf({ "old line" })
+        api.nvim_win_set_buf(initial_winid, bufnr)
+        vim.cmd("split")
+        local other_winid = api.nvim_get_current_win()
+        api.nvim_win_set_buf(other_winid, bufnr)
+        api.nvim_set_current_win(initial_winid)
+
+        inline_diff.render(bufnr, { "old line" }, { "new line" })
+        inline_diff.attach_to_window(bufnr, initial_winid)
+
+        -- The namespace is now scoped: only `initial_winid` should
+        -- render the diff. We can't easily inspect rendered pixels, but
+        -- we can assert that only the attached window is recorded.
+        local set = inline_diff._scoped_wins_by_buf[bufnr]
+        assert.is_true(set[initial_winid])
+        assert.is_nil(set[other_winid])
+      end)
+
+      it("attach_to_window transfers winid ownership to the new bufnr", function()
+        -- `diff1_inline` cycles entries through one window, so the
+        -- latest attach must strip `winid` from the previous buffer's
+        -- set; otherwise detaching that buffer would `win_remove_ns`
+        -- a window the current one still relies on.
+        local first = fresh_buf({ "a" })
+        local second = fresh_buf({ "b" })
+        inline_diff.attach_to_window(first, initial_winid)
+        assert.is_true(inline_diff._scoped_wins_by_buf[first][initial_winid])
+
+        inline_diff.attach_to_window(second, initial_winid)
+        assert.is_nil(inline_diff._scoped_wins_by_buf[first])
+        assert.is_true(inline_diff._scoped_wins_by_buf[second][initial_winid])
+
+        -- Detaching the previous buffer must leave the current scope
+        -- intact: this is the regression the transfer guards against.
+        inline_diff.detach(first)
+        assert.is_true(inline_diff._scoped_wins_by_buf[second][initial_winid])
+      end)
+    else
+      it("attach_to_window is a no-op on Neovim < 0.11", function()
+        local bufnr = fresh_buf({ "a" })
+        inline_diff.attach_to_window(bufnr, initial_winid)
+        assert.is_nil(inline_diff._scoped_wins_by_buf[bufnr])
+      end)
+    end
+
+    -- Simulate Neovim < 0.11 by stripping the scope APIs from `vim.api`
+    -- and re-loading the module so `WIN_SCOPE_SUPPORTED` is captured as
+    -- false. Runs on every Neovim version so the fallback path is
+    -- exercised even on builds where the scope API exists.
+    it(
+      "emits a one-shot warning when no scope API is available and the buffer is shared",
+      function()
+        local real_add = api.nvim_win_add_ns
+        local real_remove = api.nvim_win_remove_ns
+        -- Bracket-indexed so LuaLS doesn't flag the experimental field.
+        local real_set = api["nvim__ns_set"]
+        local real_notify = vim.notify
+        local notifications = {}
+
+        api.nvim_win_add_ns = nil
+        api.nvim_win_remove_ns = nil
+        api["nvim__ns_set"] = nil
+        vim.notify = function(msg, level)
+          notifications[#notifications + 1] = { msg = msg, level = level }
+        end
+
+        -- `pcall` so a mid-test failure still restores the patched
+        -- globals; otherwise a leaked stub would cascade through the
+        -- rest of the suite. Re-raised below.
+        local ok, err = pcall(function()
+          package.loaded["diffview.scene.inline_diff"] = nil
+          local stripped = require("diffview.scene.inline_diff")
+
+          -- Surface the buffer in a second window so the leak-warning
+          -- guard (`win_findbuf` returns >1 entry) fires.
+          local bufnr = fresh_buf({ "a" })
+          api.nvim_win_set_buf(initial_winid, bufnr)
+          vim.cmd("split")
+          local other = api.nvim_get_current_win()
+          api.nvim_win_set_buf(other, bufnr)
+          api.nvim_set_current_win(initial_winid)
+
+          stripped.attach_to_window(bufnr, initial_winid)
+          assert.is_nil(stripped._scoped_wins_by_buf[bufnr])
+          assert.are.equal(1, #notifications)
+          assert.are.equal(vim.log.levels.WARN, notifications[1].level)
+          assert.is_truthy(notifications[1].msg:find("diff1_inline", 1, true))
+
+          -- Second attach must not re-warn.
+          stripped.attach_to_window(bufnr, initial_winid)
+          assert.are.equal(1, #notifications)
+        end)
+
+        -- Restore the API and put the *original* module instance back
+        -- into `package.loaded` so subsequent tests' `inline_diff`
+        -- upvalue (captured at file load time) keeps matching what
+        -- `require` returns now. Without this, the stripped instance
+        -- would linger in `package.loaded` and the autocmds re-registered
+        -- against it would diverge from the upvalue's state tables.
+        api.nvim_win_add_ns = real_add
+        api.nvim_win_remove_ns = real_remove
+        api["nvim__ns_set"] = real_set
+        vim.notify = real_notify
+        package.loaded["diffview.scene.inline_diff"] = inline_diff
+
+        if not ok then
+          error(err)
+        end
+      end
+    )
   end)
 end)

@@ -111,7 +111,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        neovim: [stable, nightly]
+        # Pin the lowest patch on each supported minor so the inline-diff
+        # window-scoping fallbacks (Neovim < 0.11 → no-op + warning;
+        # 0.11 → experimental `nvim__ns_set`; 0.12+ → stable
+        # `nvim_win_add_ns`) all have an explicit gate. `stable` /
+        # `nightly` give forward-compat coverage on top.
+        neovim: [v0.10.4, v0.11.6, stable, nightly]
     # Keep nightly as an early-warning signal but don't let it block PRs.
     continue-on-error: ${{ matrix.neovim == 'nightly' }}
     name: Test (Neovim ${{ matrix.neovim }})

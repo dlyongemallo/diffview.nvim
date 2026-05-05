@@ -24,6 +24,25 @@ local M = {}
 
 M.ns = api.nvim_create_namespace("diffview_inline_diff")
 
+-- Confine inline-diff extmarks to the diffview window so they don't
+-- leak into other windows displaying the same buffer (issue #156).
+-- Two APIs:
+--   * stable `nvim_win_add_ns`/`nvim_win_remove_ns` (0.12+)
+--   * experimental `nvim__ns_set` (0.11; the `{wins = {...}}` shape
+--     has been steady).
+-- Use the stable pair only when *both* halves ship; otherwise fall
+-- back to `nvim__ns_set` if present. With neither available,
+-- `WIN_SCOPE_SUPPORTED` is false and `attach_to_window` degrades to a
+-- one-shot warning.
+-- TODO: drop the experimental fallback when the plugin's minimum
+-- Neovim version is raised to 0.12.
+local has_stable_pair = api.nvim_win_add_ns ~= nil and api.nvim_win_remove_ns ~= nil
+local win_add_ns = has_stable_pair and api.nvim_win_add_ns or nil ---@type (fun(win: integer, ns: integer): boolean?)?
+local win_remove_ns = has_stable_pair and api.nvim_win_remove_ns or nil ---@type (fun(win: integer, ns: integer): boolean?)?
+---@diagnostic disable-next-line: undefined-field -- experimental 0.11 API.
+local ns_set = api.nvim__ns_set ---@type fun(ns: integer, opts: table): table?
+local WIN_SCOPE_SUPPORTED = has_stable_pair or ns_set ~= nil
+
 -- Upper bound on `string.rep(" ", pad)` per virt_line. Real terminal widths
 -- are well under this; the cap exists to bound memory on unusually wide
 -- setups (multi-monitor tiles, font-scaled ultrawides) where the windowed
@@ -907,6 +926,28 @@ M._hunks_by_buf = {}
 ---@type table<integer, { ft: string, old: string, captures: table<integer, InlineDiff.LineCapture[]> }>
 M._captures_by_buf = {}
 
+-- Per-buffer set of winids where `M.ns` is currently scoped. Maintained
+-- via the stable `nvim_win_add_ns`/`nvim_win_remove_ns` pair, or via
+-- `nvim__ns_set` (which `detach_from_all_windows` rebuilds from the
+-- remaining buffers' winids). Lets `M.detach` and the buffer-lifecycle
+-- autocmd drop this buffer's contributions before clearing extmarks.
+-- Empty when neither scope API is available.
+---@type table<integer, table<integer, true>>
+M._scoped_wins_by_buf = {}
+
+-- One-shot per-session flag: the first time `attach_to_window` runs on
+-- Neovim < 0.11 against a buffer that's also displayed outside the
+-- diffview window, emit the leak warning once. Avoids re-warning on
+-- every repaint or on every file inside a long file-history walk.
+local leak_warned = false
+
+-- Forward declaration so the BufWipeout/BufDelete autocmd installed by
+-- `register_cache_cleanup` (defined below) can call into this helper,
+-- which itself isn't declared until further down the file. The body is
+-- assigned at the actual definition site.
+---@type fun(bufnr: integer)
+local detach_from_all_windows
+
 -- Track which buffers already have a cleanup autocmd so we don't register
 -- duplicates across repeated render passes on the same buffer.
 ---@type table<integer, true>
@@ -936,6 +977,15 @@ local function register_cache_cleanup(bufnr)
     callback = function(args)
       M._hunks_by_buf[args.buf] = nil
       M._captures_by_buf[args.buf] = nil
+      -- The hosting windows may still be valid (e.g. `:bdelete`
+      -- switches them to an alternate buffer rather than closing
+      -- them), and on the experimental `nvim__ns_set` path the
+      -- namespace's window list is global across all attached
+      -- buffers, so leaving stale winids in it would leak this
+      -- buffer's old slots into rendering for *other* still-attached
+      -- buffers. `detach_from_all_windows` rebuilds the list
+      -- correctly under both APIs.
+      detach_from_all_windows(args.buf)
       cache_cleanup_registered[args.buf] = nil
       -- Buffer-scoped autocmds on the scroll-adjuster group are dropped by
       -- Neovim when the buffer is wiped, so only the registration flag needs
@@ -1068,6 +1118,132 @@ local function register_scroll_adjuster(bufnr)
   })
 end
 
+-- Emit a one-shot WARN if the inline diff is being rendered against a
+-- buffer that's also displayed in a window other than `winid`, but the
+-- running Neovim is too old (< 0.11) to scope `M.ns` to a single
+-- window. The buffer-shared extmarks will leak into those other
+-- windows; the warning makes that visible without spamming on every
+-- repaint or on every file in a long file-history walk.
+---@param bufnr integer
+---@param winid integer
+local function maybe_warn_leak(bufnr, winid)
+  if leak_warned then
+    return
+  end
+  if not (api.nvim_buf_is_valid(bufnr) and api.nvim_win_is_valid(winid)) then
+    return
+  end
+  for _, w in ipairs(vim.fn.win_findbuf(bufnr)) do
+    if w ~= winid then
+      leak_warned = true
+      vim.notify(
+        "diffview.nvim: `diff1_inline` highlights may leak into other windows showing this file. "
+          .. "Upgrade to Neovim 0.11+ to fix.",
+        vim.log.levels.WARN
+      )
+      return
+    end
+  end
+end
+
+-- Confine `M.ns` to `winid` so the inline-diff extmarks render only in
+-- the diffview window (issue #156). Without `WIN_SCOPE_SUPPORTED`,
+-- `maybe_warn_leak` emits a one-shot warning instead. Idempotent:
+-- re-attaching the same `winid` is a no-op.
+--
+-- A window hosts one buffer at a time, so `winid` already recorded
+-- under another `bufnr` means it's been reassigned (e.g. `diff1_inline`
+-- cycles entries through one window). Transfer ownership so a later
+-- detach of the previous buffer doesn't strip the namespace off a
+-- window the current buffer still relies on.
+---@param bufnr integer
+---@param winid integer
+function M.attach_to_window(bufnr, winid)
+  if not (api.nvim_buf_is_valid(bufnr) and api.nvim_win_is_valid(winid)) then
+    return
+  end
+  if not WIN_SCOPE_SUPPORTED then
+    maybe_warn_leak(bufnr, winid)
+    return
+  end
+  local set = M._scoped_wins_by_buf[bufnr] or {}
+  if set[winid] then
+    return
+  end
+  local ok
+  if win_add_ns then
+    ok = pcall(win_add_ns, winid, M.ns)
+  else
+    -- The experimental `nvim__ns_set` replaces the entire window list
+    -- in one call, so collect every previously-scoped winid (across
+    -- all buffers, since the list is per-namespace not per-buffer)
+    -- plus the new one and pass them together. Stale winids are
+    -- filtered out so a closed window doesn't carry forward.
+    local wins = { winid }
+    for _, other in pairs(M._scoped_wins_by_buf) do
+      for w in pairs(other) do
+        if w ~= winid and api.nvim_win_is_valid(w) then
+          wins[#wins + 1] = w
+        end
+      end
+    end
+    ok = pcall(ns_set, M.ns, { wins = wins })
+  end
+  if not ok then
+    return
+  end
+  for other_bufnr, other in pairs(M._scoped_wins_by_buf) do
+    if other_bufnr ~= bufnr and other[winid] then
+      other[winid] = nil
+      if next(other) == nil then
+        M._scoped_wins_by_buf[other_bufnr] = nil
+      end
+    end
+  end
+  set[winid] = true
+  M._scoped_wins_by_buf[bufnr] = set
+end
+
+-- Reverse of `attach_to_window`. Called by `M.detach` for each window
+-- the namespace was scoped to before clearing the buffer's extmarks,
+-- so a later non-diffview render pass on the same buffer in the same
+-- window slot doesn't silently inherit the scope. Forward-declared
+-- above so the BufWipeout/BufDelete autocmd in `register_cache_cleanup`
+-- can reach it.
+---@param bufnr integer
+detach_from_all_windows = function(bufnr)
+  if not WIN_SCOPE_SUPPORTED then
+    return
+  end
+  local set = M._scoped_wins_by_buf[bufnr]
+  if not set then
+    return
+  end
+  if win_remove_ns then
+    for winid in pairs(set) do
+      if api.nvim_win_is_valid(winid) then
+        pcall(win_remove_ns, winid, M.ns)
+      end
+    end
+  else
+    -- Experimental fallback: rebuild the namespace's window list from
+    -- the remaining buffers' scoped winids, dropping the ones tied to
+    -- `bufnr`.
+    local wins = {}
+    for other_bufnr, other in pairs(M._scoped_wins_by_buf) do
+      if other_bufnr ~= bufnr then
+        for w in pairs(other) do
+          if api.nvim_win_is_valid(w) then
+            wins[#wins + 1] = w
+          end
+        end
+      end
+    end
+    pcall(ns_set, M.ns, { wins = wins })
+  end
+  M._scoped_wins_by_buf[bufnr] = nil
+end
+
 -- Clear all inline-diff extmarks from the buffer.
 ---@param bufnr integer
 function M.clear(bufnr)
@@ -1092,6 +1268,9 @@ end
 -- teardown doesn't leave an empty filler band above line 1.
 ---@param bufnr integer
 function M.detach(bufnr)
+  if bufnr then
+    detach_from_all_windows(bufnr)
+  end
   M.clear(bufnr)
   if not bufnr then
     return
