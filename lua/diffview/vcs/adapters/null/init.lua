@@ -73,6 +73,13 @@ function NullAdapter:file_blob_hash(path, rev_arg)
   return nil
 end
 
+---@param path string
+---@param rev_arg string
+---@return boolean
+function NullAdapter:file_exists_at_rev(path, rev_arg)
+  return false
+end
+
 ---@return string[]
 function NullAdapter:get_command()
   if vim.fn.has("win32") == 1 then

@@ -34,10 +34,10 @@ end
 -- a fresh-add ("A") nulls the a-side. In pin_local mode `revs.a` IS the
 -- commit, which means "A" implies the file exists on the a-side too. We
 -- only null the a-side when the file is absent from the commit ("D").
--- The b-side is never constructed via `with_layout` in this mode (the view
--- supplies a pre-built `pinned_b_file`), so `try_should_null` never reaches
--- this code with `sym == "b"`; we leave the LOCAL/STAGE branches to the
--- parent.
+-- The b-side normally reuses the view-owned `pinned_b_file`; `with_layout`
+-- only consults this predicate for `sym == "b"` to decide whether to fall
+-- back to a one-off nulled file when the LOCAL path is missing on disk.
+-- We leave the LOCAL/STAGE branches to the parent for that case.
 --
 -- The synthetic top-of-history "Working tree" entry is the exception: its
 -- `revs.a` is HEAD (parent-of-working-tree), and its statuses come from

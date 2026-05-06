@@ -650,6 +650,11 @@ function Panel:on_autocmd(event, opts)
       end
     elseif state.event:match("^Buf") then
       buf_match = state.buf
+    else
+      -- Cursor/text/insert/etc. events carry the active buffer in `state.buf`;
+      -- match by buffer so subscribers can target panel-buffer-local events
+      -- (e.g. `CursorMoved`) without bypassing this dispatcher.
+      buf_match = state.buf
     end
 
     if (win_match and win_match == self.winid) or (buf_match and buf_match == self.bufid) then

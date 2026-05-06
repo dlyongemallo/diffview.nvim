@@ -1574,6 +1574,14 @@ function GitAdapter:file_blob_hash(path, rev_arg)
   return vim.trim(out[1])
 end
 
+---@param path string
+---@param rev_arg string
+---@return boolean
+function GitAdapter:file_exists_at_rev(path, rev_arg)
+  local blob = self:file_blob_hash(path, rev_arg)
+  return blob ~= nil and blob ~= ""
+end
+
 ---Parse two endpoint, commit revs from a symmetric difference notated rev arg.
 ---@param rev_arg string
 ---@return Rev? left The left rev.
@@ -2488,6 +2496,7 @@ function GitAdapter:init_completion()
     return vim.fn.getcompletion(arg_lead, "dir")
   end)
   self.comp.file_history:put({ "--follow" })
+  self.comp.file_history:put({ "--pin-local" })
   self.comp.file_history:put({ "--first-parent" })
   self.comp.file_history:put({ "--show-pulls" })
   self.comp.file_history:put({ "--reflog" })

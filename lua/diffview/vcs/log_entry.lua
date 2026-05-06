@@ -17,6 +17,7 @@ local M = {}
 ---@field folded boolean
 ---@field nulled boolean
 ---@field has_remote_ref boolean Whether this commit has a remote ref decoration (e.g. a remote branch tip).
+---@field _pin_overlays? table<string, FileEntry> Cache of transient FileEntry overlays keyed by `pinned_path`, populated when a pinned file isn't touched by this commit.
 local LogEntry = oop.create_class("LogEntry")
 
 function LogEntry:init(opt)
@@ -42,6 +43,12 @@ end
 function LogEntry:destroy()
   for _, file in ipairs(self.files) do
     file:destroy()
+  end
+  if self._pin_overlays then
+    for _, overlay in pairs(self._pin_overlays) do
+      overlay:destroy()
+    end
+    self._pin_overlays = nil
   end
 end
 

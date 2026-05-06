@@ -275,6 +275,13 @@ COMMANDS                                        *diffview-commands*
                 will be created. Use the special value `LOCAL` to use the
                 local version of the file.
 
+        --pin-local
+                Pin the right-hand side of the diff to the working-tree
+                LOCAL buffer across log navigation. Pass `--pin-local=false`
+                to disable when the corresponding config option is enabled.
+                Mutually exclusive with `--base={git-rev}`. See
+                |diffview-config-view.file_history.pin_local|.
+
         --range={git-rev}
                 Show only commits in the specified revision range.
 
@@ -377,6 +384,12 @@ COMMANDS                                        *diffview-commands*
                 Show only commits for the specified revset {rev}.
                 See `hg help revsets` for the full list of keywords and
                 constructs.
+
+        --pin-local
+                Pin the right-hand side of the diff to the working-tree
+                LOCAL buffer across log navigation. Pass `--pin-local=false`
+                to disable when the corresponding config option is enabled.
+                See |diffview-config-view.file_history.pin_local|.
 
         -f, --follow
                 Follow renames (only for single file).
@@ -901,6 +914,26 @@ view.inline                                     *diffview-config-view.inline*
                 {deletion_highlight}: the background extent is
                 unchanged, only the foreground colouring of the deleted
                 text is affected.
+
+view.file_history.pin_local                     *diffview-config-view.file_history.pin_local*
+        Type: `boolean`, Default: `false`
+
+        Pin the right-hand side of the diff in file-history views to the
+        working-tree LOCAL buffer across log navigation, so you can
+        browse commit history while diffing each commit against your
+        live file (preserving its existing buffer state, including
+        unsaved edits). When `false`, the right side shows the file at
+        each browsed commit.
+
+        A synthetic "Working tree" entry is prepended to the history
+        whenever the working tree is dirty, so you can also diff HEAD
+        against the live file.
+
+        Per-invocation, the `--pin-local` flag enables this and
+        `--pin-local=false` disables it, overriding the value set here.
+        Supported for git and hg repositories. For git, this is
+        mutually exclusive with `--base={git-rev}` (which pins the
+        right side to a fixed revision instead).
 
 file_panel                                      *diffview-config-file_panel*
         Type: `table`, Default: (see defaults)

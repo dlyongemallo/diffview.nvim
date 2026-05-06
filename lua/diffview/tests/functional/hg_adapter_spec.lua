@@ -340,6 +340,79 @@ describe("diffview.vcs.adapters.hg", function()
     end)
   end)
 
+  describe("file_exists_at_rev", function()
+    local repo
+
+    before_each(function()
+      if not hg_available() then
+        pending("hg not installed")
+        return
+      end
+      repo = create_hg_repo()
+    end)
+
+    after_each(function()
+      if repo then
+        repo.cleanup()
+      end
+    end)
+
+    it("returns true for files tracked at the revision", function()
+      if not hg_available() then
+        pending("hg not installed")
+        return
+      end
+
+      repo.write("kept.txt", "v1\n")
+      repo.hg({ "add", "kept.txt" })
+      repo.hg({ "commit", "-m", "init", "-u", "test <test@test.com>" })
+
+      local adapter = repo.adapter()
+      assert.is_true(adapter:file_exists_at_rev("kept.txt", "tip"))
+    end)
+
+    it("returns false for paths absent at the revision", function()
+      if not hg_available() then
+        pending("hg not installed")
+        return
+      end
+
+      repo.write("kept.txt", "v1\n")
+      repo.hg({ "add", "kept.txt" })
+      repo.hg({ "commit", "-m", "init", "-u", "test <test@test.com>" })
+
+      local adapter = repo.adapter()
+      assert.is_false(adapter:file_exists_at_rev("never_added.txt", "tip"))
+    end)
+
+    -- Regression: an earlier commit's resolver fell through to status="M"
+    -- for hg because `HgAdapter` didn't implement the probe, so navigating
+    -- to a commit before the pinned file was added tried to `hg cat` a
+    -- missing file and the diff buffer creation failed. The probe now lets
+    -- the resolver mark the overlay status="D" and null the a-side.
+    it("returns false for paths added in a later revision", function()
+      if not hg_available() then
+        pending("hg not installed")
+        return
+      end
+
+      repo.write("first.txt", "v1\n")
+      repo.hg({ "add", "first.txt" })
+      repo.hg({ "commit", "-m", "first", "-u", "test <test@test.com>" })
+
+      local first_rev = repo.hg({ "log", "--template={node}", "--rev", "tip" })
+
+      repo.write("later.txt", "added later\n")
+      repo.hg({ "add", "later.txt" })
+      repo.hg({ "commit", "-m", "second", "-u", "test <test@test.com>" })
+
+      local adapter = repo.adapter()
+      -- `later.txt` exists at tip but not at the first commit.
+      assert.is_true(adapter:file_exists_at_rev("later.txt", "tip"))
+      assert.is_false(adapter:file_exists_at_rev("later.txt", first_rev))
+    end)
+  end)
+
   -- See `git_adapter_spec`'s `history_scope` block for the rationale: the
   -- scope is the single source of truth for "single-file?" + "which path?",
   -- and must agree with `is_single_file()`'s `<2` semantics so `pin_local`

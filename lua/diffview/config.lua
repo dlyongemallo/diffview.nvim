@@ -298,6 +298,7 @@ M.defaults = {
     ---@field disable_diagnostics boolean
     ---@field winbar_info boolean
     ---@field focus_diff boolean
+    ---@field pin_local? boolean
 
     ---@class DiffviewMergeViewTypeConfig
     ---@field layout DiffviewMergeLayout|DiffviewInferredLayout
@@ -310,6 +311,7 @@ M.defaults = {
     ---@field disable_diagnostics? boolean Temporarily disable diagnostics for diff buffers while in the view.
     ---@field winbar_info? boolean See `|diffview-config-view.x.winbar_info|`.
     ---@field focus_diff? boolean Focus the main diff window on open instead of the file panel.
+    ---@field pin_local? boolean File-history only: pin the b-window to the working-tree LOCAL buffer across log navigation, so you can browse history while diffing each commit against your live file. Per-invocation, `--pin-local` enables and `--pin-local=false` disables (overriding any value set here). For git, `--base=<rev>` is an alternative that pins to a fixed commit instead. See `|diffview-config-view.file_history.pin_local|`.
 
     ---@class DiffviewMergeViewTypeConfig.user
     ---@field layout? DiffviewMergeLayout|DiffviewInferredLayout Layout to use for this view type. See `|diffview-config-view.x.layout|`.
@@ -335,6 +337,7 @@ M.defaults = {
       disable_diagnostics = false,
       winbar_info = false,
       focus_diff = false,
+      pin_local = false,
     },
     -- Initial 'foldlevel' for diff buffers. Default 0 collapses unchanged
     -- regions; set to a high value (e.g. 99) to keep all folds open.

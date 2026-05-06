@@ -265,6 +265,16 @@ function VCSAdapter:file_blob_hash(path, rev_arg)
   oop.abstract_stub()
 end
 
+---Whether `path` exists at `rev_arg`. Cheaper than `file_blob_hash` for
+---adapters where blob identity isn't a first-class concept (e.g. Mercurial),
+---and the only thing the pin_local overlay path actually needs.
+---@param path string
+---@param rev_arg string
+---@return boolean
+function VCSAdapter:file_exists_at_rev(path, rev_arg)
+  oop.abstract_stub()
+end
+
 ---@return string[] # path to binary for VCS command
 function VCSAdapter:get_command()
   oop.abstract_stub()

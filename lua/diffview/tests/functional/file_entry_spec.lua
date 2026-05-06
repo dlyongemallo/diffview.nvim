@@ -212,6 +212,219 @@ describe("diffview.scene.file_entry", function()
     assert.are_not.equal(shared, entry.layout.a.file)
   end)
 
+  -- Carve-out: a status="D" entry whose working-tree path is also missing
+  -- must not reuse the shared `pinned_b_file`, otherwise the b-side opens
+  -- an empty/editable buffer for the missing path. `with_layout` falls back
+  -- to a fresh nulled file; the shared instance is preserved for entries
+  -- where the LOCAL path still exists (e.g. overlay against a commit that
+  -- predates the file's introduction).
+  it("with_layout falls back to a nulled b-file when the LOCAL path is missing", function()
+    local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+
+    local missing_path = vim.fn.tempname() .. "-does-not-exist"
+    local shared = {
+      path = "foo.txt",
+      absolute_path = missing_path,
+    } --[[@as vcs.File ]]
+    local fake_adapter = { ctx = { toplevel = "/" } }
+    local rev_a = {
+      type = RevType.COMMIT,
+      commit = "abc1234567",
+      object_name = function(_, n)
+        return ("abc1234567"):sub(1, n or 10)
+      end,
+    }
+    -- Mock `object_name` on the LOCAL rev too: when the fall-through builds
+    -- a fresh nulled b-file, `vcs.File:init` evaluates the winbar's
+    -- `object_path` regardless of rev type (the value is unused for LOCAL,
+    -- but the table-construction happens up front).
+    local rev_b = {
+      type = RevType.LOCAL,
+      object_name = function(_, n)
+        return ("0"):rep(n or 10)
+      end,
+    }
+
+    local entry = FileEntry.with_layout(Diff2HorPinned, {
+      adapter = fake_adapter,
+      path = "foo.txt",
+      oldpath = nil,
+      status = "D",
+      kind = "working",
+      revs = { a = rev_a, b = rev_b },
+      pinned_b_file = shared,
+    })
+
+    assert.are_not.equal(shared, entry.layout.b.file)
+    assert.is_true(entry.layout.b.file.nulled)
+  end)
+
+  -- Overlay: pinned_path exists in the working tree but isn't in this
+  -- commit. `_resolve_pinned_target` marks status="D" so the layout nulls
+  -- the a-side (file absent from the commit), but the b-side must still
+  -- show the LOCAL working-tree file. The disk check in `with_layout` is
+  -- what preserves this case.
+  it("with_layout reuses pinned_b_file on status=D when the LOCAL path exists", function()
+    local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+
+    local existing_path = vim.fn.tempname()
+    local f = assert(io.open(existing_path, "w"))
+    f:write("present\n")
+    f:close()
+
+    local shared = {
+      path = "foo.txt",
+      absolute_path = existing_path,
+    } --[[@as vcs.File ]]
+    local fake_adapter = { ctx = { toplevel = "/" } }
+    local rev_a = {
+      type = RevType.COMMIT,
+      commit = "abc1234567",
+      object_name = function(_, n)
+        return ("abc1234567"):sub(1, n or 10)
+      end,
+    }
+    local rev_b = { type = RevType.LOCAL }
+
+    local ok, err = pcall(function()
+      local entry = FileEntry.with_layout(Diff2HorPinned, {
+        adapter = fake_adapter,
+        path = "foo.txt",
+        oldpath = nil,
+        status = "D",
+        kind = "working",
+        revs = { a = rev_a, b = rev_b },
+        pinned_b_file = shared,
+      })
+
+      assert.equals(shared, entry.layout.b.file)
+    end)
+
+    pcall(vim.fn.delete, existing_path)
+    if not ok then
+      error(err)
+    end
+  end)
+
+  -- The fallback nulled file built by `with_layout` for a status="D"
+  -- entry whose LOCAL path is gone is constructed for a window whose
+  -- symbol is in `Diff2*Pinned.shared_symbols`. `Layout:owned_files()`
+  -- intentionally skips shared symbols (the view owns them), so without
+  -- explicit per-FileEntry tracking these one-off fallbacks would never
+  -- be destroyed -- a slow buffer/Lua-object leak for any history
+  -- containing deleted-and-removed paths. `with_layout` now tracks them
+  -- in `_extra_owned` so `FileEntry:destroy` can release them.
+  it("with_layout tracks the fallback nulled b-file as an extra-owned file", function()
+    local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+
+    local missing_path = vim.fn.tempname() .. "-does-not-exist"
+    local shared = {
+      path = "foo.txt",
+      absolute_path = missing_path,
+    } --[[@as vcs.File ]]
+    local fake_adapter = { ctx = { toplevel = "/" } }
+    local rev_a = {
+      type = RevType.COMMIT,
+      commit = "abc1234567",
+      object_name = function(_, n)
+        return ("abc1234567"):sub(1, n or 10)
+      end,
+    }
+    local rev_b = {
+      type = RevType.LOCAL,
+      object_name = function(_, n)
+        return ("0"):rep(n or 10)
+      end,
+    }
+
+    local entry = FileEntry.with_layout(Diff2HorPinned, {
+      adapter = fake_adapter,
+      path = "foo.txt",
+      oldpath = nil,
+      status = "D",
+      kind = "working",
+      revs = { a = rev_a, b = rev_b },
+      pinned_b_file = shared,
+    })
+
+    -- Fallback created (so the b-window doesn't reuse the shared instance).
+    assert.are_not.equal(shared, entry.layout.b.file)
+    -- Fallback is tracked so destroy() can release it; the layout's
+    -- owned_files() would otherwise skip it via shared_symbols.
+    eq(1, #entry._extra_owned)
+    eq(entry.layout.b.file, entry._extra_owned[1])
+  end)
+
+  -- Identity case: when the b-side reuses the supplied `pinned_b_file`,
+  -- the FileEntry must NOT track it -- the view owns the shared instance
+  -- and destroying it from a per-entry teardown would wipe state out
+  -- from under every other entry.
+  it("with_layout does not track the shared pinned_b_file as extra-owned", function()
+    local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
+
+    local shared = { path = "foo.txt" } --[[@as vcs.File ]]
+    local fake_adapter = { ctx = { toplevel = "/" } }
+    local rev_a = {
+      type = RevType.COMMIT,
+      commit = "abc1234567",
+      object_name = function(_, n)
+        return ("abc1234567"):sub(1, n or 10)
+      end,
+    }
+    local rev_b = { type = RevType.LOCAL }
+
+    local entry = FileEntry.with_layout(Diff2HorPinned, {
+      adapter = fake_adapter,
+      path = "old/foo.txt",
+      oldpath = nil,
+      status = "M",
+      kind = "working",
+      revs = { a = rev_a, b = rev_b },
+      pinned_b_file = shared,
+    })
+
+    eq(shared, entry.layout.b.file)
+    eq(0, #entry._extra_owned)
+  end)
+
+  -- Lifecycle: `FileEntry:destroy` must reach the extra-owned fallbacks
+  -- (the layout's `owned_files()` doesn't expose them).
+  it("destroy() releases extra-owned fallback files", function()
+    local destroyed_extra = false
+    local extra = {
+      destroy = function()
+        destroyed_extra = true
+      end,
+    }
+    local layout_destroyed = false
+    local layout = {
+      owned_files = function()
+        return {}
+      end,
+      destroy = function()
+        layout_destroyed = true
+      end,
+    }
+
+    local entry = FileEntry({
+      adapter = { ctx = { toplevel = "/tmp" } },
+      path = "a.txt",
+      oldpath = nil,
+      revs = {},
+      layout = layout,
+      status = "M",
+      stats = {},
+      kind = "working",
+      _extra_owned = { extra },
+    })
+
+    entry:destroy()
+
+    assert.is_true(destroyed_extra)
+    assert.is_true(layout_destroyed)
+    eq(0, #entry._extra_owned)
+  end)
+
   it("forwards force flag to contained files when destroyed", function()
     local seen = {}
     local layout_destroyed = false

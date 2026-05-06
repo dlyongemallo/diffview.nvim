@@ -966,6 +966,25 @@ function HgAdapter:head_rev()
   return HgRev(RevType.COMMIT, s, true)
 end
 
+---@param path string
+---@param rev_arg string
+---@return boolean
+function HgAdapter:file_exists_at_rev(path, rev_arg)
+  -- `hg files -r REV -- path` exits 0 with the path on stdout when the file
+  -- is tracked in REV, exits non-zero with empty stdout otherwise. The `--`
+  -- separator keeps paths starting with `-` from being parsed as options.
+  local out, code = self:exec_sync(
+    { "files", "-r", rev_arg, "--", path },
+    { cwd = self.ctx.toplevel, silent = true }
+  )
+
+  if code ~= 0 or not out or not out[1] then
+    return false
+  end
+
+  return vim.trim(out[1]) ~= ""
+end
+
 ---Get the current branch name.
 ---@return string? branch_name The branch name, or nil if not available.
 function HgAdapter:get_branch_name()
@@ -1478,6 +1497,7 @@ function HgAdapter:init_completion()
   end)
 
   self.comp.file_history:put({ "--follow", "-f" })
+  self.comp.file_history:put({ "--pin-local" })
   self.comp.file_history:put({ "--no-merges", "-M" })
   self.comp.file_history:put({ "--limit", "-l" }, {})
 

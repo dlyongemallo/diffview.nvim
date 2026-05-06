@@ -614,8 +614,9 @@ describe("diffview.scene.layouts.diff_2_*_pinned should_null", function()
   -- pin_local sets revs.a to the commit itself (not its parent), so the
   -- standard parent-vs-commit semantics don't apply on the a-side: the
   -- file is missing iff it doesn't exist in this commit, i.e. status "D".
-  -- (sym "b" isn't covered: pinned-mode b-side files are injected by the
-  -- view's cache and never go through `try_should_null`.)
+  -- (sym "b" defers to `Diff2.should_null`; `with_layout` consults it only
+  -- to decide whether to fall back from the shared `pinned_b_file` when
+  -- the LOCAL path is missing on disk.)
   it("nulls window a only when the file is absent from the commit (status D)", function()
     local commit = { type = RevType.COMMIT }
     for _, cls in ipairs({ Diff2HorPinned, Diff2VerPinned }) do

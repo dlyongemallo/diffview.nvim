@@ -206,11 +206,59 @@ FileHistoryPanel.update_entries = async.wrap(function(self, callback)
   self.entries = {}
   self.updating = true
 
+  local layout_opt = {
+    default_layout = self.parent:get_default_layout() --[[@as Diff2 ]],
+    pin_local = self.parent.pin_local,
+    pinned_path = self.parent.pinned_path,
+    -- Closure into the view's pin_local cache: adapters call this when
+    -- constructing a pinned-mode entry's b-side, so every entry across the
+    -- whole history shares the same `vcs.File` instance for a given path
+    -- (and therefore the same Neovim buffer state). The view owns the
+    -- cache's lifetime; adapters and entries treat the returned files as
+    -- borrowed (see `Diff2*Pinned.shared_symbols`).
+    pinned_b_file_for = self.parent.pin_local and function(path)
+      return self.parent:get_pinned_b_file(path)
+    end or nil,
+  }
+
+  -- Prepend a synthetic LOCAL "commit" so the working tree appears as the
+  -- top-of-log entry. The synth is omitted when the working tree is clean
+  -- or when the adapter doesn't override the base no-op.
+  --
+  -- Path filter: in `-L` line-trace mode `adapter.ctx.path_args` is empty
+  -- (the path lives in the L spec), so passing it raw would make
+  -- `git diff HEAD --` pick up every dirty file in the repo. Use the
+  -- adapter's `history_scope` to recover the scoped path and restrict the
+  -- synth to it.
+  if self.parent.pin_local then
+    local raw_path_args = self.adapter.ctx.path_args or {}
+    -- `self.log_options` is the `{ single_file, multi_file }` wrapper, but
+    -- `history_scope` expects a flat `LogOptions` (it reads `.L` for the
+    -- line-trace branch). The `L` and `path_args` fields are mirrored
+    -- across both variants (seeded together in `:init`, mutated together
+    -- by the option panel), so reading from the single_file form gives
+    -- the right specs to recover the scoped path.
+    local scope = self.adapter:history_scope(raw_path_args, self.log_options.single_file)
+    local synth_path_args = (scope.single_file and scope.path) and { scope.path } or raw_path_args
+
+    local synth = self.adapter:build_local_log_entry({
+      path_args = synth_path_args,
+      layout_opt = layout_opt,
+      -- Pass scope's verdict directly: recomputing single_file inside the
+      -- adapter from `path_args` would mismark a single-arg multi-file
+      -- pathspec (e.g. `*.txt` matching multiple files) as single-file.
+      single_file = scope.single_file,
+    })
+
+    if synth then
+      self.entries[#self.entries + 1] = synth
+      self.single_file = synth.single_file
+    end
+  end
+
   local stream = self.adapter:file_history({
     log_opt = self.log_options,
-    layout_opt = {
-      default_layout = self.parent.get_default_layout(),
-    },
+    layout_opt = layout_opt,
   })
 
   self:sync()
@@ -314,6 +362,16 @@ function FileHistoryPanel:find_entry(file)
     for _, f in ipairs(entry.files) do
       if f == file then
         return entry
+      end
+    end
+    -- Pinned-RHS overlay FileEntries are stored separately on the entry so
+    -- they don't render as extra rows; we still match against them so
+    -- `set_file` can route diff updates correctly.
+    if entry._pin_overlays then
+      for _, f in pairs(entry._pin_overlays) do
+        if f == file then
+          return entry
+        end
       end
     end
   end
@@ -445,13 +503,34 @@ function FileHistoryPanel:set_file_by_offset(offset)
   local entry, file = self.cur_item[1], self.cur_item[2]
 
   if not (entry and file) and self:num_items() > 0 then
-    self:set_cur_item({ self.entries[1], self.entries[1].files[1] })
+    -- Bootstrap (post-rebuild / first-open). In pin_local mode this is the
+    -- code path that runs after `update_entries`; pick the file matching
+    -- `pinned_path` (or its overlay) so refresh/options-change preserves
+    -- the user's pinned file instead of snapping to `entries[1].files[1]`.
+    local first = self.entries[1]
+    local target = self.parent:pick_entry_target(first) or first.files[1]
+    self:set_cur_item({ first, target })
     return self.cur_item[2]
   end
 
   if self:num_items() > 1 then
     local entry_idx = utils.vec_indexof(self.entries, entry)
     local file_idx = utils.vec_indexof(entry.files, file)
+
+    -- pin_local overlays (transient FileEntries built by
+    -- `_resolve_pinned_target` for commits that don't touch the pinned
+    -- path) aren't in `entry.files`, so `vec_indexof` returns -1 and
+    -- offset navigation would silently no-op when the user is standing
+    -- on an overlay. Treat the overlay's position as `entry.files[1]`
+    -- so j/k/next-item/prev-item still advance the cursor.
+    if
+      entry_idx ~= -1
+      and file_idx == -1
+      and entry._pin_overlays
+      and entry._pin_overlays[file.path] == file
+    then
+      file_idx = 1
+    end
 
     if entry_idx ~= -1 and file_idx ~= -1 then
       local wrap = config.get_config().wrap_entries
@@ -471,7 +550,10 @@ function FileHistoryPanel:set_file_by_offset(offset)
       return self.cur_item[2]
     end
   else
-    self:set_cur_item({ self.entries[1], self.entries[1].files[1] })
+    -- See the bootstrap branch above for the pin_local rationale.
+    local first = self.entries[1]
+    local target = self.parent:pick_entry_target(first) or first.files[1]
+    self:set_cur_item({ first, target })
     return self.cur_item[2]
   end
 end
@@ -500,20 +582,27 @@ function FileHistoryPanel:highlight_item(item)
   else
     ---@cast item FileEntry
     for _, comp_struct in ipairs(self.components.log.entries) do
-      local i = utils.vec_indexof(comp_struct.comp.context.files --[[@as FileEntry[] ]], item)
+      local entry = comp_struct.comp.context --[[@as LogEntry ]]
+      local i = utils.vec_indexof(entry.files --[[@as FileEntry[] ]], item)
 
       if i ~= -1 then
         if self.single_file then
           pcall(api.nvim_win_set_cursor, self.winid, { comp_struct.comp.lstart + 1, 0 })
         else
-          if comp_struct.comp.context.folded then
-            comp_struct.comp.context.folded = false
+          if entry.folded then
+            entry.folded = false
             self:render()
             self:redraw()
           end
 
           pcall(api.nvim_win_set_cursor, self.winid, { comp_struct.comp.lstart + i + 1, 0 })
         end
+      elseif entry._pin_overlays and entry._pin_overlays[item.path] == item then
+        -- pin_local overlays are transient FileEntries that aren't rendered
+        -- as their own row, so there's no file-line to land on. Park the
+        -- cursor on the entry header instead so commit-navigation actions
+        -- still move the visible selection in lock-step with the diff.
+        pcall(api.nvim_win_set_cursor, self.winid, { comp_struct.comp.lstart, 0 })
       end
     end
   end

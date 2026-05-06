@@ -78,6 +78,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
         layout = "diff2_horizontal",
         disable_diagnostics = false,  -- Temporarily disable diagnostics for diff buffers while in the view.
         winbar_info = false,          -- See |diffview-config-view.x.winbar_info|
+        pin_local = false,            -- See |diffview-config-view.file_history.pin_local|
       },
       foldlevel = 0,                  -- See |diffview-config-view.foldlevel|
       -- Layouts to cycle through with `cycle_layout` action. Each view's
