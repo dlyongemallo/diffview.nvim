@@ -737,12 +737,20 @@ local CAPTURED_CHUNKS_MAX_LEN = 5000
 -- `del_hl` so deletions keep their background while showing TS colours on
 -- top. `caps` is a list of `{col_start, col_end, hl}` whose columns reference
 -- `text` directly — slice callers (e.g. the "hanging" extent) must offset
--- before calling. Each output chunk uses `{del_hl, ts_hl}` so Neovim's
--- left-to-right hl-group merging stacks the foreground over the background.
--- With no captures (or `text` over `CAPTURED_CHUNKS_MAX_LEN`), returns the
--- same `{ {text, del_hl} }` the pre-TS code produced. Empty `text` returns
--- `{ { "", del_hl } }` rather than `{}` so a deleted blank line still
--- renders as a virt_line row instead of being elided to nothing.
+-- before calling. Each output chunk uses `{del_hl, ts_hl_1, ts_hl_2, ...}` —
+-- the full capture stack covering that byte run, in `iter_captures` order
+-- (= rightmost in the resulting hl_group list = highest priority for
+-- Neovim's merger). Forwarding the whole stack rather than picking the
+-- last capture matters for decoration-only captures like `@spell` that
+-- define no fg: a "last wins" pick would silently drop the earlier
+-- `@comment` fg, leaving deleted comments under the default Normal fg.
+-- Stacking lets Neovim's hl-group merger compose attributes the same way
+-- the on-buffer TS highlighter would — rightmost wins per-attribute, but
+-- undefined attributes don't override. With no captures (or `text` over
+-- `CAPTURED_CHUNKS_MAX_LEN`), returns the same `{ {text, del_hl} }` the
+-- pre-TS code produced. Empty `text` returns `{ { "", del_hl } }` rather
+-- than `{}` so a deleted blank line still renders as a virt_line row
+-- instead of being elided to nothing.
 ---@param text string
 ---@param caps InlineDiff.LineCapture[]?
 ---@param del_hl string
@@ -753,34 +761,72 @@ local function captured_chunks(text, caps, del_hl)
   end
 
   local len = #text
-  -- Resolve the most-specific (latest-applied) capture per byte. TS emits
-  -- captures in document order with later overriding earlier; mirroring
-  -- that here keeps the inline rendering consistent with how the same
-  -- buffer would highlight under `vim.treesitter.start`.
-  local hl_at = {}
+  -- Per-byte capture stack: every hl that covers the byte, appended in
+  -- `iter_captures` order. The hl_group list treats that order as priority
+  -- (rightmost = highest), so a more-specific capture (e.g.
+  -- `@comment.documentation` following `@comment`) wins for any attribute it
+  -- redefines, while earlier captures still contribute attributes the later
+  -- ones leave undefined.
+  local stacks = {}
   for _, c in ipairs(caps) do
     local sc, ec, hl = c[1], c[2], c[3]
     -- Clamp to `len` so a stale or off-by-one capture can't write past
     -- the string end and create a phantom chunk on the next iteration.
     local stop = math.min(ec, len)
     for i = sc + 1, stop do
-      hl_at[i] = hl
+      local s = stacks[i]
+      if s == nil then
+        stacks[i] = { hl }
+      else
+        s[#s + 1] = hl
+      end
     end
+  end
+
+  -- Coalesce contiguous bytes whose stacks are element-wise identical into a
+  -- single chunk. Captures only ever get appended (never removed mid-byte) in
+  -- the loop above, so two adjacent positions with the same stack must have
+  -- been covered by the same set of captures in the same iteration order.
+  local function same_stack(a, b)
+    if a == nil and b == nil then
+      return true
+    end
+    if a == nil or b == nil then
+      return false
+    end
+    if #a ~= #b then
+      return false
+    end
+    for k = 1, #a do
+      if a[k] ~= b[k] then
+        return false
+      end
+    end
+    return true
+  end
+
+  local function build_groups(stack)
+    if not stack then
+      return del_hl
+    end
+    local groups = { del_hl }
+    for _, hl in ipairs(stack) do
+      groups[#groups + 1] = hl
+    end
+    return groups
   end
 
   local chunks = {}
   local segment_start = 1
-  local current = hl_at[1]
+  local current = stacks[1]
   for i = 2, len do
-    if hl_at[i] ~= current then
-      local groups = current and { del_hl, current } or del_hl
-      chunks[#chunks + 1] = { text:sub(segment_start, i - 1), groups }
+    if not same_stack(stacks[i], current) then
+      chunks[#chunks + 1] = { text:sub(segment_start, i - 1), build_groups(current) }
       segment_start = i
-      current = hl_at[i]
+      current = stacks[i]
     end
   end
-  local groups = current and { del_hl, current } or del_hl
-  chunks[#chunks + 1] = { text:sub(segment_start, len), groups }
+  chunks[#chunks + 1] = { text:sub(segment_start, len), build_groups(current) }
   return chunks
 end
 

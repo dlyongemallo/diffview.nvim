@@ -1257,24 +1257,49 @@ describe("diffview.scene.inline_diff", function()
       assert.are.equal("DiffviewDiffDelete", chunks[3][2])
     end)
 
-    it("captured_chunks resolves overlapping captures to the latest applied", function()
-      -- Mirrors TS document order: a later capture overrides an earlier one
-      -- on the bytes they share. Outer "@variable" applies to all 5 bytes,
-      -- inner "@string" overrides bytes 1..3.
+    it("captured_chunks stacks overlapping captures so each contributes attrs", function()
+      -- The hl_group list forwarded to nvim_buf_set_extmark composes attrs in
+      -- priority order (rightmost wins per-attribute, undefined attrs don't
+      -- override), so passing the full stack lets Neovim's merger produce the
+      -- same result as the on-buffer TS highlighter. Picking only the latest
+      -- capture per byte would silently drop earlier captures' attrs — fatal
+      -- when a later capture (e.g. `@spell`) defines no fg and an earlier one
+      -- (`@comment`) does.
       local chunks = captured_chunks(
         "hello",
         { { 0, 5, "@variable" }, { 1, 3, "@string" } },
         "DiffviewDiffDelete"
       )
-      -- Expect: [h:variable][el:string][lo:variable]
+      -- Expect: [h:variable][el:variable+string][lo:variable]. The middle
+      -- segment carries both captures in iteration order.
       assert.are.equal(3, #chunks)
-      assert.are.same({ "DiffviewDiffDelete", "@variable" }, chunks[1][2])
       assert.are.equal("h", chunks[1][1])
-      assert.are.same({ "DiffviewDiffDelete", "@string" }, chunks[2][2])
+      assert.are.same({ "DiffviewDiffDelete", "@variable" }, chunks[1][2])
       assert.are.equal("el", chunks[2][1])
-      assert.are.same({ "DiffviewDiffDelete", "@variable" }, chunks[3][2])
+      assert.are.same({ "DiffviewDiffDelete", "@variable", "@string" }, chunks[2][2])
       assert.are.equal("lo", chunks[3][1])
+      assert.are.same({ "DiffviewDiffDelete", "@variable" }, chunks[3][2])
     end)
+
+    it(
+      "captured_chunks preserves an earlier capture's fg under a later attr-less capture",
+      function()
+        -- Lua/Go/JS highlights queries emit `@comment` and then `@spell` for
+        -- every comment node; `@spell` typically defines only undercurl/sp, no
+        -- fg. A "last wins" reduction would emit `{del_hl, @spell}`, so deleted
+        -- comments would render with the default Normal fg. Stacking forwards
+        -- both — the merger keeps `@comment`'s fg because `@spell` doesn't
+        -- redefine it.
+        local chunks = captured_chunks(
+          "-- comment",
+          { { 0, 10, "@comment" }, { 0, 10, "@spell" } },
+          "DiffviewDiffDelete"
+        )
+        assert.are.equal(1, #chunks)
+        assert.are.equal("-- comment", chunks[1][1])
+        assert.are.same({ "DiffviewDiffDelete", "@comment", "@spell" }, chunks[1][2])
+      end
+    )
 
     it("captured_chunks clamps captures that extend past text end", function()
       -- Off-by-one or stale captures past `#text` must not generate a phantom
