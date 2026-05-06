@@ -156,23 +156,13 @@ local function is_word_token(s)
 end
 
 -- Classify a UTF-8 character into a subword class for `tokenize`:
--- "lower" (ASCII a-z, plus any non-ASCII byte — see below), "upper"
--- (ASCII A-Z), "digit" (ASCII 0-9), "under" (`_`), or `nil` for ASCII
--- non-word characters.
---
--- ASCII-only classification by design: every multi-byte character and
--- every stray high byte from malformed UTF-8 falls into "lower". This
--- keeps multi-byte runs joined with adjacent ASCII lowercase rather
--- than splitting per-character, and avoids carrying a Unicode category
--- table in pure Lua. Known trade-offs that follow from this:
---   * Accented uppercase (`Ü`, `É`) does not trigger a lower→upper
---     split, so `fooÜber` stays one token.
---   * Unicode punctuation/symbols (`—`, emoji) are not treated as
---     non-word and stay inside word tokens rather than splitting them.
--- ASCII camelCase/PascalCase/snake_case/digit splits — the common case
--- in source code — work as expected. Stray high bytes share the
--- "lower" bucket so classification stays consistent with
--- `is_word_byte`, which treats them as word bytes.
+-- "lower" (ASCII a-z), "upper" (ASCII A-Z), "digit" (ASCII 0-9),
+-- "under" (`_`), or `nil` for ASCII non-word characters. Multi-byte
+-- characters and stray high bytes from malformed UTF-8 bucket as
+-- "lower" so non-Latin runs join adjacent ASCII lowercase. Known
+-- consequences: accented uppercase (`Ü`, `É`) doesn't trigger a
+-- lower→upper split, and Unicode punctuation/symbols stay inside word
+-- tokens rather than splitting them.
 ---@param ch string
 ---@return "lower"|"upper"|"digit"|"under"|nil
 local function subword_class(ch)
@@ -201,33 +191,172 @@ local function subword_class(ch)
   return nil
 end
 
--- Tokenize `s` for subword-level intraline diffing. Splits both on
--- ASCII non-word characters AND on subword boundaries within word-char
--- runs: camelCase (`fooBar` → `foo`, `Bar`), acronym→word
--- (`XMLParser` → `XML`, `Parser`), digit↔letter (`error123abc` →
--- `error`, `123`, `abc`), and underscore (`audio_preservation` →
--- `audio`, `_`, `preservation`). Each ASCII non-word character becomes
--- its own token; each subword run becomes one token. Multi-byte chars
--- bucket as lowercase letters; see `subword_class` for the trade-offs.
--- Returns the token list and a parallel byte-range map.
+-- Minimum length for `coalesce_hex_runs` to consider folding subword
+-- splits back into a single hex-literal token. Sized to catch full
+-- SHAs and longer abbreviations without lumping in short identifier
+-- suffixes; 7-char abbreviations stay subword-split.
+local HEX_TOKEN_MIN_LEN = 8
+
+-- Upper bound on the longest contiguous letter run permitted in a
+-- hex-literal candidate. Random hex averages a max letter run of ~3;
+-- pseudo-hex words like `cafe`, `face`, `dead`, `cafef00d`, `decade`
+-- exceed the threshold. Hashes that roll a 5+ letter streak skip the
+-- coalesce and fall back to the existing `INTRALINE_MAX_HUNKS` gate.
+local HEX_TOKEN_MAX_LETTER_RUN = 4
+
+-- True when the concatenation of `tokens[i..j]` (with combined byte
+-- length `total_len`) looks like a hash or numeric literal rather
+-- than a coincidentally-all-hex identifier. Combines four cheap
+-- signals in one O(n) pass over the token slice's bytes:
+--   * length >= `HEX_TOKEN_MIN_LEN`,
+--   * single-case hex (every letter in `[a-f]` or every letter in
+--     `[A-F]`),
+--   * digit/letter transitions >= `ceil(length / 4)` (rejects
+--     word-prefixed candidates like `decade1234567`),
+--   * max contiguous letter run <= `HEX_TOKEN_MAX_LETTER_RUN`
+--     (rejects dictionary-shaped runs like `cafef00d1234`).
+-- Walking the slice directly lets `coalesce_hex_runs` decide before
+-- allocating a merged string, so a non-hex word run (e.g. most
+-- camelCase identifiers) bails on its first non-[0-9A-Fa-f] byte.
+---@param tokens string[]
+---@param i integer
+---@param j integer
+---@param total_len integer
+---@return boolean
+local function is_hex_run_in_tokens(tokens, i, j, total_len)
+  if total_len < HEX_TOKEN_MIN_LEN then
+    return false
+  end
+  local has_lo, has_up = false, false
+  local prev_class = 0 -- 0 = none, 1 = digit, 2 = letter.
+  local transitions = 0
+  local cur_letter_run, max_letter_run = 0, 0
+  for k = i, j do
+    local t = tokens[k]
+    for p = 1, #t do
+      local b = t:byte(p)
+      local class
+      if b >= 0x30 and b <= 0x39 then
+        class = 1
+        cur_letter_run = 0
+      elseif b >= 0x61 and b <= 0x66 then
+        class = 2
+        has_lo = true
+        cur_letter_run = cur_letter_run + 1
+        if cur_letter_run > max_letter_run then
+          max_letter_run = cur_letter_run
+        end
+      elseif b >= 0x41 and b <= 0x46 then
+        class = 2
+        has_up = true
+        cur_letter_run = cur_letter_run + 1
+        if cur_letter_run > max_letter_run then
+          max_letter_run = cur_letter_run
+        end
+      else
+        return false
+      end
+      if prev_class ~= 0 and prev_class ~= class then
+        transitions = transitions + 1
+      end
+      prev_class = class
+    end
+  end
+  if has_lo and has_up then
+    return false
+  end
+  if max_letter_run > HEX_TOKEN_MAX_LETTER_RUN then
+    return false
+  end
+  if transitions < math.ceil(total_len / 4) then
+    return false
+  end
+  return true
+end
+
+-- Thin string wrapper around `is_hex_run_in_tokens`. The production
+-- path (`coalesce_hex_runs`) drives the token-slice variant directly;
+-- this wrapper exists so the predicate stays exercisable from tests
+-- with a single string input.
+---@param s string
+---@return boolean
+local function is_hex_run(s)
+  return is_hex_run_in_tokens({ s }, 1, 1, #s)
+end
+
+-- Walk a fresh `tokenize` token list and merge runs of byte-adjacent
+-- word tokens whose joined string passes `is_hex_run_in_tokens`. A
+-- 40-char hash that would otherwise fragment into ~25 alternating
+-- digit/letter subwords folds back into one token, so a 1:1 hash
+-- replacement renders as a whole-token swap instead of slipping under
+-- `INTRALINE_MAX_HUNKS` from coincidental subword matches between two
+-- unrelated hashes.
 --
--- Per-character tokenization was tried first, but `vim.diff --minimal`
--- matches coincidental letters between dissimilar lines (e.g.
--- "something." and "any tracked metric." share 't', 'e', 'm', 'i', '.')
--- and splits the diff into small hunks. Rendered in overleaf style those
--- fragments interleave deleted and inserted text into unreadable
--- character-level noise.
+-- The walk is bounded by byte adjacency so it can't span a non-word
+-- char: `"v1.0-1c9dfb..."` keeps `v`, dots, and dashes as natural
+-- boundaries. Within one source word run the walk is all-or-nothing.
+---@param tokens string[]
+---@param byte_map { byte: integer, byte_len: integer }[]
+---@return string[]
+---@return { byte: integer, byte_len: integer }[]
+local function coalesce_hex_runs(tokens, byte_map)
+  local out, out_map = {}, {}
+  local i = 1
+  while i <= #tokens do
+    if not is_word_token(tokens[i]) then
+      out[#out + 1] = tokens[i]
+      out_map[#out_map + 1] = byte_map[i]
+      i = i + 1
+    else
+      local j = i
+      while
+        j + 1 <= #tokens
+        and is_word_token(tokens[j + 1])
+        and byte_map[j + 1].byte == byte_map[j].byte + byte_map[j].byte_len
+      do
+        j = j + 1
+      end
+
+      if j > i then
+        local merged_len = byte_map[j].byte + byte_map[j].byte_len - byte_map[i].byte
+        if is_hex_run_in_tokens(tokens, i, j, merged_len) then
+          out[#out + 1] = table.concat(tokens, "", i, j)
+          out_map[#out_map + 1] = {
+            byte = byte_map[i].byte,
+            byte_len = merged_len,
+          }
+        else
+          for k = i, j do
+            out[#out + 1] = tokens[k]
+            out_map[#out_map + 1] = byte_map[k]
+          end
+        end
+      else
+        out[#out + 1] = tokens[i]
+        out_map[#out_map + 1] = byte_map[i]
+      end
+      i = j + 1
+    end
+  end
+  return out, out_map
+end
+
+-- Tokenize `s` for intraline diffing. Splits at ASCII non-word
+-- characters and at subword boundaries within word-char runs:
+-- camelCase (`fooBar` → `foo`, `Bar`), acronym→word (`XMLParser` →
+-- `XML`, `Parser`), digit↔letter (`error123abc` → `error`, `123`,
+-- `abc`), and underscore (`audio_preservation` → `audio`, `_`,
+-- `preservation`). Each non-word char becomes its own token; each
+-- subword run becomes one token. Multi-byte chars bucket as
+-- lowercase; see `subword_class`. Returns the token list and a
+-- parallel byte-range map.
 --
--- Whole-identifier word tokens fixed that but introduced a second
--- failure: a 1:1 token replacement between unrelated identifiers sharing
--- only a structural prefix (`EventStateOpen` / `EventStateClose`)
--- admitted char-level refinement on the prefix-overlap gate, then
--- `vim.diff` latched onto a coincidental letter inside the differing
--- tails (`Open` / `Close` share an `e`) and produced interleaved
--- per-char noise. Subword tokens close the gap: the divergent subword
--- now pairs directly with its replacement, the resulting char-level
--- diff has no shared prefix/suffix to admit refinement, and the hunk
--- renders as a clean whole-token replacement.
+-- Subword granularity keeps `vim.diff --minimal` from latching onto
+-- coincidental letters in dissimilar lines or in the divergent tails
+-- of structurally similar identifiers, both of which would render as
+-- per-char noise in overleaf style. A post-pass (`coalesce_hex_runs`)
+-- folds the splits back into one token for long hash-like hex runs
+-- so git SHAs and similar literals stay atomic.
 ---@param s string
 ---@return string[] tokens
 ---@return { byte: integer, byte_len: integer }[] byte_map
@@ -298,7 +427,7 @@ local function tokenize(s)
   end
   flush()
 
-  return tokens, byte_map
+  return coalesce_hex_runs(tokens, byte_map)
 end
 
 -- Decompose `s` into UTF-8 characters with byte offsets. Used to refine a
@@ -1713,6 +1842,7 @@ M._test = {
   is_word_char = is_word_char,
   is_word_token = is_word_token,
   subword_class = subword_class,
+  is_hex_run = is_hex_run,
   tokenize = tokenize,
   split_chars = split_chars,
   diff_units = diff_units,
