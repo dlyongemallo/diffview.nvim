@@ -291,7 +291,7 @@ local function render_entries(panel, parent, entries, updating)
     end
 
     comp:ln()
-    perf:lap("entry " .. entry.commit.hash:sub(1, 7))
+    perf:lap("entry " .. (entry.commit.hash and entry.commit.hash:sub(1, 7) or "<local>"))
 
     if not entry.single_file and not entry.folded then
       render_files(entry_struct.files.comp, entry.files)

@@ -54,6 +54,7 @@ end
 ---@field merge_ctx vcs.MergeContext?
 ---@field active boolean
 ---@field opened boolean
+---@field _extra_owned vcs.File[] # Files this entry owns that aren't reachable through `layout:owned_files()` (e.g. one-off nulled fallbacks built for a window whose symbol is in `shared_symbols`).
 local FileEntry = oop.create_class("FileEntry")
 
 ---@class FileEntry.init.Opt
@@ -67,6 +68,7 @@ local FileEntry = oop.create_class("FileEntry")
 ---@field kind vcs.FileKind
 ---@field commit? Commit
 ---@field merge_ctx? vcs.MergeContext
+---@field _extra_owned? vcs.File[]
 
 ---FileEntry constructor
 ---@param opt FileEntry.init.Opt
@@ -87,6 +89,10 @@ function FileEntry:init(opt)
   self.merge_ctx = opt.merge_ctx
   self.active = false
   self.opened = false
+  -- Files this FileEntry owns that aren't reachable through `layout:owned_files()`
+  -- (e.g. one-off nulled fallbacks for shared-symbol windows when the
+  -- shared instance can't be used). Populated by `with_layout`.
+  self._extra_owned = opt._extra_owned or {}
 end
 
 ---@param force? boolean
@@ -94,6 +100,11 @@ function FileEntry:destroy(force)
   for _, f in ipairs(self.layout:owned_files()) do
     f:destroy(force)
   end
+
+  for _, f in ipairs(self._extra_owned) do
+    f:destroy(force)
+  end
+  self._extra_owned = {}
 
   self.layout:destroy()
 end
@@ -266,21 +277,62 @@ end
 ---@class FileEntry.with_layout.Opt : FileEntry.init.Opt
 ---@field nulled? boolean
 ---@field get_data? git.FileDataProducer
+---@field pinned_path? string # Deprecated: when `pinned_b_file` is supplied the layout takes its b-side from that shared File and `pinned_path` is ignored. Retained as a fallback for adapters that haven't been wired to the view's pin_local cache yet.
+---@field pinned_b_file? vcs.File # The view-owned, shared working-tree `vcs.File` for `pin_local` mode. When set, the layout's b-side reuses this exact instance instead of constructing a fresh one, so identity is preserved across every entry the view ever shows. The instance outlives entry teardown via the layout's `shared_symbols`, and is destroyed by `FileHistoryView:close()`. One carve-out: if the layout's `should_null` says the b-side should render as absent AND the working-tree path no longer exists on disk, the b-side falls back to a one-off nulled file so a status="D" entry doesn't open an empty/editable buffer for a missing path.
 
 ---@param layout_class Layout (class)
 ---@param opt FileEntry.with_layout.Opt
 ---@return FileEntry
 function FileEntry.with_layout(layout_class, opt)
+  local extra_owned = {}
+
   local function create_file(rev, symbol)
-    return File({
+    local fallback_for_shared = false
+    if symbol == "b" and opt.pinned_b_file then
+      -- Fall through to a fresh nulled file when the layout says the
+      -- b-side should render as absent AND the shared LOCAL path no
+      -- longer exists on disk. Without this, status="D" entries whose
+      -- working-tree path is also gone would open an empty/editable
+      -- buffer for the missing path. The disk check preserves the
+      -- overlay case (file exists in WT but not in this commit), where
+      -- `try_should_null` would also return true but the b-side must
+      -- still show the LOCAL file.
+      local null_b = try_should_null(layout_class, rev, opt.status, symbol)
+        and vim.fn.filereadable(opt.pinned_b_file.absolute_path) ~= 1
+      if not null_b then
+        return opt.pinned_b_file
+      end
+      -- We're constructing a one-off File for a window whose symbol is in
+      -- `shared_symbols`, so `Layout:owned_files()` would skip it and
+      -- `FileEntry:destroy` would otherwise leak it. Track it as an extra
+      -- owned file below.
+      fallback_for_shared = true
+    end
+
+    local path
+    if symbol == "a" then
+      path = opt.oldpath or opt.path
+    elseif symbol == "b" and opt.pinned_path then
+      path = opt.pinned_path
+    else
+      path = opt.path
+    end
+
+    local file = File({
       adapter = opt.adapter,
-      path = symbol == "a" and opt.oldpath or opt.path,
+      path = path,
       kind = opt.kind,
       commit = opt.commit,
       get_data = opt.get_data,
       rev = rev,
       nulled = utils.sate(opt.nulled, try_should_null(layout_class, rev, opt.status, symbol)),
     }) --[[@as vcs.File ]]
+
+    if fallback_for_shared then
+      extra_owned[#extra_owned + 1] = file
+    end
+
+    return file
   end
 
   return FileEntry({
@@ -292,6 +344,7 @@ function FileEntry.with_layout(layout_class, opt)
     kind = opt.kind,
     commit = opt.commit,
     revs = opt.revs,
+    _extra_owned = extra_owned,
     layout = layout_class({
       a = create_file(opt.revs.a, "a"),
       b = create_file(opt.revs.b, "b"),

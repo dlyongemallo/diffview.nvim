@@ -517,6 +517,31 @@ function HgAdapter:stream_fh_data(state)
   return stream
 end
 
+---@override
+---@param path_args string[]
+---@param log_options HgLogOptions
+---@return vcs.adapter.HistoryScope
+function HgAdapter:history_scope(path_args, log_options) ---@diagnostic disable-line: unused-local
+  -- Mercurial has no `-L` line-trace mode (`file_history_options` rejects
+  -- it), so the scope question reduces to "is this a single-file pathspec?".
+  if not (path_args and #path_args == 1 and self.ctx.toplevel) then
+    return { single_file = false }
+  end
+  if pl:is_dir(path_args[1]) then
+    return { single_file = false }
+  end
+  -- See `GitAdapter:history_scope` for why we resolve through `hg files`
+  -- instead of using `path_args[1]` raw, and for the `#out == 0` fallback.
+  local out = self:exec_sync(utils.vec_join("files", "--", path_args), self.ctx.toplevel)
+  if #out == 1 then
+    return { single_file = true, path = out[1] }
+  end
+  if #out == 0 then
+    return { single_file = true, path = path_args[1] }
+  end
+  return { single_file = false }
+end
+
 function HgAdapter:is_single_file(path_args, lflags)
   if path_args and self.ctx.toplevel then
     return #path_args == 1
@@ -691,6 +716,7 @@ end)
 ---@return LogEntry|string ret
 function HgAdapter:parse_fh_data(data, commit, state)
   local files = {}
+  local pin_local = state.layout_opt.pin_local == true
 
   for i = 1, #data.numstat - 1 do
     local status = data.namestat[i]:sub(1, 1):gsub("%s", " ")
@@ -714,20 +740,34 @@ function HgAdapter:parse_fh_data(data, commit, state)
       status = "R"
     end
 
+    local rev_a, rev_b
+    if pin_local then
+      -- pin_local diffs each changeset against the working tree, so the
+      -- a-side reads from this changeset (not its parent) and the b-side
+      -- from LOCAL. This matches the synthetic top-of-history "Working
+      -- tree" entry (HEAD vs LOCAL) and the documented behaviour.
+      rev_a = HgRev(RevType.COMMIT, data.right_hash)
+      rev_b = self.Rev(RevType.LOCAL)
+    else
+      rev_a = data.left_hash and HgRev(RevType.COMMIT, data.left_hash) or HgRev.new_null_tree()
+      rev_b = state.prepared_log_opts.base or HgRev(RevType.COMMIT, data.right_hash)
+    end
+
     table.insert(
       files,
-      FileEntry.with_layout(state.layout_opt.default_layout or Diff2Hor, {
-        adapter = self,
+      self:build_pin_local_file_entry({
+        layout_class = state.layout_opt.default_layout or Diff2Hor,
+        layout_opt = state.layout_opt,
         path = name,
-        oldpath = oldname,
+        -- In pin_local mode revs.a is the changeset itself, so the parent's
+        -- old name doesn't apply; `name` lives in this changeset's tree.
+        oldpath = (not pin_local) and oldname or nil,
         status = status,
         stats = stats,
-        kind = "working",
         commit = commit,
-        revs = {
-          a = data.left_hash and HgRev(RevType.COMMIT, data.left_hash) or HgRev.new_null_tree(),
-          b = state.prepared_log_opts.base or HgRev(RevType.COMMIT, data.right_hash),
-        },
+        rev_a = rev_a,
+        rev_b = rev_b,
+        single_file = state.single_file,
       })
     )
   end
@@ -757,6 +797,121 @@ function HgAdapter:parse_fh_data(data, commit, state)
       nulled = true,
       files = { FileEntry.new_null_entry(self) },
     })
+end
+
+---@override
+---@param opt { path_args: string[], layout_opt: vcs.adapter.LayoutOpt, single_file: boolean }
+---@return LogEntry?
+function HgAdapter:build_local_log_entry(opt)
+  local path_args = opt.path_args or {}
+  local layout_opt = opt.layout_opt
+
+  local head = self:head_rev()
+  if not head then
+    return nil
+  end
+
+  -- See `GitAdapter:build_local_log_entry` for the rationale: revs.a here
+  -- is HEAD (parent of the working tree), not the changeset being browsed,
+  -- so the pinned layout must defer its a-side decision to `Diff2.should_null`.
+  head.pin_local_synthetic = true
+
+  -- The `--` separator stops paths starting with `-` from being parsed as
+  -- options, matching the convention the rest of this adapter uses for
+  -- path-sensitive hg invocations.
+  local status_args = utils.vec_join(
+    "status",
+    "--modified",
+    "--added",
+    "--removed",
+    "--deleted",
+    "--template={status} {path}\n",
+    "--",
+    path_args
+  )
+  local out, code = self:exec_sync(status_args, self.ctx.toplevel)
+  if code ~= 0 or not out or #out == 0 then
+    return nil
+  end
+
+  local files_data = {}
+  for _, line in ipairs(out) do
+    if line and #line > 0 then
+      -- Parse `{status} {path}`: split on the first whitespace run after the
+      -- status char so non-alpha statuses (e.g. `!` for deleted) aren't
+      -- silently dropped.
+      local status, name = line:match("^(%S)%s+(.+)$")
+      if status == "R" or status == "!" then
+        -- Mercurial uses `R` for tracked-and-removed and `!` for missing
+        -- (deleted on disk); our UI represents both as `D`.
+        status = "D"
+      end
+      if status and name and name ~= "" then
+        -- Don't `vim.trim` the path: Mercurial allows leading/trailing
+        -- whitespace in filenames, and the `(.+)$` capture already excludes
+        -- the line terminator. Trimming would silently rewrite the path
+        -- and the synthetic entry would point at a different file than
+        -- the repo actually contains.
+        table.insert(files_data, { status = status, name = name })
+      end
+    end
+  end
+
+  if #files_data == 0 then
+    return nil
+  end
+
+  local user_out = self:exec_sync(
+    { "config", "ui.username" },
+    { cwd = self.ctx.toplevel, silent = true }
+  )
+  local author = (user_out and user_out[1] and vim.trim(user_out[1])) or ""
+  if author == "" then
+    author = "Working tree"
+  end
+
+  -- `Commit` here is `HgCommit` (see the alias at the top of this file),
+  -- whose `init` derives `iso_date` from `time` and defaults `time_offset`
+  -- to 0. Both fields are required by `render.lua` when the panel's
+  -- `date_format` is `iso` (and in the `auto` branch for older commits);
+  -- a nil `iso_date` would abort the panel render, so we rely on the
+  -- subclass init populating them rather than passing them explicitly.
+  local commit = Commit({
+    hash = nil,
+    author = author,
+    time = os.time(),
+    rel_date = "now",
+    subject = "Working tree",
+    ref_names = nil,
+  })
+
+  local layout_class = layout_opt.default_layout or Diff2Hor
+  local files = {}
+
+  for _, f in ipairs(files_data) do
+    table.insert(
+      files,
+      self:build_pin_local_file_entry({
+        layout_class = layout_class,
+        layout_opt = layout_opt,
+        path = f.name,
+        oldpath = nil,
+        status = f.status,
+        commit = commit,
+        rev_a = head,
+        rev_b = self.Rev(RevType.LOCAL),
+        single_file = opt.single_file,
+      })
+    )
+  end
+
+  return LogEntry({
+    path_args = path_args,
+    commit = commit,
+    files = files,
+    -- See `GitAdapter:build_local_log_entry` for the rationale.
+    single_file = opt.single_file,
+  })
 end
 
 ---@param argo ArgObject
@@ -809,6 +964,25 @@ function HgAdapter:head_rev()
   local s = vim.trim(out[1]):gsub("^%^", "")
 
   return HgRev(RevType.COMMIT, s, true)
+end
+
+---@param path string
+---@param rev_arg string
+---@return boolean
+function HgAdapter:file_exists_at_rev(path, rev_arg)
+  -- `hg files -r REV -- path` exits 0 with the path on stdout when the file
+  -- is tracked in REV, exits non-zero with empty stdout otherwise. The `--`
+  -- separator keeps paths starting with `-` from being parsed as options.
+  local out, code = self:exec_sync(
+    { "files", "-r", rev_arg, "--", path },
+    { cwd = self.ctx.toplevel, silent = true }
+  )
+
+  if code ~= 0 or not out or not out[1] then
+    return false
+  end
+
+  return vim.trim(out[1]) ~= ""
 end
 
 ---Get the current branch name.
@@ -1323,6 +1497,7 @@ function HgAdapter:init_completion()
   end)
 
   self.comp.file_history:put({ "--follow", "-f" })
+  self.comp.file_history:put({ "--pin-local" })
   self.comp.file_history:put({ "--no-merges", "-M" })
   self.comp.file_history:put({ "--limit", "-l" }, {})
 

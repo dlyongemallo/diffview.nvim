@@ -7,6 +7,8 @@ local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") 
 local FileDiffView = lazy.access("diffview.scene.views.diff.file_diff_view", "FileDiffView") ---@type FileDiffView|LazyModule
 local FileHistoryView =
   lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
+local GitAdapter = lazy.access("diffview.vcs.adapters.git", "GitAdapter") ---@type GitAdapter|LazyModule
+local HgAdapter = lazy.access("diffview.vcs.adapters.hg", "HgAdapter") ---@type HgAdapter|LazyModule
 local NullAdapter = lazy.access("diffview.vcs.adapters.null", "NullAdapter") ---@type NullAdapter|LazyModule
 local StandardView = lazy.access("diffview.scene.views.standard.standard_view", "StandardView") ---@type StandardView|LazyModule
 local arg_parser = lazy.require("diffview.arg_parser") ---@module "diffview.arg_parser"
@@ -145,9 +147,55 @@ function M.file_history(range, args)
     return
   end
 
+  -- Boolean flag: bare `--pin-local` enables, `--pin-local=false` overrides
+  -- a value set in the user's config. Falls back to the config value when
+  -- the flag isn't passed at all.
+  local raw_pin_local = argo:get_flag("pin-local")
+  local pin_local
+  if raw_pin_local ~= nil then
+    pin_local = raw_pin_local --[[@as boolean ]]
+  else
+    pin_local = config.get_config().view.file_history.pin_local or false
+  end
+
+  if
+    pin_local
+    and not (adapter:instanceof(GitAdapter.__get()) or adapter:instanceof(HgAdapter.__get()))
+  then
+    utils.err("`--pin-local` is only supported for git and mercurial repositories.")
+    return
+  end
+
+  -- pin_local forces revs.b = LOCAL on every entry, which silently overrides
+  -- a fixed-base RHS the user asked for via `--base`. Reject the combination
+  -- so the conflict is loud rather than confusing.
+  if pin_local and argo:get_flag("base", { no_empty = true }) then
+    utils.err(
+      "`--pin-local` and `--base` cannot be combined: pin_local forces the right-hand side to the working tree."
+    )
+    return
+  end
+
+  -- For single-file pinning, seed `pinned_path` so the b-side stays bound to
+  -- the user's working-tree file even across renames in older commits. For
+  -- multi-file pinning the path is dynamic (set by the cursor follower) so it
+  -- starts unset. `history_scope` is the single source of truth: it knows
+  -- about both `path_args` and `-L` line-trace (whose path lives in the L
+  -- spec, not `path_args`), and rejects single-arg directory pathspecs that
+  -- would otherwise produce a `pinned_path` no FileEntry can match.
+  local pinned_path
+  if pin_local then
+    local scope = adapter:history_scope(adapter.ctx.path_args, log_options)
+    if scope.single_file then
+      pinned_path = scope.path
+    end
+  end
+
   local v = FileHistoryView({
     adapter = adapter,
     log_options = log_options,
+    pin_local = pin_local,
+    pinned_path = pinned_path,
   })
 
   if not v:is_valid() then
@@ -185,6 +233,9 @@ function M.diffview_diff_files(args)
   end
 
   local toplevel = pl:parent(left_path) or "."
+  -- LuaLS picks up `GitAdapter.create`'s 2-arg signature when both adapters
+  -- are imported in this file, so suppress the spurious diagnostics.
+  ---@diagnostic disable-next-line: missing-parameter, param-type-mismatch
   local adapter = NullAdapter.create({ toplevel = toplevel })
 
   local v = FileDiffView({

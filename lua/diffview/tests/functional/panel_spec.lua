@@ -1053,4 +1053,65 @@ describe("diffview.ui.panel", function()
       eq(nil, panel:get_autosize_components())
     end)
   end)
+
+  describe("Panel on_autocmd dispatch", function()
+    local Panel = require("diffview.ui.panel").Panel
+
+    -- Without buffer-matching for non Win*/Buf* events, subscribers to
+    -- events like `CursorMoved` would never be invoked: the dispatcher
+    -- defaults `win_match` and `buf_match` to nil and the gating check
+    -- silently swallows the event. The pinned-mode cursor follower in
+    -- `FileHistoryView` relies on this dispatch path.
+    it("dispatches CursorMoved to subscribers matching the panel buffer", function()
+      local panel = Panel({
+        bufname = "TestOnAutocmdPanel",
+        config = Panel.default_config_split,
+      })
+      panel.bufid = vim.api.nvim_create_buf(false, true)
+
+      local fired = 0
+      panel:on_autocmd("CursorMoved", {
+        callback = function()
+          fired = fired + 1
+        end,
+      })
+
+      Panel.au.emitter:emit("CursorMoved", {
+        event = "CursorMoved",
+        buf = panel.bufid,
+      })
+
+      eq(1, fired)
+
+      pcall(vim.api.nvim_buf_delete, panel.bufid, { force = true })
+      panel:destroy()
+    end)
+
+    it("ignores CursorMoved events fired in other buffers", function()
+      local panel = Panel({
+        bufname = "TestOnAutocmdPanelOther",
+        config = Panel.default_config_split,
+      })
+      panel.bufid = vim.api.nvim_create_buf(false, true)
+      local other_buf = vim.api.nvim_create_buf(false, true)
+
+      local fired = 0
+      panel:on_autocmd("CursorMoved", {
+        callback = function()
+          fired = fired + 1
+        end,
+      })
+
+      Panel.au.emitter:emit("CursorMoved", {
+        event = "CursorMoved",
+        buf = other_buf,
+      })
+
+      eq(0, fired)
+
+      pcall(vim.api.nvim_buf_delete, other_buf, { force = true })
+      pcall(vim.api.nvim_buf_delete, panel.bufid, { force = true })
+      panel:destroy()
+    end)
+  end)
 end)

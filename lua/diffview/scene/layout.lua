@@ -222,12 +222,37 @@ function Layout:files()
   end)
 end
 
----Return every file the layout is responsible for, including any files that
----aren't attached to a window (e.g. `Diff1Inline.a_file`). Used by the file
----entry teardown path so non-window files don't get orphaned.
+---Symbols whose attached `vcs.File` is borrowed (owned elsewhere) and
+---therefore must not be destroyed by `FileEntry:destroy`. Pinned variants
+---set this to `{ "b" }` so the view-owned working-tree File survives entry
+---teardown. Default: own everything.
+---@type string[]
+Layout.shared_symbols = {}
+
+---Return the files this layout owns and is responsible for tearing down
+---in `FileEntry:destroy`. Files whose symbol is listed in `shared_symbols`
+---are excluded: those are owned by someone outside the entry (e.g. the
+---view's pin_local cache).
+---
+---The default implementation walks the window-attached files for symbols
+---in `self.symbols`. Subclasses with files outside the window set (e.g.
+---`Diff1Inline.a_file`) MUST override `owned_files` to include them, or
+---the entry teardown path will orphan those files.
 ---@return vcs.File[]
 function Layout:owned_files()
-  return self:files()
+  local skip = {}
+  for _, sym in ipairs(self.shared_symbols) do
+    skip[sym] = true
+  end
+
+  local out = {}
+  for _, sym in ipairs(self.symbols) do
+    local win = self[sym]
+    if not skip[sym] and win and win.file then
+      out[#out + 1] = win.file
+    end
+  end
+  return out
 end
 
 ---Look up the file the layout assigns to `sym`. Default behaviour reads
@@ -372,6 +397,17 @@ function Layout:detach_files()
   for _, win in ipairs(self.windows) do
     win:detach_file()
   end
+end
+
+---Variant of `detach_files` invoked by views during entry-to-entry swaps,
+---where some layouts (e.g. pinned variants) want to keep specific windows
+---bound across the swap. Defaults to a full `detach_files()`; pinned
+---layouts override to skip the pinned window only when the next entry's
+---file for that window is the same instance, so multi-file pinning still
+---detaches the old b-side when the row crosses to a different path.
+---@param next_entry? FileEntry
+function Layout:detach_files_for_swap(next_entry) ---@diagnostic disable-line: unused-local
+  self:detach_files()
 end
 
 ---Sync the scrollbind.
