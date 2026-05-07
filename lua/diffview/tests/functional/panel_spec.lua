@@ -1054,6 +1054,134 @@ describe("diffview.ui.panel", function()
     end)
   end)
 
+  describe("FileHistoryPanel show=false lifecycle", function()
+    local FileHistoryPanel =
+      require("diffview.scene.views.file_history.file_history_panel").FileHistoryPanel
+
+    -- Build a stub FileHistoryPanel that bypasses real window creation:
+    -- `is_open`/`buf_loaded` short-circuit `Panel:open`, and `get_config`
+    -- returns split+auto so the post-open `wincmd =` branch is skipped.
+    local function make_panel(cur_item, on_highlight)
+      return setmetatable({
+        cur_item = cur_item or {},
+        is_open = function()
+          return true
+        end,
+        buf_loaded = function()
+          return true
+        end,
+        get_config = function()
+          return { type = "split", width = "auto" }
+        end,
+        highlight_item = function(_, item)
+          if on_highlight then
+            on_highlight(item)
+          end
+        end,
+      }, { __index = FileHistoryPanel })
+    end
+
+    it("places the cursor on cur_item[2] when toggled open (#161)", function()
+      local file = { path = "a.txt" }
+      local entry = { files = { file } }
+      local highlighted
+
+      local panel = make_panel({ entry, file }, function(item)
+        highlighted = item
+      end)
+
+      panel:open()
+      eq(file, highlighted)
+    end)
+
+    it("does not call highlight_item when cur_item is empty", function()
+      local panel = make_panel({}, function()
+        error("highlight_item should not be called")
+      end)
+
+      assert.has_no.errors(function()
+        panel:open()
+      end)
+    end)
+
+    -- Regression: pressing `<tab>`/`<s-tab>` while the panel is toggled off
+    -- routes through `set_file_by_offset` -> `set_entry_fold`, which used to
+    -- call `utils.set_cursor` against `self.winid` unconditionally. Once the
+    -- panel was closed the stored winid was stale, so `nvim_win_get_buf`
+    -- raised "Invalid window id".
+    it("set_entry_fold does not touch the cursor when the panel is closed", function()
+      local cursor_calls = 0
+      local entry = {
+        folded = false,
+        files = {},
+      }
+
+      local panel = setmetatable({
+        single_file = false,
+        winid = 999999,
+        is_open = function()
+          return false
+        end,
+        render = function() end,
+        redraw = function() end,
+        components = {
+          log = {
+            entries = {
+              comp = {
+                some = function(_, _)
+                  cursor_calls = cursor_calls + 1
+                end,
+              },
+            },
+          },
+        },
+      }, { __index = FileHistoryPanel })
+
+      assert.has_no.errors(function()
+        panel:set_entry_fold(entry, false)
+      end)
+      eq(true, entry.folded)
+      eq(0, cursor_calls)
+    end)
+
+    -- Companion to the regression above: when the panel *is* open the
+    -- iteration must still run so the cursor lands on the collapsed entry.
+    it("set_entry_fold iterates components when the panel is open", function()
+      local iter_calls = 0
+      local entry = {
+        folded = false,
+        files = {},
+      }
+
+      local panel = setmetatable({
+        single_file = false,
+        winid = 1,
+        is_open = function()
+          return true
+        end,
+        render = function() end,
+        redraw = function() end,
+        components = {
+          log = {
+            entries = {
+              comp = {
+                some = function(_, _)
+                  iter_calls = iter_calls + 1
+                end,
+              },
+            },
+          },
+        },
+      }, { __index = FileHistoryPanel })
+
+      assert.has_no.errors(function()
+        panel:set_entry_fold(entry, false)
+      end)
+      eq(true, entry.folded)
+      eq(1, iter_calls)
+    end)
+  end)
+
   describe("Panel on_autocmd dispatch", function()
     local Panel = require("diffview.ui.panel").Panel
 

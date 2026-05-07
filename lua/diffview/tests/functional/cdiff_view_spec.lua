@@ -328,6 +328,74 @@ describe("diffview.api.CDiffView", function()
         end
       end)
     )
+
+    it(
+      "places the cursor on the active file when the panel is toggled open (#161)",
+      test_utils.async_test(function()
+        local repo = make_repo()
+        local view
+
+        local ok, err = pcall(function()
+          config.get_config().file_panel.show = false
+
+          view = CDiffView({
+            git_root = repo,
+            left = Rev(RevType.STAGE),
+            right = Rev(RevType.LOCAL),
+            files = make_files({
+              make_file_data("a.txt"),
+              make_file_data("b.txt"),
+              make_file_data("c.txt"),
+            }),
+            update_files = function()
+              return make_files({
+                make_file_data("a.txt"),
+                make_file_data("b.txt"),
+                make_file_data("c.txt"),
+              })
+            end,
+            get_file_data = function()
+              return {}
+            end,
+          })
+
+          view:open()
+          local loaded = vim.wait(1000, function()
+            return not view.is_loading
+          end, 10)
+          assert.is_true(loaded, "view did not finish loading within 1s")
+
+          -- Pick a non-first file as the active entry; the bug is that the
+          -- cursor lands on line 1 instead of on this file's row.
+          local target_file
+          for _, f in view.files:iter() do
+            if f.path == "b.txt" then
+              target_file = f
+              break
+            end
+          end
+          assert.is_not_nil(target_file)
+          view.panel:set_cur_file(target_file)
+
+          assert.falsy(view.panel:is_open())
+
+          -- Toggle the panel open (simulates :DiffviewToggleFiles).
+          view.panel:toggle(true)
+          assert.is_true(view.panel:is_open())
+
+          -- The cursor should land on the active file rather than the top of
+          -- the buffer.
+          local item = view.panel:get_item_at_cursor()
+          assert.equals(target_file, item)
+        end)
+
+        close_view(view)
+        cleanup_repo(repo)
+        if not ok then
+          error(err)
+        end
+      end)
+    )
   end)
 
   -- -----------------------------------------------------------------------

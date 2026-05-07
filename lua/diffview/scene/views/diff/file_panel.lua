@@ -73,6 +73,7 @@ function FilePanel:open()
   if not (conf.type == "split" and conf.width == "auto") then
     vim.cmd("wincmd =")
   end
+  self:highlight_cur_file()
 end
 
 function FilePanel:setup_buffer()

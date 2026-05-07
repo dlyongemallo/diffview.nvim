@@ -117,6 +117,9 @@ function FileHistoryPanel:open()
   if not (conf.type == "split" and conf.width == "auto") then
     vim.cmd("wincmd =")
   end
+  if self.cur_item[2] then
+    self:highlight_item(self.cur_item[2])
+  end
 end
 
 ---@override
@@ -645,15 +648,17 @@ function FileHistoryPanel:set_entry_fold(entry, open)
     self:render()
     self:redraw()
 
-    if entry.folded then
-      -- Set the cursor at the top of the log entry
-      self.components.log.entries.comp:some(function(comp, _, _)
-        if comp.context == entry then
-          utils.set_cursor(self.winid, comp.lstart + 1)
-          return true
-        end
-      end)
+    if not (self:is_open() and entry.folded) then
+      return
     end
+
+    -- Set the cursor at the top of the log entry.
+    self.components.log.entries.comp:some(function(comp, _, _)
+      if comp.context == entry then
+        utils.set_cursor(self.winid, comp.lstart + 1)
+        return true
+      end
+    end)
   end
 end
 
