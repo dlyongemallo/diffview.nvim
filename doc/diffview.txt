@@ -1033,6 +1033,10 @@ file_history_panel                              *diffview-config-file_history_pa
             {win_config} (table|function)
                 See |diffview-config-win_config|.
 
+            {show} (boolean)
+                Show the file history panel when opening
+                |:DiffviewFileHistory|. Default: `true`
+
             {commit_subject_max_length} (integer)
                 Maximum length for commit subject display.
                 Default: `72`

@@ -151,6 +151,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
         height = 16,
         win_opts = {},
       },
+      show = true,                        -- Show the file history panel when opening DiffviewFileHistory.
       commit_subject_max_length = 72,     -- Max length for commit subject display.
       date_format = "auto",               -- Date format: "auto" | "relative" | "iso"
     },

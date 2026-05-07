@@ -472,6 +472,7 @@ M.defaults = {
   ---@field commit_format DiffviewCommitFormatField[]
   ---@field log_options DiffviewFileHistoryLogOptions
   ---@field win_config DiffviewFileHistoryPanelWinConfig
+  ---@field show boolean
   ---@field commit_subject_max_length integer
   ---@field date_format DiffviewDateFormat
 
@@ -481,6 +482,7 @@ M.defaults = {
   ---@field commit_format? DiffviewCommitFormatField[] Ordered components shown per commit entry.
   ---@field log_options? DiffviewFileHistoryLogOptions.user Log options per adapter. See `|diffview-config-log_options|`.
   ---@field win_config? DiffviewFileHistoryPanelWinConfig.user File history panel window config.
+  ---@field show? boolean Show the file history panel when opening DiffviewFileHistory.
   ---@field commit_subject_max_length? integer Max length for commit subject display.
   ---@field date_format? DiffviewDateFormat "auto", "relative", or "iso".
   file_history_panel = {
@@ -537,6 +539,7 @@ M.defaults = {
       height = 16,
       win_opts = {}
     },
+    show = true, -- Show the file history panel by default when opening DiffviewFileHistory.
     commit_subject_max_length = 72, -- Max length for commit subject display.
     date_format = "auto", -- Date format: "auto" (relative for recent, ISO for old), "relative", or "iso".
   },

@@ -527,6 +527,11 @@ function FileHistoryView:get_default_layout_name()
   return config.get_config().view.file_history.layout
 end
 
+---@override
+function FileHistoryView:should_show_panel()
+  return config.get_config().file_history_panel.show
+end
+
 -- Map a non-pinned Diff2 layout name to its pinned counterpart. Pinned
 -- layouts share window orientation with their unpinned siblings; we just
 -- re-route the layout class so the b-window keeps its file across entry
