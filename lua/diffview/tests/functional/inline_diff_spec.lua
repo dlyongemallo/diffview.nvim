@@ -771,6 +771,45 @@ describe("diffview.scene.inline_diff", function()
       )
     end)
 
+    it("tokenize coalesces a long single-case hex hash into one token", function()
+      -- 40-char SHA-1, all-lowercase hex with mixed digit/letter runs:
+      -- without the post-pass the run subword-splits into ~25 tokens,
+      -- which fragment the diff against an unrelated hash and admit
+      -- coincidental subword matches under `INTRALINE_MAX_HUNKS`.
+      local s = "1c9dfb261b8be35f689c6d83dfd3e92b7f59ecf8"
+      local tokens, m = h.tokenize(s)
+      assert.are.same({ s }, tokens)
+      assert.are.equal(0, m[1].byte)
+      assert.are.equal(40, m[1].byte_len)
+    end)
+
+    it("tokenize coalesces uppercase hex with alternating digits too", function()
+      -- All-uppercase run with frequent digit↔letter alternation passes
+      -- the same predicate.
+      assert.are.same({ "AB12CD34EF56AB78" }, (h.tokenize("AB12CD34EF56AB78")))
+    end)
+
+    it("tokenize leaves short hex-like runs subword-split", function()
+      -- 7 chars, below `HEX_TOKEN_MIN_LEN`: stays subword-split so a
+      -- short identifier suffix isn't collapsed into one opaque token.
+      assert.are.same({ "abc", "1234" }, (h.tokenize("abc1234")))
+    end)
+
+    it("tokenize rejects pseudo-hex with low transition density", function()
+      -- 1-2 transitions across 12-13 chars sit below `ceil(len/4)`, so
+      -- word-prefixed patterns keep their split and `decade` /
+      -- `1234567` stay diffable as semantic units.
+      assert.are.same({ "decade", "1234567" }, (h.tokenize("decade1234567")))
+      assert.are.same({ "cafebabe", "1234" }, (h.tokenize("cafebabe1234")))
+      assert.are.same({ "face", "1234", "abcd" }, (h.tokenize("face1234abcd")))
+    end)
+
+    it("tokenize rejects pseudo-hex with a long letter run", function()
+      -- 3 transitions hits `ceil(12/4)=3`, but `cafef` letter run = 5
+      -- exceeds `HEX_TOKEN_MAX_LETTER_RUN`, so the predicate rejects.
+      assert.are.same({ "cafef", "00", "d", "1234" }, (h.tokenize("cafef00d1234")))
+    end)
+
     it("subword_class buckets ASCII and multi-byte chars correctly", function()
       assert.are.equal("lower", h.subword_class("a"))
       assert.are.equal("upper", h.subword_class("Z"))
@@ -795,13 +834,49 @@ describe("diffview.scene.inline_diff", function()
       assert.is_false(h.is_word_token(""))
     end)
 
+    it("is_hex_run accepts long single-case hex with high transition density", function()
+      assert.is_true(h.is_hex_run("1c9dfb261b8be35f689c6d83dfd3e92b7f59ecf8"))
+      assert.is_true(h.is_hex_run("AB12CD34EF56AB78"))
+    end)
+
+    it("is_hex_run rejects strings shorter than HEX_TOKEN_MIN_LEN", function()
+      assert.is_false(h.is_hex_run("abc1234"))
+      assert.is_false(h.is_hex_run(""))
+    end)
+
+    it("is_hex_run rejects mixed-case hex", function()
+      -- `tokenize`'s upper→lower split already separates the cases, so a
+      -- mixed-case merge candidate never reaches `is_hex_run` in practice;
+      -- the predicate rejects defensively for correctness.
+      assert.is_false(h.is_hex_run("AbCd1234"))
+    end)
+
+    it("is_hex_run rejects strings with non-hex chars", function()
+      assert.is_false(h.is_hex_run("hello123abc"))
+      assert.is_false(h.is_hex_run("1234567890_"))
+    end)
+
+    it("is_hex_run rejects low transition density", function()
+      assert.is_false(h.is_hex_run("decade1234567"))
+      assert.is_false(h.is_hex_run("cafebabe1234"))
+    end)
+
+    it("is_hex_run rejects long letter runs", function()
+      -- `cafef` = 5-char letter run, exceeds `HEX_TOKEN_MAX_LETTER_RUN`.
+      assert.is_false(h.is_hex_run("cafef00d1234"))
+    end)
+
+    it("is_hex_run rejects pure-digit and pure-letter runs", function()
+      -- These can't reach the predicate from `coalesce_hex_runs` (their
+      -- source word run is one subword token), but rejecting them on
+      -- their own merits keeps the contract sharp: zero transitions.
+      assert.is_false(h.is_hex_run("12345678"))
+      assert.is_false(h.is_hex_run("abcdefab"))
+    end)
+
     it("diff_units returns [] when either side is empty", function()
       assert.are.same({}, h.diff_units({}, { "a" }))
       assert.are.same({}, h.diff_units({ "a" }, {}))
-    end)
-
-    it("INTRALINE_MAX_HUNKS is a positive integer", function()
-      assert.is_true(h.INTRALINE_MAX_HUNKS >= 1)
     end)
 
     it("refinement_safe admits single-hunk sub-diffs regardless of overlap", function()
@@ -894,6 +969,36 @@ describe("diffview.scene.inline_diff", function()
 
       local vls = virt_line_hls(extmarks(bufnr))
       assert.are.same({ "DiffviewDiffDeleteInline" }, vls)
+    end)
+
+    it("renders a JSON commit-hash modification as one whole-token swap", function()
+      -- A pair of lazy-lock.json-style lines differing only in a 40-char
+      -- SHA. Without `coalesce_hex_runs`, the two unrelated hashes
+      -- subword-split into ~17-19 alternating digit/lowercase tokens
+      -- whose coincidental matches kept some pairs under
+      -- `INTRALINE_MAX_HUNKS` and rendered as fragmented per-token
+      -- highlights; after coalescing, the diff is a single 1:1 hash
+      -- replacement covering exactly the new hash's byte range.
+      local old_line = '  "x": { "commit": "ffa44ee9470743a7697d28df3a1a216fdfe2b09d" }'
+      local new_line = '  "x": { "commit": "cf4c30892644f01ebfb1e248eeca9e259856f9dc" }'
+      local bufnr = fresh_buf({ new_line })
+      inline_diff.render(bufnr, { old_line }, { new_line })
+      local cr = char_ranges(extmarks(bufnr))
+      assert.are.equal(1, #cr)
+      local hash_start = string.find(new_line, "cf4c3089", 1, true) - 1
+      assert.are.equal(0, cr[1].row)
+      assert.are.equal(hash_start, cr[1].start)
+      assert.are.equal(hash_start + 40, cr[1].finish)
+    end)
+
+    it("emits the entire deleted hash as one inline virt_text in overleaf", function()
+      local old_line = '  "x": { "commit": "ffa44ee9470743a7697d28df3a1a216fdfe2b09d" }'
+      local new_line = '  "x": { "commit": "cf4c30892644f01ebfb1e248eeca9e259856f9dc" }'
+      local bufnr = fresh_buf({ new_line })
+      inline_diff.render(bufnr, { old_line }, { new_line }, { style = "overleaf" })
+      local virts = inline_virt_texts(extmarks(bufnr), "DiffviewDiffDeleteInline")
+      assert.are.equal(1, #virts)
+      assert.are.equal("ffa44ee9470743a7697d28df3a1a216fdfe2b09d", virts[1].text)
     end)
   end)
 
