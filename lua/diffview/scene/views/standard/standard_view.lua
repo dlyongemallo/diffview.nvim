@@ -62,9 +62,16 @@ function StandardView:init_layout()
     api.nvim_win_close(curwin, false)
   end
 
-  local show_panel = config.get_config().file_panel.show
-  self.panel:focus(not show_panel)
+  self.panel:focus(not self:should_show_panel())
   self.emitter:emit("post_layout")
+end
+
+---Whether the view's panel should be opened on view init. Subclasses bound
+---to a specific panel type (DiffView → file_panel, FileHistoryView →
+---file_history_panel) override this to read their own config block.
+---@return boolean
+function StandardView:should_show_panel()
+  return config.get_config().file_panel.show
 end
 
 function StandardView:post_layout()

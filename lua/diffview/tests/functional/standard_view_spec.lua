@@ -1,5 +1,8 @@
 local helpers = require("diffview.tests.helpers")
+local config = require("diffview.config")
 local StandardView = require("diffview.scene.views.standard.standard_view").StandardView
+local FileHistoryView =
+  require("diffview.scene.views.file_history.file_history_view").FileHistoryView
 
 local eq = helpers.eq
 
@@ -115,5 +118,49 @@ describe("diffview.standard_view panel cursor", function()
     view:save_panel_cursor()
     view:restore_panel_cursor()
     eq({ 7, 4 }, restored)
+  end)
+end)
+
+describe("diffview.standard_view should_show_panel", function()
+  local original_config
+
+  before_each(function()
+    original_config = vim.deepcopy(config.get_config())
+  end)
+
+  after_each(function()
+    config.setup(original_config)
+  end)
+
+  it("StandardView reads file_panel.show", function()
+    local view = setmetatable({}, { __index = StandardView })
+
+    config.get_config().file_panel.show = true
+    eq(true, view:should_show_panel())
+
+    config.get_config().file_panel.show = false
+    eq(false, view:should_show_panel())
+  end)
+
+  it("FileHistoryView reads file_history_panel.show", function()
+    local view = setmetatable({}, { __index = FileHistoryView })
+
+    config.get_config().file_history_panel.show = true
+    eq(true, view:should_show_panel())
+
+    config.get_config().file_history_panel.show = false
+    eq(false, view:should_show_panel())
+  end)
+
+  it("FileHistoryView is independent of file_panel.show", function()
+    local view = setmetatable({}, { __index = FileHistoryView })
+
+    config.get_config().file_panel.show = false
+    config.get_config().file_history_panel.show = true
+    eq(true, view:should_show_panel())
+
+    config.get_config().file_panel.show = true
+    config.get_config().file_history_panel.show = false
+    eq(false, view:should_show_panel())
   end)
 end)
