@@ -270,11 +270,16 @@ FileHistoryPanel.update_entries = async.wrap(function(self, callback)
     if self.shutdown:check() then
       return
     end
-    if not self:cur_file() then
-      self:update_components()
-      self.parent:next_item()
-    else
-      self:sync()
+
+    local bootstrap_file
+    if not self:cur_file() and self:num_items() > 0 then
+      bootstrap_file = self:next_file()
+    end
+
+    self:sync()
+
+    if bootstrap_file then
+      self.parent:set_file(bootstrap_file)
     end
 
     vim.cmd("redraw")
