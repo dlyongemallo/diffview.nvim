@@ -397,10 +397,12 @@ local function render_panel(panel)
 
   local comp = panel.components.path.comp
 
-  comp:add_line(
-    pl:truncate(pl:vim_fnamemodify(panel.adapter.ctx.toplevel, ":~"), width - 6),
-    "DiffviewFilePanelRootPath"
-  )
+  if conf.file_panel.show_root_path then
+    comp:add_line(
+      pl:truncate(pl:vim_fnamemodify(panel.adapter.ctx.toplevel, ":~"), width - 6),
+      "DiffviewFilePanelRootPath"
+    )
+  end
 
   if conf.file_panel.show_branch_name then
     local branch_name = panel.adapter:get_branch_name()

@@ -83,6 +83,32 @@ describe("show_branch_name", function()
 end)
 
 -- ---------------------------------------------------------------------------
+-- show_root_path
+-- ---------------------------------------------------------------------------
+
+describe("show_root_path", function()
+  local original
+
+  before_each(function()
+    original = vim.deepcopy(config.get_config())
+  end)
+
+  after_each(function()
+    config.setup(original)
+  end)
+
+  it("defaults to true", function()
+    local conf = setup_with({})
+    assert.is_true(conf.file_panel.show_root_path)
+  end)
+
+  it("survives setup() when explicitly set to false", function()
+    local conf = setup_with({ file_panel = { show_root_path = false } })
+    assert.is_false(conf.file_panel.show_root_path)
+  end)
+end)
+
+-- ---------------------------------------------------------------------------
 -- rename_threshold (commit c5b9200)
 -- ---------------------------------------------------------------------------
 
