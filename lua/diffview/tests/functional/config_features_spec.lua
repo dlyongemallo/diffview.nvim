@@ -99,12 +99,12 @@ describe("show_root_path", function()
 
   it("defaults to true", function()
     local conf = setup_with({})
-    assert.is_true(conf.file_panel.show_root_path)
+    assert.is_true(conf.show_root_path)
   end)
 
   it("survives setup() when explicitly set to false", function()
-    local conf = setup_with({ file_panel = { show_root_path = false } })
-    assert.is_false(conf.file_panel.show_root_path)
+    local conf = setup_with({ show_root_path = false })
+    assert.is_false(conf.show_root_path)
   end)
 end)
 

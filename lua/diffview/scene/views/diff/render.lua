@@ -397,7 +397,7 @@ local function render_panel(panel)
 
   local comp = panel.components.path.comp
 
-  if conf.file_panel.show_root_path then
+  if conf.show_root_path then
     comp:add_line(
       pl:truncate(pl:vim_fnamemodify(panel.adapter.ctx.toplevel, ":~"), width - 6),
       "DiffviewFilePanelRootPath"

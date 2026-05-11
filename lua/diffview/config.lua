@@ -108,6 +108,7 @@ local common_panel_keymaps = {
 ---@field rename_threshold? integer
 ---@field use_icons boolean
 ---@field show_help_hints boolean
+---@field show_root_path boolean
 ---@field watch_index boolean
 ---@field hide_merge_artifacts boolean
 ---@field auto_close_on_empty boolean
@@ -138,6 +139,7 @@ local common_panel_keymaps = {
 ---@field rename_threshold? integer Rename detection similarity (0-100). Nil uses git default (50%).
 ---@field use_icons? boolean Requires nvim-web-devicons or mini.icons.
 ---@field show_help_hints? boolean Show hints for how to open the help panel.
+---@field show_root_path? boolean Show repository root path in panel headers.
 ---@field watch_index? boolean Update views and index buffers when the git index changes.
 ---@field hide_merge_artifacts? boolean Hide merge artifact files (*.orig, *.BACKUP.*, *.BASE.*, *.LOCAL.*, *.REMOTE.*).
 ---@field auto_close_on_empty? boolean Close diffview when the last file is staged/resolved.
@@ -170,6 +172,7 @@ M.defaults = {
   rename_threshold = nil, -- Similarity threshold for rename detection (e.g. 40 for 40%). Nil uses git default (50%).
   use_icons = true,
   show_help_hints = true,
+  show_root_path = true, -- Show repository root path in panel headers.
   watch_index = true,
   hide_merge_artifacts = false, -- Hide merge artifact files (*.orig, *.BACKUP.*, etc.)
   auto_close_on_empty = false, -- Automatically close diffview when the last file is staged/resolved.
@@ -402,7 +405,6 @@ M.defaults = {
   ---@field always_show_marks boolean
   ---@field mark_placement DiffviewMarkPlacement
   ---@field show_branch_name boolean
-  ---@field show_root_path boolean
 
   ---@class DiffviewFilePanelConfig.user
   ---@field listing_style? DiffviewListingStyle "list" or "tree".
@@ -415,7 +417,6 @@ M.defaults = {
   ---@field always_show_marks? boolean Show selection marks even when no files are selected.
   ---@field mark_placement? DiffviewMarkPlacement Where to render selection marks.
   ---@field show_branch_name? boolean Show branch name in the file panel header.
-  ---@field show_root_path? boolean Show repository root path in the file panel header.
   file_panel = {
     listing_style = "tree",
     sort_file = nil, -- Custom file comparator: function(a_name, b_name, a_data, b_data) -> boolean
@@ -462,7 +463,6 @@ M.defaults = {
     always_show_marks = false, -- Show selection marks even when no files are selected.
     mark_placement = "inline", -- Where to show selection marks: "inline" (next to file names) or "sign_column" (in the sign column).
     show_branch_name = false, -- Show branch name in the file panel header.
-    show_root_path = true, -- Show repository root path in the file panel header.
   },
 
   ---@alias DiffviewStatStyle "number"|"bar"|"both"
