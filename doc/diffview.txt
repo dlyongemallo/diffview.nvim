@@ -529,6 +529,12 @@ show_help_hints                                 *diffview-config-show_help_hints
 
         Show hints for how to open the help panel.
 
+show_root_path                                  *diffview-config-show_root_path*
+        Type: `boolean`, Default: `true`
+
+        Show the repository root path in the file panel and file history panel
+        headers.
+
 watch_index                                     *diffview-config-watch_index*
         Type: `boolean`, Default: `true`
 
