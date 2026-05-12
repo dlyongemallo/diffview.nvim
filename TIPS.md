@@ -349,4 +349,45 @@ known issues and workarounds:
     })
     ```
 
+- **Plugins that act on the current window/buffer (fzf-lua, blame.nvim, etc.):**
+  - Panel windows are pinned to their buffer via `winfixbuf`, so plugins
+    that try to load a different buffer into the current window
+    (e.g., [fzf-lua](https://github.com/ibhagwan/fzf-lua)) will fail when
+    invoked from the panel.
+  - Plugins that run a job against the current buffer's name (e.g.,
+    [blame.nvim](https://github.com/FabijanZulj/blame.nvim)) will fail
+    because the panel buffer is `nofile`.
+  - **Workaround:** wrap the offending keymaps with a helper that, when
+    invoked from a diffview panel, first focuses the diff's main window.
+    This both avoids the `winfixbuf` error and makes the picked file
+    open in the right place:
+    ```lua
+    local function in_diff_window(fn)
+      return function()
+        if vim.wo.winfixbuf then
+          local ok, lib = pcall(require, "diffview.lib")
+          if ok then
+            local view = lib.get_current_view()
+            if view and view.cur_layout then
+              local main = view.cur_layout:get_main_win()
+              if main and main.id and vim.api.nvim_win_is_valid(main.id) then
+                vim.api.nvim_set_current_win(main.id)
+              end
+            end
+          end
+        end
+        fn()
+      end
+    end
+
+    vim.keymap.set("n", "<a-f>",
+      in_diff_window(function() require("fzf-lua").files() end))
+    vim.keymap.set("n", "<a-b>",
+      in_diff_window(function() vim.cmd("BlameToggle") end))
+    ```
+  - If you would rather not use the wrapper,
+    [stickybuf.nvim](https://github.com/stevearc/stickybuf.nvim) will
+    bounce the buffer to a non-panel window (so files at least open
+    somewhere, though not necessarily the diff's main window).
+
 <!-- vim: set tw=80 -->
