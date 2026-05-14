@@ -39,6 +39,7 @@ Panel.winopts = {
   relativenumber = false,
   number = false,
   list = false,
+  winfixbuf = true,
   winfixwidth = true,
   winfixheight = true,
   foldenable = false,
