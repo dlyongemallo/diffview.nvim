@@ -48,7 +48,7 @@ describe("diffview.scene.inline_diff", function()
   local function char_ranges(marks)
     local out = {}
     for _, m in ipairs(marks) do
-      if m[4] and m[4].hl_group == "DiffviewDiffText" then
+      if m[4] and m[4].hl_group == "DiffviewDiffAddInline" then
         out[#out + 1] = { row = m[2], start = m[3], finish = m[4].end_col }
       end
     end
@@ -201,16 +201,16 @@ describe("diffview.scene.inline_diff", function()
       assert.are.same({}, virt_line_counts(extmarks(bufnr)))
     end)
 
-    it("marks modified lines with DiffChange and char-level DiffText", function()
+    it("marks modified lines with DiffChange and char-level DiffviewDiffAddInline", function()
       local bufnr = fresh_buf({ "hello wonderful world" })
       inline_diff.render(bufnr, { "hello world" }, { "hello wonderful world" })
 
       local hls = line_hls(extmarks(bufnr))
       assert.are.same({ { row = 0, hl = "DiffviewDiffChange" } }, hls)
 
-      -- Expect at least one char-level DiffText range covering "wonderful ".
+      -- Expect at least one char-level DiffviewDiffAddInline range covering "wonderful ".
       local ranges = char_ranges(extmarks(bufnr))
-      assert.is_true(#ranges > 0, "expected DiffviewDiffText extmarks")
+      assert.is_true(#ranges > 0, "expected DiffviewDiffAddInline extmarks")
 
       -- Unified style echoes the old line above the modification.
       local vls = virt_line_counts(extmarks(bufnr))
@@ -292,6 +292,107 @@ describe("diffview.scene.inline_diff", function()
     end)
   end)
 
+  describe("DiffviewDiffAddInline highlight", function()
+    local hl = require("diffview.hl")
+    local saved_diff_add, saved_diffview_groups
+
+    -- `hl.setup()` mutates every `Diffview*` highlight group, so saving only
+    -- the two groups the test explicitly touches would let the rest leak
+    -- into later tests and make the suite order-dependent. Snapshot every
+    -- `Diffview*` group before and fully restore them afterwards.
+    local function snapshot_diffview_hl()
+      local result = {}
+      for name in pairs(api.nvim_get_hl(0, {})) do
+        if name:match("^Diffview") then
+          result[name] = api.nvim_get_hl(0, { name = name, link = true })
+        end
+      end
+      return result
+    end
+
+    local function restore_diffview_hl(snapshot)
+      -- Clear current `Diffview*` groups first so any new groups created by
+      -- `hl.setup()` (and absent from the snapshot) are also wiped.
+      for name in pairs(api.nvim_get_hl(0, {})) do
+        if name:match("^Diffview") then
+          api.nvim_set_hl(0, name, {})
+        end
+      end
+      for name, h in pairs(snapshot) do
+        api.nvim_set_hl(0, name, h)
+      end
+    end
+
+    before_each(function()
+      saved_diff_add = api.nvim_get_hl(0, { name = "DiffAdd", link = true })
+      saved_diffview_groups = snapshot_diffview_hl()
+      api.nvim_set_hl(0, "DiffAdd", { bg = "#004400", fg = "#cccccc" })
+      api.nvim_set_hl(0, "DiffviewDiffAddInline", {})
+      api.nvim_set_hl(0, "DiffviewDiffAdd", { link = "DiffAdd" })
+      hl.setup()
+    end)
+
+    after_each(function()
+      api.nvim_set_hl(0, "DiffAdd", saved_diff_add)
+      restore_diffview_hl(saved_diffview_groups)
+    end)
+
+    it("inherits bg from DiffviewDiffAdd and omits fg", function()
+      local got = api.nvim_get_hl(0, { name = "DiffviewDiffAddInline", link = false })
+      local diff_add = api.nvim_get_hl(0, { name = "DiffviewDiffAdd", link = false })
+
+      -- fg must be absent so tree-sitter foreground composes through the
+      -- priority-200 extmark (otherwise it would stomp the syntax fg).
+      assert.is_nil(got.fg)
+      assert.are.equal(diff_add.bg, got.bg)
+    end)
+
+    it("strips reverse/standout but keeps fg-safe styles like bold/italic", function()
+      -- Some colourschemes flag `DiffAdd` with `reverse` (and/or
+      -- `standout`). Both swap fg/bg at render time, so leaving them in
+      -- the inherited style would let the addition `bg` paint over the
+      -- syntax `fg` and defeat the dropped-`fg` goal. Verify those two
+      -- are filtered while fg-safe attrs like `bold`/`italic` carry over.
+      -- The visible bg should track the source `fg` (post-swap), not the
+      -- raw source `bg`, so the inline addition keeps the colour the
+      -- colourscheme intended to show.
+      api.nvim_set_hl(0, "DiffAdd", {
+        bg = 0x004400,
+        fg = 0xcccccc,
+        bold = true,
+        italic = true,
+        reverse = true,
+        standout = true,
+      })
+      api.nvim_set_hl(0, "DiffviewDiffAddInline", {})
+      hl.setup()
+
+      local got = api.nvim_get_hl(0, { name = "DiffviewDiffAddInline", link = false })
+      assert.is_nil(got.fg)
+      assert.are.equal(0xcccccc, got.bg)
+      assert.is_true(got.bold)
+      assert.is_true(got.italic)
+      assert.is_nil(got.reverse)
+      assert.is_nil(got.standout)
+    end)
+
+    it("derives bg from source fg for reverse-only colourschemes", function()
+      -- Colourschemes that flag `DiffAdd` with only `reverse` (and a `fg`,
+      -- no explicit `bg`) rely on the swap to paint the addition bg from
+      -- the fg. After stripping `reverse`, falling back to the raw `bg`
+      -- would yield `NONE` and lose the highlight entirely. Use the
+      -- source `fg` as the effective bg instead.
+      api.nvim_set_hl(0, "DiffAdd", { fg = 0x00cc00, reverse = true })
+      api.nvim_set_hl(0, "DiffviewDiffAddInline", {})
+      hl.setup()
+
+      local got = api.nvim_get_hl(0, { name = "DiffviewDiffAddInline", link = false })
+      assert.is_nil(got.fg)
+      assert.are.equal(0x00cc00, got.bg)
+      assert.is_nil(got.reverse)
+    end)
+  end)
+
   describe("overleaf style", function()
     it("emits inline virt_text for char-level deletions on paired lines", function()
       local bufnr = fresh_buf({ "hello world" })
@@ -309,7 +410,7 @@ describe("diffview.scene.inline_diff", function()
       assert.is_true(any, "expected deleted text to contain 'brave'")
     end)
 
-    it("still emits DiffText hl on added chars in overleaf style", function()
+    it("still emits DiffviewDiffAddInline hl on added chars in overleaf style", function()
       local bufnr = fresh_buf({ "hello brave new world" })
       inline_diff.render(
         bufnr,
@@ -319,7 +420,7 @@ describe("diffview.scene.inline_diff", function()
       )
 
       local ranges = char_ranges(extmarks(bufnr))
-      assert.is_true(#ranges > 0, "expected DiffviewDiffText extmarks on added chars")
+      assert.is_true(#ranges > 0, "expected DiffviewDiffAddInline extmarks on added chars")
     end)
 
     it("uses DiffviewDiffDeleteInline hl for whole-line deletions", function()
@@ -914,7 +1015,7 @@ describe("diffview.scene.inline_diff", function()
       local out = { hl = 0, inline = 0 }
       for _, m in ipairs(marks) do
         local d = m[4]
-        if d.hl_group == "DiffviewDiffText" then
+        if d.hl_group == "DiffviewDiffAddInline" then
           out.hl = out.hl + 1
         end
         if d.virt_text and d.virt_text_pos == "inline" then
@@ -928,7 +1029,7 @@ describe("diffview.scene.inline_diff", function()
       local bufnr = fresh_buf({ "hello brave world" })
       inline_diff.render(bufnr, { "hello world" }, { "hello brave world" })
       local t = text_extmarks(bufnr)
-      assert.is_true(t.hl > 0, "expected DiffText on added chars for similar lines")
+      assert.is_true(t.hl > 0, "expected DiffviewDiffAddInline on added chars for similar lines")
     end)
 
     it("skips char-level highlights when lines are too dissimilar (unified)", function()
@@ -940,7 +1041,7 @@ describe("diffview.scene.inline_diff", function()
       local bufnr = fresh_buf({ new })
       inline_diff.render(bufnr, { old }, { new })
       local t = text_extmarks(bufnr)
-      assert.are.equal(0, t.hl, "expected no DiffText fragments on dissimilar pairing")
+      assert.are.equal(0, t.hl, "expected no DiffviewDiffAddInline fragments on dissimilar pairing")
     end)
 
     it("skips inline deletions in overleaf for dissimilar pairings", function()
@@ -1024,13 +1125,13 @@ describe("diffview.scene.inline_diff", function()
 
     it("refines 1:1 word replacements with char-level precision", function()
       -- "recieve" → "receive" is one word-level 1:1 pair, so the sub-diff
-      -- kicks in. DiffText highlights should cover only the moved letter
+      -- kicks in. DiffviewDiffAddInline highlights should cover only the moved letter
       -- rather than the whole word.
       local bufnr = fresh_buf({ "receive" })
       inline_diff.render(bufnr, { "recieve" }, { "receive" })
 
       local ranges = char_ranges(extmarks(bufnr))
-      assert.is_true(#ranges > 0, "expected char-level DiffText inside the word")
+      assert.is_true(#ranges > 0, "expected char-level DiffviewDiffAddInline inside the word")
       for _, r in ipairs(ranges) do
         assert.is_true(
           r.finish - r.start < #"receive",
@@ -1094,10 +1195,14 @@ describe("diffview.scene.inline_diff", function()
       -- Anchor sits before "Close" in the new line.
       assert.are.equal(("    EventState"):len(), inlines[1].col)
 
-      -- The DiffText hl on "Close" is one contiguous span, not interleaved
-      -- per-char fragments.
+      -- The DiffviewDiffAddInline hl on "Close" is one contiguous span, not
+      -- interleaved per-char fragments.
       local ranges = char_ranges(extmarks(bufnr))
-      assert.are.equal(1, #ranges, "expected one DiffText span over the inserted subword")
+      assert.are.equal(
+        1,
+        #ranges,
+        "expected one DiffviewDiffAddInline span over the inserted subword"
+      )
       assert.are.equal(("    EventState"):len(), ranges[1].start)
       assert.are.equal(("    EventStateClose"):len(), ranges[1].finish)
     end)
@@ -1260,7 +1365,7 @@ describe("diffview.scene.inline_diff", function()
       )
       -- The appended tail is highlighted as added.
       local ranges = char_ranges(extmarks(bufnr))
-      assert.is_true(#ranges > 0, "expected DiffText on the appended tail")
+      assert.is_true(#ranges > 0, "expected DiffviewDiffAddInline on the appended tail")
     end)
 
     it("refines a 1:N hunk where a word is split by inserted whitespace", function()
