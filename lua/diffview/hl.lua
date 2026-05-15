@@ -25,9 +25,7 @@ local M = {}
 ---@field explicit?  boolean All undefined fields will be cleared from the hl group.
 
 ---@class hl.HiLinkSpec
----@field force? boolean
 ---@field default? boolean
----@field clear? boolean
 
 ---@class hl.HlData
 ---@field link? string|integer
@@ -266,25 +264,17 @@ function M.hi_link(from, to, opt)
     to = -1
   end
 
-  opt = vim.tbl_extend("keep", opt or {}, {
-    force = true,
-  }) --[[@as hl.HiLinkSpec ]]
+  opt = opt or {}
 
   if type(from) ~= "table" then
     from = { from }
   end
 
+  -- Bypass `M.hi`: its merge-with-existing path inherits `default = true`
+  -- from a prior default link, silently no-op'ing force-relinks like
+  -- `enhanced_diff_hl`'s `DiffviewDiffDelete` to `DiffviewDiffDeleteDim`.
   for _, f in ipairs(from) do
-    if opt.clear then
-      api.nvim_set_hl(0, f, { default = opt.default, link = to })
-    else
-      -- When `clear` is not set; use our `hi()` function such that other
-      -- attributes are not affected.
-      M.hi(f, {
-        default = opt.default,
-        link = to --[[@as string|-1 ]],
-      })
-    end
+    api.nvim_set_hl(0, f, { default = opt.default, link = to })
   end
 end
 
@@ -466,12 +456,46 @@ function M.update_diff_hl()
   -- deletion colours pick up the change here too, and so `enhanced_diff_hl`
   -- mode — which relinks `DiffviewDiffDelete` to `DiffviewDiffDeleteDim` —
   -- is honoured. Runs AFTER the relink above so the final state is read.
-  local del_fg = M.get_fg("DiffviewDiffDelete", true) or "NONE"
-  local del_bg = M.get_bg("DiffviewDiffDelete", true) or "NONE"
+  local del_fg = M.get_fg("DiffviewDiffDelete") or "NONE"
+  local del_bg = M.get_bg("DiffviewDiffDelete") or "NONE"
   M.hi("DiffviewDiffDeleteInline", {
     fg = del_fg,
     bg = del_bg,
     style = "strikethrough",
+    default = true,
+  })
+
+  -- `diff1_inline` highlight for inserted char ranges (pure adds or the
+  -- added side of a modification). Derives `bg` from `DiffviewDiffAdd`
+  -- (not `DiffviewDiffText`) so inserted bytes share the addition bg at
+  -- any granularity, matching `diff2`. `fg` is dropped so tree-sitter
+  -- foreground composes through the priority-200 extmark instead of
+  -- being stomped. `reverse` and `standout` are stripped from the
+  -- inherited style for the same reason: they swap fg/bg at render
+  -- time, so leaving them in would let the addition `bg` paint over
+  -- the syntax `fg`. When the source uses one of those attrs, the
+  -- visible bg is actually the source `fg` (the swap moves it there),
+  -- so use that instead — otherwise reverse-only colourschemes lose
+  -- the addition bg entirely after we strip `reverse`.
+  local add_style_attrs = {}
+  local add_is_reversed = false
+  for _, attr in ipairs(vim.split(M.get_style("DiffviewDiffAdd") or "", ",")) do
+    if attr == "reverse" or attr == "standout" then
+      add_is_reversed = true
+    elseif attr ~= "" then
+      add_style_attrs[#add_style_attrs + 1] = attr
+    end
+  end
+  local add_bg
+  if add_is_reversed then
+    add_bg = M.get_fg("DiffviewDiffAdd") or M.get_bg("DiffviewDiffAdd") or "NONE"
+  else
+    add_bg = M.get_bg("DiffviewDiffAdd") or "NONE"
+  end
+  local add_style = #add_style_attrs > 0 and table.concat(add_style_attrs, ",") or "NONE"
+  M.hi("DiffviewDiffAddInline", {
+    bg = add_bg,
+    style = add_style,
     default = true,
   })
 end

@@ -566,7 +566,7 @@ local function render_hunk(
     if first and last then
       api.nvim_buf_set_extmark(bufnr, M.ns, new_row, base_byte + first.byte, {
         end_col = base_byte + last.byte + last.byte_len,
-        hl_group = "DiffviewDiffText",
+        hl_group = "DiffviewDiffAddInline",
         priority = 200,
       })
     else
@@ -578,7 +578,7 @@ local function render_hunk(
         if info then
           api.nvim_buf_set_extmark(bufnr, M.ns, new_row, base_byte + info.byte, {
             end_col = base_byte + info.byte + info.byte_len,
-            hl_group = "DiffviewDiffText",
+            hl_group = "DiffviewDiffAddInline",
             priority = 200,
           })
         end
