@@ -793,10 +793,19 @@ local update_files_impl = debounce.debounce_trailing(
     FileEntry.update_index_stat(self.adapter, index_stat)
     self.files:update_file_trees()
     self.panel:update_components()
+    -- Clear the loading state before rendering so the first paint shows
+    -- the file list directly rather than another frame of "Fetching
+    -- changes...". `redraw()` (via `renderer.render()`) then populates
+    -- the file components' `lstart`/`lend`/`height` fields that
+    -- `reconstrain_cursor` (below) relies on to clamp the cursor row.
+    self.is_loading = false
+    self.panel.is_loading = false
     self.panel:render()
     self.panel:redraw()
     perf:lap("panel redrawn")
     self.panel:reconstrain_cursor()
+
+    local prev_panel_cur_file = self.panel.cur_file
 
     if utils.vec_indexof(self.panel:ordered_file_list(), self.panel.cur_file) == -1 then
       self.panel:set_cur_file(nil)
@@ -812,12 +821,14 @@ local update_files_impl = debounce.debounce_trailing(
       end
     end
 
-    -- Clear loading state and re-render panel before set_file, so highlight_file
-    -- can find the file components (the previous render returned early due to is_loading).
-    self.is_loading = false
-    self.panel.is_loading = false
-    self.panel:render()
-    self.panel:redraw()
+    -- Re-render only when the two blocks above actually changed `cur_file`,
+    -- so the panel's active-file highlight matches the file `set_file` is
+    -- about to open. In the common refresh path `cur_file` is unchanged
+    -- and the earlier render still reflects the correct state.
+    if self.panel.cur_file ~= prev_panel_cur_file then
+      self.panel:render()
+      self.panel:redraw()
+    end
 
     local next_file = self.panel.cur_file or self.panel:next_file()
 
