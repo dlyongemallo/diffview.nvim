@@ -5,6 +5,7 @@ require("diffview.bootstrap")
 
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local FileDiffView = lazy.access("diffview.scene.views.diff.file_diff_view", "FileDiffView") ---@type FileDiffView|LazyModule
+local FileMergeView = lazy.access("diffview.scene.views.diff.file_merge_view", "FileMergeView") ---@type FileMergeView|LazyModule
 local FileHistoryView =
   lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
 local GitAdapter = lazy.access("diffview.vcs.adapters.git", "GitAdapter") ---@type GitAdapter|LazyModule
@@ -250,6 +251,68 @@ function M.diffview_diff_files(args)
 
   table.insert(M.views, v)
   logger:debug("FileDiffView instantiation successful!")
+
+  return v
+end
+
+---Entry point for external merge drivers (jj, hg's external merge tool, etc.)
+---that hand the editor four on-disk file paths. The `output` file is the
+---resolved-content sink that the driver reads after the editor exits.
+---Argument order matches `jj-diffconflicts` and jj's documented `$output
+---$base $left $right` substitution order.
+---@param args string[]
+function M.diffview_merge_files(args)
+  local argo = arg_parser.parse(args)
+
+  logger:info("[command call] :DiffviewMergeFiles " .. table.concat(args, " "))
+
+  if #argo.args ~= 3 and #argo.args ~= 4 then
+    utils.err(
+      "DiffviewMergeFiles requires three or four file paths: <output> [<base>] <left> <right>."
+    )
+    return
+  end
+
+  local output_path = pl:absolute(pl:vim_expand(argo.args[1]))
+  local base_path, left_path, right_path
+
+  if #argo.args == 4 then
+    base_path = pl:absolute(pl:vim_expand(argo.args[2]))
+    left_path = pl:absolute(pl:vim_expand(argo.args[3]))
+    right_path = pl:absolute(pl:vim_expand(argo.args[4]))
+  else
+    left_path = pl:absolute(pl:vim_expand(argo.args[2]))
+    right_path = pl:absolute(pl:vim_expand(argo.args[3]))
+  end
+
+  -- `$output` is the only path that must already exist on disk: jj creates
+  -- it (empty or pre-populated with markers depending on
+  -- `merge-tool-edits-conflict-markers`). Missing read-only sides are
+  -- expected when the conflict has an add/delete side and render as empty
+  -- buffers via `FileMergeView`'s reader.
+  if vim.fn.filereadable(output_path) ~= 1 then
+    utils.err(("Output file not readable: %s"):format(output_path))
+    return
+  end
+
+  local toplevel = pl:parent(output_path) or "."
+  ---@diagnostic disable-next-line: missing-parameter, param-type-mismatch
+  local adapter = NullAdapter.create({ toplevel = toplevel })
+
+  local v = FileMergeView({
+    adapter = adapter,
+    output_path = output_path,
+    base_path = base_path,
+    left_path = left_path,
+    right_path = right_path,
+  })
+
+  if not v:is_valid() then
+    return
+  end
+
+  table.insert(M.views, v)
+  logger:debug("FileMergeView instantiation successful!")
 
   return v
 end
