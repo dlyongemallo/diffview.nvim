@@ -793,6 +793,179 @@ describe("diffview.layout symbols", function()
         pcall(api.nvim_buf_delete, bufnr, { force = true })
       end)
     )
+
+    -- A racing newer `use_entry` bumps `_render_generation` while the older
+    -- `_prerender` is awaiting `_load_old_lines`. When the old fetch
+    -- finishes, it must not overwrite `_cached_old_lines` (the newer pass
+    -- may already have populated it, or be about to).
+    it(
+      "bails out when _render_generation changes mid-flight",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        api.nvim_buf_set_lines(bufnr, 0, -1, false, { "current" })
+
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = {
+            bufnr = bufnr,
+            nulled = false,
+            binary = false,
+            active = true,
+            is_valid = function()
+              return true
+            end,
+          },
+        }
+        inst.a_file = { nulled = false, binary = false }
+        inst._render_generation = 1
+
+        -- A stub `_load_old_lines` that bumps the generation while it is
+        -- "in flight" so the post-yield guard fires.
+        inst._load_old_lines = async.wrap(function(self, callback)
+          self._render_generation = self._render_generation + 1
+          callback({ "stale-old" })
+        end, 2)
+
+        async.await(inst:_prerender())
+
+        -- The stale fetch must NOT have written its lines into the cache.
+        assert.is_nil(inst._cached_old_lines)
+        local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+        eq(0, #marks)
+
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    -- The view closes (layout is destroyed) while `_prerender` is awaiting
+    -- a git fetch. On resume, `_prerender` must not render extmarks (would
+    -- leak into the LOCAL working-tree buffer that outlives the view) and
+    -- the surrounding `create`/`use_entry` must not run `create_wins` /
+    -- `open_files` against the disposed layout. `destroy` bumps
+    -- `_render_generation`, so this is structurally the same check as the
+    -- swap test above; exercising it through the real `destroy` entry
+    -- point pins the contract that teardown invalidates in-flight passes.
+    it(
+      "bails out when the layout is destroyed mid-flight",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        api.nvim_buf_set_lines(bufnr, 0, -1, false, { "current" })
+
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = {
+            bufnr = bufnr,
+            nulled = false,
+            binary = false,
+            active = true,
+            is_valid = function()
+              return true
+            end,
+          },
+        }
+        inst.a_file = { nulled = false, binary = false }
+        inst._render_generation = 0
+        inst.windows = {}
+
+        inst._load_old_lines = async.wrap(function(self, callback)
+          -- Real `destroy`: bumps the render generation, runs
+          -- `teardown_render`, and iterates `self.windows` (empty here, so
+          -- the iteration is a no-op).
+          self:destroy()
+          callback({ "old-content" })
+        end, 2)
+
+        async.await(inst:_prerender())
+
+        assert.is_nil(inst._cached_old_lines)
+        local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+        eq(0, #marks)
+
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    -- `FileEntry:convert_layout` tears down the outgoing layout's render
+    -- state via `teardown_render` (not `destroy`) before reusing the
+    -- buffer in the new layout. An in-flight `_prerender` whose
+    -- `_load_old_lines` callback resumes after the teardown must not
+    -- repopulate `_cached_old_lines` or stamp extmarks onto a buffer the
+    -- outgoing layout no longer owns.
+    it(
+      "bails out when teardown_render fires mid-flight (convert_layout path)",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        api.nvim_buf_set_lines(bufnr, 0, -1, false, { "current" })
+
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = {
+            bufnr = bufnr,
+            nulled = false,
+            binary = false,
+            active = true,
+            is_valid = function()
+              return true
+            end,
+          },
+        }
+        inst.a_file = { nulled = false, binary = false }
+        inst._render_generation = 0
+
+        inst._load_old_lines = async.wrap(function(self, callback)
+          -- Stand-in for `FileEntry:convert_layout`, which calls
+          -- `teardown_render` on the outgoing layout without going
+          -- through `destroy`.
+          self:teardown_render()
+          callback({ "old-content" })
+        end, 2)
+
+        async.await(inst:_prerender())
+
+        assert.is_nil(inst._cached_old_lines)
+        local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+        eq(0, #marks)
+
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    -- `StandardView` caches one layout per class and re-runs `create` on
+    -- the same instance after a prior `destroy` when the user navigates
+    -- back to that class. A sticky destroyed flag would make the
+    -- post-`_prerender` guard bail forever; the monotonic generation
+    -- token must let the reused create proceed.
+    it(
+      "create proceeds on a cached instance after a prior destroy",
+      helpers.async_test(function()
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst._render_generation = 0
+        inst.windows = {}
+
+        local steps = { prerender = 0, wins = 0, hooks = 0 }
+        inst._prerender = async.void(function()
+          steps.prerender = steps.prerender + 1
+        end)
+        inst.create_wins = async.void(function()
+          steps.wins = steps.wins + 1
+        end)
+        inst._install_window_hooks = function()
+          steps.hooks = steps.hooks + 1
+        end
+
+        async.await(inst:create())
+        eq(1, steps.prerender)
+        eq(1, steps.wins)
+        eq(1, steps.hooks)
+
+        inst:destroy()
+
+        async.await(inst:create())
+        eq(2, steps.prerender)
+        eq(2, steps.wins)
+        eq(2, steps.hooks)
+      end)
+    )
   end)
 
   -- `create_post` runs between `create_wins` (which created `self.b.id`)
