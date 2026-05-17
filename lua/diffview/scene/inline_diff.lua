@@ -58,19 +58,34 @@ local DELETION_HL_WIDTH_CAP = 500
 -- `'foldcolumn'`/`'signcolumn'`/number-column width (`textoff`) is excluded
 -- so the padding string isn't allocated longer than the actual text region.
 -- Capped at `DELETION_HL_WIDTH_CAP` to bound the per-virt_line allocation.
+--
+-- `hint_winid` is folded into the same max so a renderer called before the
+-- buffer is shown there (e.g. `Diff1Inline._prerender`) can still size the
+-- pad: width/`textoff` are window properties, so the value holds even when
+-- the window currently shows a different buffer.
 ---@param bufnr integer
+---@param hint_winid integer?
 ---@return integer
-local function full_width_target(bufnr)
+local function full_width_target(bufnr, hint_winid)
   local max = 0
-  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
-    if api.nvim_win_is_valid(winid) then
-      local info = vim.fn.getwininfo(winid)[1]
-      local textoff = (info and info.textoff) or 0
-      local w = api.nvim_win_get_width(winid) - textoff
-      if w > max then
-        max = w
-      end
+  local seen = {}
+  local function include(winid)
+    if seen[winid] or not api.nvim_win_is_valid(winid) then
+      return
     end
+    seen[winid] = true
+    local info = vim.fn.getwininfo(winid)[1]
+    local textoff = (info and info.textoff) or 0
+    local w = api.nvim_win_get_width(winid) - textoff
+    if w > max then
+      max = w
+    end
+  end
+  for _, winid in ipairs(vim.fn.win_findbuf(bufnr)) do
+    include(winid)
+  end
+  if hint_winid then
+    include(hint_winid)
   end
   return math.min(max, DELETION_HL_WIDTH_CAP)
 end
@@ -1563,6 +1578,7 @@ end
 ---@field style? "unified"|"overleaf" Default: `"unified"`.
 ---@field deletion_highlight? "text"|"full_width"|"hanging" Extent of the `del_hl` background on virt_line deletions. Default: `"text"`.
 ---@field deletion_treesitter? boolean Layer TS captures over deleted virt_lines. Default: `true`.
+---@field winid? integer Eventual display window. Folded into the `full_width` pad target so a renderer called before the buffer is displayed (e.g. `Diff1Inline._prerender`) can still size padding correctly.
 
 ---@class InlineDiffStyle
 ---@field del_hl string Highlight group for virt_line deletions.
@@ -1658,10 +1674,10 @@ function M.render(bufnr, old_lines, new_lines, opts)
   register_scroll_adjuster(bufnr)
 
   -- Resolve the `full_width` pad target once for the whole render. It depends
-  -- only on the buffer's displayed windows, so a hunk loop that emits many
-  -- deleted blocks would otherwise repeat a `win_findbuf` + `getwininfo`
-  -- traversal per block.
-  local fw_target = extent == "full_width" and full_width_target(bufnr) or 0
+  -- only on the buffer's displayed windows (plus the optional `opts.winid`
+  -- hint), so a hunk loop that emits many deleted blocks would otherwise
+  -- repeat a `win_findbuf` + `getwininfo` traversal per block.
+  local fw_target = extent == "full_width" and full_width_target(bufnr, opts.winid) or 0
 
   -- TS captures for the entire old side, computed lazily and memoized:
   -- the data is shared across every `render_deleted_block` call below

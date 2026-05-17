@@ -566,6 +566,65 @@ describe("diffview.scene.inline_diff", function()
       assert.are.equal(math.min(text_width, FULL_WIDTH_CAP) - 7, #chunks[2][1])
     end)
 
+    -- Simulates the `Diff1Inline._prerender` use_entry path: the b buffer
+    -- isn't yet displayed in the target diffview window (that window is
+    -- still showing the previous file's buffer), but the caller knows the
+    -- winid and forwards it so the pad target can be computed against the
+    -- eventual display target. Without the hint the bufnr wouldn't be in
+    -- `win_findbuf` so the pad would resolve to 0 and no padding chunk
+    -- would be emitted.
+    it("'full_width' uses opts.winid when the buffer isn't displayed yet", function()
+      local target = fresh_buf({ "tail" })
+      vim.cmd("vsplit")
+      local winid = api.nvim_get_current_win()
+      -- Crucially, do NOT put `target` into `winid`; keep some other buffer
+      -- there so `win_findbuf(target)` returns nothing.
+      local other = fresh_buf({ "other" })
+      api.nvim_win_set_buf(winid, other)
+      assert.are.same({}, vim.fn.win_findbuf(target))
+      local info = vim.fn.getwininfo(winid)[1]
+      local textoff = (info and info.textoff) or 0
+      local text_width = api.nvim_win_get_width(winid) - textoff
+
+      inline_diff.render(
+        target,
+        { "deleted", "tail" },
+        { "tail" },
+        { deletion_highlight = "full_width", winid = winid }
+      )
+
+      local lines = virt_line_chunks(extmarks(target))
+      assert.are.equal(1, #lines)
+      local chunks = lines[1]
+      assert.are.equal(2, #chunks)
+      -- "deleted" is 7 display cells; padding fills the rest of the hint window.
+      assert.are.equal(math.min(text_width, FULL_WIDTH_CAP) - 7, #chunks[2][1])
+    end)
+
+    -- Confirms the previous test isn't a false positive: with no hint and
+    -- no window showing the buffer, the pad target is 0 and no padding
+    -- chunk is emitted.
+    it(
+      "'full_width' emits no padding when the buffer is undisplayed and no winid hint is given",
+      function()
+        local target = fresh_buf({ "tail" })
+        assert.are.same({}, vim.fn.win_findbuf(target))
+
+        inline_diff.render(
+          target,
+          { "deleted", "tail" },
+          { "tail" },
+          { deletion_highlight = "full_width" }
+        )
+
+        local lines = virt_line_chunks(extmarks(target))
+        assert.are.equal(1, #lines)
+        -- Only the deletion text, no padding chunk.
+        assert.are.equal(1, #lines[1])
+        assert.are.equal("deleted", lines[1][1][1])
+      end
+    )
+
     it("'full_width' pads in overleaf style under the overleaf del_hl", function()
       local bufnr = fresh_buf({ "alpha" })
       vim.cmd("vsplit")
