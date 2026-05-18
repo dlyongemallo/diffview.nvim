@@ -400,14 +400,37 @@ function Layout:detach_files()
 end
 
 ---Variant of `detach_files` invoked by views during entry-to-entry swaps,
----where some layouts (e.g. pinned variants) want to keep specific windows
----bound across the swap. Defaults to a full `detach_files()`; pinned
----layouts override to skip the pinned window only when the next entry's
----file for that window is the same instance, so multi-file pinning still
----detaches the old b-side when the row crosses to a different path.
+---where pinned variants want to keep specific windows bound across the
+---swap. For symbols listed in `shared_symbols`, only detach when the next
+---entry's same-symbol file is a different instance (multi-file pinning
+---crossing rows), and never detach without a `next_entry` to compare
+---against -- mirrors the pre-fix behaviour for legacy callers that
+---haven't migrated to the new signature. All other symbols are detached
+---unconditionally, matching the default tab-leave/view-close teardown.
 ---@param next_entry? FileEntry
-function Layout:detach_files_for_swap(next_entry) ---@diagnostic disable-line: unused-local
-  self:detach_files()
+function Layout:detach_files_for_swap(next_entry)
+  local shared = {}
+  for _, sym in ipairs(self.shared_symbols) do
+    shared[sym] = true
+  end
+
+  for _, sym in ipairs(self.symbols) do
+    local win = self[sym]
+    if win then
+      if shared[sym] then
+        if next_entry then
+          local next_layout = next_entry.layout
+          local next_win = next_layout and next_layout[sym]
+          local next_file = next_win and next_win.file
+          if win.file ~= next_file then
+            win:detach_file()
+          end
+        end
+      else
+        win:detach_file()
+      end
+    end
+  end
 end
 
 ---Sync the scrollbind.
