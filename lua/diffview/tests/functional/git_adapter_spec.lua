@@ -1261,4 +1261,217 @@ describe("diffview.vcs.adapters.git", function()
       end)
     )
   end)
+
+  describe("fh_compute_pushed_set", function()
+    it(
+      "marks ancestors of a remote-tracking ref as pushed, not only the tip",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Build a small linear history of three commits.
+          local hashes = {}
+          for i = 1, 3 do
+            local p = ("%s/f%d.txt"):format(repo, i)
+            local f = assert(io.open(p, "w"))
+            f:write(("file %d\n"):format(i))
+            f:close()
+            run({ "git", "add", ("f%d.txt"):format(i) }, repo)
+            run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c" .. i }, repo)
+            hashes[i] = run({ "git", "rev-parse", "HEAD" }, repo)
+          end
+
+          -- Simulate a remote-tracking ref pinned at the second commit, so the
+          -- third commit is local-only while the first two are "pushed".
+          run({ "git", "update-ref", "refs/remotes/origin/main", hashes[2] }, repo)
+
+          local set = adapter:fh_compute_pushed_set({})
+          assert.is_not_nil(set, "fh_compute_pushed_set should not return nil on success")
+          assert.True(set[hashes[1]], "first commit must be in the pushed set")
+          assert.True(set[hashes[2]], "second commit (the remote tip) must be in the pushed set")
+          assert.is_nil(set[hashes[3]], "third commit must NOT be in the pushed set")
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "returns an empty set in a repository with no remote-tracking refs",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          local set = adapter:fh_compute_pushed_set({})
+          assert.is_not_nil(set)
+          assert.is_nil(next(set), "set must be empty when no refs/remotes/ exist")
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+  end)
+
+  -- `--follow` walks a single-file history through renames, so the streamed
+  -- commits include those that touched the file under previous names. The
+  -- initial `fh_compute_pushed_set` query only knows about the current path,
+  -- so `fh_extend_pushed_set` is the on-demand top-up for the old name.
+  describe("fh_extend_pushed_set", function()
+    it(
+      "adds hashes that touched the pre-rename path to the existing set",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Build a small history that renames a file:
+          --   c1: create  original.txt
+          --   c2: modify  original.txt
+          --   c3: rename  original.txt -> renamed.txt
+          --   c4: modify  renamed.txt  (local-only)
+          local original = repo .. "/original.txt"
+          local f = assert(io.open(original, "w"))
+          f:write("v1\n")
+          f:close()
+          run({ "git", "add", "original.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c1" }, repo)
+          local c1 = run({ "git", "rev-parse", "HEAD" }, repo)
+
+          f = assert(io.open(original, "w"))
+          f:write("v2\n")
+          f:close()
+          run({ "git", "add", "original.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c2" }, repo)
+          local c2 = run({ "git", "rev-parse", "HEAD" }, repo)
+
+          run({ "git", "mv", "original.txt", "renamed.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c3" }, repo)
+          local c3 = run({ "git", "rev-parse", "HEAD" }, repo)
+
+          -- Pin the remote-tracking ref at c3 so c1..c3 are "pushed".
+          run({ "git", "update-ref", "refs/remotes/origin/main", c3 }, repo)
+
+          f = assert(io.open(repo .. "/renamed.txt", "w"))
+          f:write("v3\n")
+          f:close()
+          run({ "git", "add", "renamed.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c4" }, repo)
+          local c4 = run({ "git", "rev-parse", "HEAD" }, repo)
+
+          -- Mirror the worker's setup: initial query is for the current path
+          -- only, so c1 and c2 (which touched the old name only) must be
+          -- missing from the initial set.
+          local state = {
+            pushed_set = adapter:fh_compute_pushed_set({ "renamed.txt" }),
+            pushed_paths_seen = { ["renamed.txt"] = true },
+          }
+          assert.is_not_nil(state.pushed_set)
+          assert.True(state.pushed_set[c3], "rename commit must be in initial set")
+          assert.is_nil(state.pushed_set[c2], "pre-rename c2 must be absent initially")
+          assert.is_nil(state.pushed_set[c1], "pre-rename c1 must be absent initially")
+          assert.is_nil(state.pushed_set[c4], "local-only c4 must never be present")
+
+          adapter:fh_extend_pushed_set(state, "original.txt")
+
+          assert.True(state.pushed_set[c1], "c1 must be in the extended set")
+          assert.True(state.pushed_set[c2], "c2 must be in the extended set")
+          assert.True(state.pushed_set[c3], "c3 must still be in the set")
+          assert.is_nil(state.pushed_set[c4], "c4 must remain absent (local-only)")
+          assert.True(state.pushed_paths_seen["original.txt"])
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "is idempotent: a second call with the same path does not rerun rev-list",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        -- Install the call counter outside the `pcall` so we can restore the
+        -- original method in a guaranteed cleanup step, even if an assertion
+        -- inside the body throws.
+        local calls = 0
+        local real = adapter.fh_compute_pushed_set
+        adapter.fh_compute_pushed_set = function(self, path_args)
+          calls = calls + 1
+          return real(self, path_args)
+        end
+
+        local ok, err = pcall(function()
+          local state = {
+            pushed_set = {},
+            pushed_paths_seen = {},
+          }
+
+          adapter:fh_extend_pushed_set(state, "original.txt")
+          assert.equals(1, calls)
+          assert.True(state.pushed_paths_seen["original.txt"])
+
+          adapter:fh_extend_pushed_set(state, "original.txt")
+          assert.equals(1, calls, "second call must not invoke fh_compute_pushed_set")
+        end)
+
+        adapter.fh_compute_pushed_set = real
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "is a no-op when the pushed set was never computed",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Mirrors `subject_highlight ~= "ref_aware"`: the worker skips the
+          -- initial query and leaves both fields nil. The extension must not
+          -- materialise a set in that case.
+          local state = {}
+
+          adapter:fh_extend_pushed_set(state, "original.txt")
+
+          assert.is_nil(state.pushed_set)
+          assert.is_nil(state.pushed_paths_seen)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+  end)
 end)
