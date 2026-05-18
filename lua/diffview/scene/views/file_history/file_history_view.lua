@@ -532,24 +532,35 @@ function FileHistoryView:should_show_panel()
   return config.get_config().file_history_panel.show
 end
 
--- Map a non-pinned Diff2 layout name to its pinned counterpart. Pinned
--- layouts share window orientation with their unpinned siblings; we just
--- re-route the layout class so the b-window keeps its file across entry
--- swaps. Names that have no pinned variant fall through unchanged.
+-- Map a non-pinned layout name to its pinned counterpart. Pinned variants
+-- share window orientation with their unpinned siblings; we re-route the
+-- layout class so the b-window keeps its file across entry swaps via
+-- `shared_symbols = { "b" }`. Diff1/Diff1Inline have pinned variants too
+-- (their b-side is also bound to the view-owned working-tree file in
+-- pin_local mode); names without a pinned sibling fall through unchanged.
 local pinned_variant = {
+  diff1_plain = "diff1_plain_pinned",
+  diff1_inline = "diff1_inline_pinned",
   diff2_horizontal = "diff2_horizontal_pinned",
   diff2_vertical = "diff2_vertical_pinned",
 }
 
--- Inverse of `pinned_variant`. A pinned class is only valid when adapters
--- inject `revs.a = COMMIT` (which only happens under `pin_local`); applied
--- to a parent-vs-commit history the pinned `should_null` mis-classifies
--- status "A"/"?" and the adapter then fails to `show <rev>:<missing>`. The
--- user-config path is already gated by `config`'s `standard_layouts`
--- validation (pinned names aren't in the schema's allow-list), but we
--- still fold pinned → unpinned here as belt-and-suspenders for any other
--- caller (tests, future code) that reaches `get_default_layout` with a
--- pinned name and `pin_local` off.
+-- Inverse of `pinned_variant`. Pinned classes only make sense in
+-- `pin_local` mode: they all declare `shared_symbols = { "b" }` and expect
+-- the FileHistoryView to own the b-side `vcs.File` via its pin_local cache,
+-- so outside `pin_local` there's no shared owner and the b-side would
+-- never be torn down. The Diff2 pinned variants are additionally unsafe
+-- there because they override `should_null` with parent-vs-commit semantics
+-- that assume `revs.a = COMMIT` (only injected under `pin_local`); applied
+-- to a parent-vs-commit history they mis-classify status "A"/"?" and the
+-- adapter then fails to `show <rev>:<missing>` (the Diff1 pinned variants
+-- inherit `Diff1.should_null` unchanged, so they don't have that specific
+-- bug, but the shared-b ownership mismatch still applies). The user-config
+-- path is already gated by `config`'s `standard_layouts` validation
+-- (pinned names aren't in the schema's allow-list), but we still fold
+-- pinned → unpinned here as belt-and-suspenders for any other caller
+-- (tests, future code) that reaches `get_default_layout` with a pinned
+-- name and `pin_local` off.
 local unpinned_variant = {}
 for unpinned, pinned in pairs(pinned_variant) do
   unpinned_variant[pinned] = unpinned
@@ -564,22 +575,24 @@ function FileHistoryView:get_default_layout()
     name = FileHistoryView.get_default_diff2().name
   end
 
+  local resolved
   if self.pin_local then
-    -- pin_local needs a pinned-Diff2 layout: only those declare
-    -- `shared_symbols = { "b" }`, which is what keeps `FileEntry:destroy`
-    -- from tearing down the view-owned working-tree file on every refresh.
-    -- If the user's configured layout doesn't have a pinned variant
-    -- (e.g. `diff1_inline`), fall back to the default Diff2 so the
-    -- shared-b-side mechanism actually engages.
-    if not pinned_variant[name] then
-      name = FileHistoryView.get_default_diff2().name
-    end
-    name = pinned_variant[name]
+    -- Upgrade standard layout names to their pinned siblings so the
+    -- shared-b mechanism engages: pinned variants declare
+    -- `shared_symbols = { "b" }`, which keeps `FileEntry:destroy` from
+    -- tearing down the view-owned working-tree file on every refresh.
+    -- All standard layouts (`diff1_*`, `diff2_*`) have pinned siblings,
+    -- so the `pinned_variant` lookup normally hits. If a non-standard
+    -- name ever reaches here (e.g. via a future non-config caller that
+    -- bypasses the `standard_layouts` allow-list), fall back to the
+    -- default pinned Diff2 -- matching `resolve_pinned_layout` -- so the
+    -- shared-b contract still holds.
+    resolved = pinned_variant[name] or pinned_variant[FileHistoryView.get_default_diff2().name]
   else
-    name = unpinned_variant[name] or name
+    resolved = unpinned_variant[name] or name
   end
 
-  return config.name_to_layout(name --[[@as string ]])
+  return config.name_to_layout(resolved --[[@as string ]])
 end
 
 ---Inverse of `resolve_pinned_layout`: map a pinned class to its unpinned
@@ -599,17 +612,19 @@ function FileHistoryView:unpinned_layout(layout_class)
 end
 
 ---Map an arbitrary layout class to the right one for this view's pin_local
----state. Used by `cycle_layout` / `set_layout` so neither action can drop a
----pin_local FileHistoryView into an unpinned `Diff2` (which would cause
+---state. Used by `cycle_layout` / `set_layout` so neither action drops a
+---pin_local FileHistoryView into an unpinned variant (which would cause
 ---`FileEntry:destroy` to tear down the view-owned working-tree file once
 ---per entry, and would untie the b-window from its shared LOCAL buffer).
 ---When `pin_local` is off, returns the input unchanged. When on:
 ---  - already a pinned variant: returns it unchanged (preserves the user's
 ---    chosen orientation).
----  - has a pinned sibling (e.g. `diff2_horizontal`): returns the pinned
----    sibling.
----  - no pinned variant (e.g. `diff1_inline`): returns the configured
----    default Diff2's pinned form, so the shared-b mechanism still engages.
+---  - has a pinned sibling (e.g. `diff2_horizontal`, `diff1_inline`):
+---    returns the pinned sibling.
+---  - no pinned variant (e.g. `diff3_*`/`diff4_*` reaching us via a
+---    user-supplied `view.cycle_layouts.default` entry or a direct
+---    `actions.set_layout` call): falls back to the default Diff2's pinned
+---    form so the shared-b contract still holds.
 ---@param layout_class Layout (class)
 ---@return Layout (class)
 function FileHistoryView:resolve_pinned_layout(layout_class)
@@ -623,11 +638,14 @@ function FileHistoryView:resolve_pinned_layout(layout_class)
     return layout_class
   end
 
-  if not pinned_variant[name] then
-    name = FileHistoryView.get_default_diff2().name
+  local sibling = pinned_variant[name]
+  if sibling then
+    return config.name_to_layout(sibling --[[@as string ]])
   end
 
-  return config.name_to_layout(pinned_variant[name] --[[@as string ]])
+  return config.name_to_layout(
+    pinned_variant[FileHistoryView.get_default_diff2().name] --[[@as string ]]
+  )
 end
 
 M.FileHistoryView = FileHistoryView

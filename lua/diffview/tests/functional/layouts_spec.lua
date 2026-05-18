@@ -811,6 +811,129 @@ describe("diffview.scene.layouts.diff_2_*_pinned detach_files_for_swap", functio
   end)
 end)
 
+describe("diffview.scene.layouts.diff_1_*_pinned ownership", function()
+  local Diff1Pinned = require("diffview.scene.layouts.diff_1_pinned").Diff1Pinned
+  local Diff1InlinePinned = require("diffview.scene.layouts.diff_1_inline_pinned").Diff1InlinePinned
+
+  -- The b-side `vcs.File` is owned by the FileHistoryView (its pin_local
+  -- cache), not by individual FileEntries. `shared_symbols` is the contract
+  -- that tells `Layout:owned_files()` to exclude that window from the
+  -- destruction set in `FileEntry:destroy` and `FileEntry:set_active`.
+  it("declares 'b' as a shared symbol so entry teardown skips it", function()
+    eq({ "b" }, Diff1Pinned.shared_symbols)
+    eq({ "b" }, Diff1InlinePinned.shared_symbols)
+  end)
+
+  -- Concrete check of the filter: `Diff1Pinned:owned_files()` must return
+  -- nothing (its only window is the shared b). For `Diff1InlinePinned` the
+  -- `a_file` is per-entry-owned and stays in the destruction set; the
+  -- shared `b` does not. This is what protects the view-owned b-file from
+  -- being torn down on entry refresh in pin_local mode.
+  it("owned_files() excludes the b-side file", function()
+    do
+      local b_file = { path = "foo.txt" }
+      local inst = setmetatable({
+        b = { file = b_file },
+        windows = {},
+        symbols = Diff1Pinned.symbols,
+        shared_symbols = Diff1Pinned.shared_symbols,
+      }, { __index = Diff1Pinned })
+
+      eq({}, inst:owned_files())
+    end
+
+    do
+      local a_file = { path = "old/foo.txt" }
+      local b_file = { path = "foo.txt" }
+      local inst = setmetatable({
+        b = { file = b_file },
+        a_file = a_file,
+        windows = { { file = b_file } },
+        symbols = Diff1InlinePinned.symbols,
+        shared_symbols = Diff1InlinePinned.shared_symbols,
+      }, { __index = Diff1InlinePinned })
+
+      eq({ a_file }, inst:owned_files())
+    end
+  end)
+end)
+
+describe("diffview.scene.layouts.diff_1_*_pinned detach_files_for_swap", function()
+  local Diff1Pinned = require("diffview.scene.layouts.diff_1_pinned").Diff1Pinned
+  local Diff1InlinePinned = require("diffview.scene.layouts.diff_1_inline_pinned").Diff1InlinePinned
+
+  -- The swap variant is what `_set_file` calls between log entries; it
+  -- skips the pinned b so the LOCAL buffer's keymaps/edits survive the
+  -- swap when the b-file stays the same instance. The full `detach_files()`
+  -- is left to the base Layout so tab-leave/view-close still tear
+  -- everything down.
+  it("does not detach window b when next entry's b matches", function()
+    for _, cls in ipairs({ Diff1Pinned, Diff1InlinePinned }) do
+      local detached = {}
+      local shared_b_file = { path = "live.txt" }
+      local inst = setmetatable({
+        b = {
+          file = shared_b_file,
+          detach_file = function()
+            detached.b = true
+          end,
+        },
+      }, { __index = cls })
+
+      local next_entry = { layout = { b = { file = shared_b_file } } }
+      inst:detach_files_for_swap(next_entry)
+
+      assert.is_nil(detached.b)
+    end
+  end)
+
+  -- Multi-file pinning: each path has its own view-owned working-tree File.
+  -- Crossing rows changes the b-side instance, and the OLD b's buffer
+  -- must be detached so it doesn't keep diffview keymaps and buffer-local
+  -- overrides after navigation.
+  it("detaches window b when the next entry's b is a different File instance", function()
+    for _, cls in ipairs({ Diff1Pinned, Diff1InlinePinned }) do
+      local detached = {}
+      local cur_b_file = { path = "alpha.txt" }
+      local next_b_file = { path = "beta.txt" }
+      local inst = setmetatable({
+        b = {
+          file = cur_b_file,
+          detach_file = function()
+            detached.b = true
+          end,
+        },
+      }, { __index = cls })
+
+      local next_entry = { layout = { b = { file = next_b_file } } }
+      inst:detach_files_for_swap(next_entry)
+
+      assert.True(detached.b)
+    end
+  end)
+
+  -- Defensive: when the caller doesn't pass a next entry, treat it as
+  -- "nothing to compare against" and skip detaching b, mirroring the
+  -- Diff2 pinned variants.
+  it("skips detaching b when no next_entry is passed", function()
+    for _, cls in ipairs({ Diff1Pinned, Diff1InlinePinned }) do
+      local detached = {}
+      local inst = setmetatable({
+        b = {
+          file = { path = "live.txt" },
+          detach_file = function()
+            detached.b = true
+          end,
+        },
+      }, { __index = cls })
+
+      inst:detach_files_for_swap()
+
+      assert.is_nil(detached.b)
+    end
+  end)
+end)
+
 describe("diffview.scene.layouts.diff_2_*_pinned use_entry inheritance", function()
   local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
   local Diff2VerPinned = require("diffview.scene.layouts.diff_2_ver_pinned").Diff2VerPinned
