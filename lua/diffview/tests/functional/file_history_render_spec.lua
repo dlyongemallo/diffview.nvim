@@ -14,19 +14,32 @@ local formatters = render._test.formatters
 
 ---@class MockRenderComponent
 ---@field lines string[][] Each element is { text, hl_group? }.
+---@field line_buffer string Concatenated text on the current line; mirrors the real component.
+---@field extra_hls { group: string, line_idx: integer, first: integer, last: integer }[] add_hl() calls layered on top of add_text() segments.
 
----Create a mock RenderComponent that records add_text / ln calls.
+---Create a mock RenderComponent that records add_text / add_hl / ln calls.
 ---@return MockRenderComponent
 local function make_comp()
-  local comp = { lines = { {} } }
+  local comp = { lines = { {} }, line_buffer = "", extra_hls = {} }
 
   function comp:add_text(text, hl)
     local cur = self.lines[#self.lines]
     cur[#cur + 1] = { text = text, hl = hl }
+    self.line_buffer = self.line_buffer .. text
+  end
+
+  function comp:add_hl(group, line_idx, first, last)
+    self.extra_hls[#self.extra_hls + 1] = {
+      group = group,
+      line_idx = line_idx,
+      first = first,
+      last = last,
+    }
   end
 
   function comp:ln()
     self.lines[#self.lines + 1] = {}
+    self.line_buffer = ""
   end
 
   --- Flatten all recorded text into a single string.
@@ -312,35 +325,68 @@ describe("file_history_render", function()
       conf.file_history_panel.subject_highlight = "plain"
       config.setup(conf)
 
-      local entry = { has_remote_ref = true }
+      local entry = { is_pushed = true }
       eq("DiffviewFilePanelFileName", render_subject_hl(entry, false))
     end)
 
-    it("uses DiffviewCommitRemoteRef for 'ref_aware' with remote ref", function()
+    it("uses DiffviewCommitRemoteRef for 'ref_aware' on pushed commit", function()
       local conf = config.get_config()
       conf.file_history_panel.subject_highlight = "ref_aware"
       config.setup(conf)
 
-      local entry = { has_remote_ref = true }
+      local entry = { is_pushed = true }
       eq("DiffviewCommitRemoteRef", render_subject_hl(entry, false))
     end)
 
-    it("uses DiffviewCommitLocalOnly for 'ref_aware' without remote ref", function()
+    it("uses DiffviewCommitLocalOnly for 'ref_aware' on unpushed commit", function()
       local conf = config.get_config()
       conf.file_history_panel.subject_highlight = "ref_aware"
       config.setup(conf)
 
-      local entry = { has_remote_ref = false }
+      local entry = { is_pushed = false }
       eq("DiffviewCommitLocalOnly", render_subject_hl(entry, false))
     end)
 
-    it("uses DiffviewFilePanelSelected when entry is selected", function()
+    it("layers DiffviewFilePanelSelected on top of the ref-aware base when selected", function()
       local conf = config.get_config()
       conf.file_history_panel.subject_highlight = "ref_aware"
       config.setup(conf)
 
-      local entry = { has_remote_ref = true }
-      eq("DiffviewFilePanelSelected", render_subject_hl(entry, true))
+      local entry = { is_pushed = true, commit = { subject = "test" } }
+      local comp = make_comp()
+      local ctx = {
+        conf = config.get_config(),
+        panel = { cur_item = { entry } },
+      }
+      formatters.subject(comp, entry, ctx)
+
+      -- The base segment keeps the ref-aware foreground.
+      eq("DiffviewCommitRemoteRef", comp.lines[1][1].hl)
+      eq(" test", comp.lines[1][1].text)
+
+      -- The selected highlight is layered over the same byte range, so the
+      -- user can customize `DiffviewFilePanelSelected` to bg-only and still
+      -- see the pushed/unpushed colour.
+      eq(1, #comp.extra_hls)
+      eq("DiffviewFilePanelSelected", comp.extra_hls[1].group)
+      eq(0, comp.extra_hls[1].first)
+      eq(#" test", comp.extra_hls[1].last)
+    end)
+
+    it("does not layer DiffviewFilePanelSelected when entry is not selected", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "ref_aware"
+      config.setup(conf)
+
+      local entry = { is_pushed = false, commit = { subject = "test" } }
+      local comp = make_comp()
+      local ctx = {
+        conf = config.get_config(),
+        panel = { cur_item = {} },
+      }
+      formatters.subject(comp, entry, ctx)
+
+      eq(0, #comp.extra_hls)
     end)
 
     it("defaults to 'ref_aware'", function()

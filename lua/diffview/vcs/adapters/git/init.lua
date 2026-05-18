@@ -874,6 +874,60 @@ function GitAdapter:file_history_options(range, paths, argo)
   return log_options
 end
 
+---Collect the set of commit hashes reachable from any remote-tracking ref,
+---restricted to commits affecting `path_args`. Used by the file history view
+---to colour pushed vs unpushed commits accurately (i.e. not only at the tip
+---of a remote branch). Returns an empty set if the repository has no
+---remote-tracking refs, or `nil` if the command fails.
+---@param path_args string[]
+---@return table<string, true>?
+function GitAdapter:fh_compute_pushed_set(path_args)
+  local out, code = self:exec_sync(utils.vec_join("rev-list", "--remotes", "--", path_args), {
+    cwd = self.ctx.toplevel,
+    log_opt = { label = "GitAdapter:fh_compute_pushed_set()" },
+  })
+
+  if code ~= 0 then
+    return nil
+  end
+
+  local set = {}
+  for _, sha in ipairs(out) do
+    if #sha > 0 then
+      set[sha] = true
+    end
+  end
+  return set
+end
+
+---When `--follow` traces a single-file history through a rename, the streamed
+---commits include those that touched the file under previous names. The
+---initial pushed set is computed for the current path only (via
+---`git rev-list --remotes -- <path>`, which has no `--follow` equivalent), so
+---it cannot recognise pre-rename commits as pushed. This method extends
+---`state.pushed_set` with hashes that touched `path` and are reachable from
+---a remote-tracking ref. Idempotent per path: a second call with the same
+---path is a no-op.
+---@param state GitAdapter.FHState
+---@param path string Path the file had before the detected rename.
+function GitAdapter:fh_extend_pushed_set(state, path)
+  if not state.pushed_set or not state.pushed_paths_seen then
+    return
+  end
+  if state.pushed_paths_seen[path] then
+    return
+  end
+  state.pushed_paths_seen[path] = true
+
+  local extra = self:fh_compute_pushed_set({ path })
+  if not extra then
+    return
+  end
+  for sha in pairs(extra) do
+    state.pushed_set[sha] = true
+  end
+end
+
 ---@class GitAdapter.FHState
 ---@field path_args string[]
 ---@field log_options GitLogOptions
@@ -881,6 +935,8 @@ end
 ---@field layout_opt vcs.adapter.LayoutOpt
 ---@field single_file boolean
 ---@field old_path string?
+---@field pushed_set? table<string, true> Hashes of commits reachable from any remote-tracking ref. Absent if not computed (e.g. `subject_highlight = "plain"`).
+---@field pushed_paths_seen? table<string, true> Paths already queried while building `pushed_set`. Used to keep the rename extension (`fh_extend_pushed_set`) idempotent.
 
 ---@param self GitAdapter
 ---@param out_stream AsyncListStream
@@ -905,6 +961,42 @@ GitAdapter.file_history_worker = async.void(function(self, out_stream, opt)
     layout_opt = opt.layout_opt,
     single_file = single_file,
   }
+
+  -- Precompute the pushed set so render can colour each commit by reachability
+  -- from a remote ref, not only by `%D` decoration at remote tips. Skipped
+  -- when ref-aware colouring is off so we don't pay for a git call we won't use.
+  -- In `-L` (line-trace) mode `state.path_args` is empty: the traced file lives
+  -- in the L spec instead. `history_scope` extracts it so we restrict the
+  -- `git rev-list --remotes` query rather than scanning every commit reachable
+  -- from any remote ref. Multi-file `-L` (different paths across specs) is
+  -- non-single-file: skip the precompute since a path-less query would defeat
+  -- the requested scope.
+  -- Also skipped for repo-wide history (no path args): a path-unrestricted
+  -- `git rev-list --remotes` enumerates every commit reachable from any remote
+  -- ref, which can be slow and memory-hungry on large repos. The
+  -- decoration-based fallback in `LogEntry` still flags remote tips.
+  -- `pushed_paths_seen` lets `fh_extend_pushed_set` (called from the parse
+  -- functions when a `--follow` rename is detected) avoid requerying paths
+  -- already covered by the initial computation.
+  if config.get_config().file_history_panel.subject_highlight == "ref_aware" then
+    local pushed_paths
+    if is_trace then
+      local scope = self:history_scope(state.path_args, log_options)
+      pushed_paths = scope.single_file and { scope.path } or nil
+    else
+      pushed_paths = state.path_args
+    end
+
+    if pushed_paths and #pushed_paths > 0 then
+      state.pushed_set = self:fh_compute_pushed_set(pushed_paths)
+      if state.pushed_set then
+        state.pushed_paths_seen = {}
+        for _, p in ipairs(pushed_paths) do
+          state.pushed_paths_seen[p] = true
+        end
+      end
+    end
+  end
 
   logger:info(
     "[FileHistory] Updating with options:",
@@ -1165,6 +1257,10 @@ function GitAdapter:parse_fh_data(data, commit, state)
 
     if entry.oldname and state.single_file then
       state.old_path = entry.oldname
+      -- `--follow` walks past this rename into commits that touched the file
+      -- under its previous name. Those commits aren't in the initial pushed
+      -- set (computed for the current path only), so extend the set now.
+      self:fh_extend_pushed_set(state, entry.oldname)
     end
 
     local rev_a, rev_b
@@ -1200,6 +1296,13 @@ function GitAdapter:parse_fh_data(data, commit, state)
     )
   end
 
+  -- `nil` signals "pushed set not computed" so LogEntry falls back to the
+  -- decoration-based check; explicit `false` means "not in the computed set".
+  local is_pushed
+  if state.pushed_set then
+    is_pushed = state.pushed_set[commit.hash] == true
+  end
+
   if files[1] then
     return true,
       LogEntry({
@@ -1207,6 +1310,7 @@ function GitAdapter:parse_fh_data(data, commit, state)
         commit = commit,
         files = files,
         single_file = state.single_file,
+        is_pushed = is_pushed,
       })
   end
 
@@ -1222,6 +1326,7 @@ function GitAdapter:parse_fh_data(data, commit, state)
       path_args = state.path_args,
       commit = commit,
       single_file = state.single_file,
+      is_pushed = is_pushed,
     })
 end
 
@@ -1239,6 +1344,10 @@ function GitAdapter:parse_fh_line_trace_data(data, commit, state)
 
     if state.single_file and oldpath then
       state.old_path = oldpath
+      -- Line-trace mode follows renames at the line level (without `--follow`)
+      -- and so streams pre-rename commits too. The initial pushed set lacks
+      -- those because it was queried with the current path only.
+      self:fh_extend_pushed_set(state, oldpath)
     end
 
     local rev_a, rev_b
@@ -1273,6 +1382,11 @@ function GitAdapter:parse_fh_line_trace_data(data, commit, state)
     )
   end
 
+  local is_pushed
+  if state.pushed_set then
+    is_pushed = state.pushed_set[commit.hash] == true
+  end
+
   if files[1] then
     return true,
       LogEntry({
@@ -1280,6 +1394,7 @@ function GitAdapter:parse_fh_line_trace_data(data, commit, state)
         commit = commit,
         files = files,
         single_file = state.single_file,
+        is_pushed = is_pushed,
       })
   end
 

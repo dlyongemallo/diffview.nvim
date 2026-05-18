@@ -189,20 +189,25 @@ local formatters = {
       subject = "[empty message]"
     end
 
-    local subject_hl
-    if ctx.panel.cur_item[1] == entry then
-      subject_hl = "DiffviewFilePanelSelected"
-    elseif
-      ctx.conf.file_history_panel.subject_highlight == "ref_aware" and entry.has_remote_ref
-    then
-      subject_hl = "DiffviewCommitRemoteRef"
-    elseif ctx.conf.file_history_panel.subject_highlight == "ref_aware" then
-      subject_hl = "DiffviewCommitLocalOnly"
+    local base_hl
+    if ctx.conf.file_history_panel.subject_highlight == "ref_aware" then
+      base_hl = entry.is_pushed and "DiffviewCommitRemoteRef" or "DiffviewCommitLocalOnly"
     else
-      subject_hl = "DiffviewFilePanelFileName"
+      base_hl = "DiffviewFilePanelFileName"
     end
 
-    comp:add_text(" " .. subject, subject_hl)
+    local text = " " .. subject
+    comp:add_text(text, base_hl)
+
+    -- Layer the selected highlight on top of the ref-aware base so users who
+    -- customize `DiffviewFilePanelSelected` to define only a background still
+    -- see the pushed/unpushed foreground. With default highlight groups (both
+    -- foreground-only) the layered group wins, matching prior behaviour.
+    if ctx.panel.cur_item[1] == entry then
+      local end_col = #comp.line_buffer
+      local start_col = end_col - #text
+      comp:add_hl("DiffviewFilePanelSelected", #comp.lines, start_col, end_col)
+    end
   end,
 
   author = function(comp, entry, _ctx)

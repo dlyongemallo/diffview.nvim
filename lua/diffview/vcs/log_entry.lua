@@ -16,7 +16,7 @@ local M = {}
 ---@field single_file boolean
 ---@field folded boolean
 ---@field nulled boolean
----@field has_remote_ref boolean Whether this commit has a remote ref decoration (e.g. a remote branch tip).
+---@field is_pushed boolean Whether this commit is reachable from a remote-tracking ref (i.e. has been pushed).
 ---@field _pin_overlays? table<string, FileEntry> Cache of transient FileEntry overlays keyed by `pinned_path`, populated when a pinned file isn't touched by this commit.
 local LogEntry = oop.create_class("LogEntry")
 
@@ -27,15 +27,21 @@ function LogEntry:init(opt)
   self.folded = true
   self.single_file = opt.single_file
   self.nulled = utils.sate(opt.nulled, false)
-  -- NOTE: This only detects commits at remote branch/tag tips via %D
-  -- decorations, not full reachability from upstream.
-  self.has_remote_ref = opt.commit
-      and opt.commit.ref_names
-      and (opt.commit.ref_names:find("origin/") or opt.commit.ref_names:find("upstream/") or opt.commit.ref_names:find(
-        "remotes/"
-      ))
-      and true
-    or false
+  if opt.is_pushed ~= nil then
+    self.is_pushed = opt.is_pushed and true or false
+  else
+    -- Fallback used when no precomputed reachability info is supplied (e.g.
+    -- the Mercurial adapter): infer "pushed" from a remote ref decoration.
+    -- This only catches commits at remote branch/tag tips, not the full set
+    -- reachable from upstream.
+    self.is_pushed = opt.commit
+        and opt.commit.ref_names
+        and (opt.commit.ref_names:find("origin/") or opt.commit.ref_names:find("upstream/") or opt.commit.ref_names:find(
+          "remotes/"
+        ))
+        and true
+      or false
+  end
   self:update_status()
   self:update_stats()
 end
