@@ -74,6 +74,7 @@ local RESIZE_REPAINT_DEBOUNCE_MS = 100
 ---@class Diff1Inline : Diff1
 ---@field a_file vcs.File? Old-side file used only to compute the diff (never rendered in a window).
 ---@field _cached_old_lines string[]? Old-side content captured on first render; reused by repaints so each keystroke-level refresh doesn't re-fetch from disk.
+---@field _render_generation integer Bumped on every state transition that invalidates in-flight render work: file swap (`use_entry`), render teardown (`teardown_render`, which covers `destroy` and `FileEntry:convert_layout`), and recreate (`create`). Async passes capture the value at entry and bail when it changes mid-flight, so a stale `_load_old_lines` callback can't overwrite `_cached_old_lines` for a file the user has navigated past or render onto a buffer the view no longer owns. Also covers cached-instance reuse: `StandardView` keeps one layout per class and re-runs `create` on the same instance after a prior `destroy`, so a sticky destroyed flag would block reuse; the monotonic counter does not.
 ---@field _repaint_bufnr integer? Buffer id the repaint autocmds are attached to (nil when no autocmds are installed).
 ---@field _repaint_debounced CancellableFn? Trailing-edge debounced `_repaint` used for the insert-mode `TextChangedI` hook.
 ---@field _suppress_repaint boolean? Set by batched buffer edits (e.g. a multi-hunk `diffget`) to turn `_repaint` into a no-op so a single trailing call covers the whole batch.
@@ -91,6 +92,11 @@ Diff1Inline.symbols = { "b" }
 function Diff1Inline:init(opt)
   self:super(opt)
   self:_set_a_file(opt and opt.a or nil)
+  -- Start at 0 so every call site can do a plain `+ 1` without a nil
+  -- check, and so capture-then-yield sequences always compare two
+  -- numbers (a nil-vs-number compare reads `true` on swap but would
+  -- read `false` on the very first render before any bump).
+  self._render_generation = 0
 end
 
 ---Assign the old-side file, tagging `symbol = "a"` so `vcs.File:produce_data()`
@@ -111,15 +117,47 @@ function Diff1Inline:clone()
   return clone
 end
 
+---True iff an in-flight async render pass started at `generation` is still
+---the current one. Used as the post-yield guard in `_prerender`,
+---`_render_inline`, and the surrounding `create`/`use_entry` paths so a
+---racing file swap or view-close cannot resume into a stale write of
+---`_cached_old_lines` or a render against a disposed window. Teardown is
+---detected the same way: `teardown_render` bumps the generation (covering
+---both `destroy` and `FileEntry:convert_layout`), so any pass that
+---captured the pre-teardown value fails this check on resume.
+---@param generation integer The value of `_render_generation` captured at
+---the start of the pass.
+---@return boolean
+function Diff1Inline:_is_active_render(generation)
+  return self._render_generation == generation
+end
+
 ---@override
 ---@param self Diff1Inline
 ---@param pivot integer?
 Diff1Inline.create = async.void(function(self, pivot)
+  -- Bump and capture so a previous lifecycle's straggler (`StandardView`
+  -- keeps one layout per class and re-runs `create` on the same instance
+  -- after `destroy`) bails on its post-yield guard via a generation
+  -- mismatch. Capturing AFTER the bump means this lifecycle's own awaits
+  -- compare equal as long as nothing intervenes.
+  self._render_generation = self._render_generation + 1
+  local generation = self._render_generation
   -- See `_prerender` for rationale.
   await(self:_prerender())
+  -- `_prerender` yields on the b-side load and on the a-side `produce_data`
+  -- fetch. If the view was closed or the layout swapped in the meantime,
+  -- `destroy` / `use_entry` will have bumped `_render_generation`; calling
+  -- `create_wins` against a disposed layout would build orphaned windows.
+  if not self:_is_active_render(generation) then
+    return
+  end
   await(self:create_wins(pivot, {
     { "b", "aboveleft vsp" },
   }, { "b" }))
+  if not self:_is_active_render(generation) then
+    return
+  end
   -- `_prerender` already laid down the extmarks; only the window-scoped
   -- state remains.
   self:_install_window_hooks()
@@ -168,16 +206,25 @@ Diff1Inline.use_entry = async.void(function(self, entry)
 
   self:set_file_for("b", src.b.file)
   self:_set_a_file(src.a_file)
-  -- File swap: invalidate cached old content so the next render re-fetches.
+  -- File swap: invalidate cached old content so the next render re-fetches,
+  -- and bump the render generation so a still-in-flight `_prerender` from
+  -- a previous swap bails when its `_load_old_lines` callback finally fires
+  -- (would otherwise overwrite `_cached_old_lines` with stale content for
+  -- a file the user has already navigated past).
   self._cached_old_lines = nil
+  self._render_generation = self._render_generation + 1
+  local generation = self._render_generation
 
   if self:is_valid() then
     -- See `_prerender` for rationale.
     await(self:_prerender())
-    if not self:is_valid() then
+    if not self:_is_active_render(generation) or not self:is_valid() then
       return
     end
     await(self:open_files())
+    if not self:_is_active_render(generation) then
+      return
+    end
     self:_install_window_hooks()
   end
 end)
@@ -244,6 +291,9 @@ Diff1Inline._prerender = async.void(function(self)
   if self.b.file.binary then
     return
   end
+  -- Capture the generation before any yield so we can detect a concurrent
+  -- file swap or layout teardown on resumption.
+  local generation = self._render_generation
   if not self.b.file:is_valid() then
     if not self.b.file.active then
       return
@@ -251,8 +301,9 @@ Diff1Inline._prerender = async.void(function(self)
     await(self.b:load_file())
   end
 
-  -- Re-validate after the load yield: the b-side may have been swapped or
-  -- the buffer destroyed while we were awaiting.
+  if not self:_is_active_render(generation) then
+    return
+  end
   if not (self.b and self.b.file and self.b.file:is_valid()) then
     return
   end
@@ -271,6 +322,9 @@ Diff1Inline._prerender = async.void(function(self)
   if self._cached_old_lines == nil then
     local old_lines = await(self:_load_old_lines())
     await(async.scheduler())
+    if not self:_is_active_render(generation) then
+      return
+    end
     -- Bail if the b-side file was swapped (bufnr differs) or the buffer
     -- was destroyed while awaiting; otherwise we'd render onto a stale
     -- buffer that no longer matches `self.b.file`.
@@ -474,12 +528,16 @@ Diff1Inline._render_inline = async.void(function(self)
   if self.b.file.binary then
     return
   end
+  local generation = self._render_generation
   local bufnr = self.b.file.bufnr --[[@as integer ]]
 
   local old_lines = self._cached_old_lines
   if old_lines == nil then
     old_lines = await(self:_load_old_lines())
     await(async.scheduler())
+    if not self:_is_active_render(generation) then
+      return
+    end
     -- Bail if the b-side file was swapped (bufnr differs) or the buffer
     -- was destroyed while awaiting; otherwise we'd render onto a stale
     -- buffer that no longer matches `self.b.file`.
@@ -625,6 +683,16 @@ end
 
 ---@override
 function Diff1Inline:teardown_render()
+  -- Bump first so any in-flight async pass that captured the previous
+  -- value (e.g. `_prerender` awaiting a git fetch) fails its post-yield
+  -- guard on resume before it can re-populate `_cached_old_lines` or
+  -- re-render extmarks onto a buffer the layout no longer owns. Covers
+  -- both `destroy` (which calls this) and `FileEntry:convert_layout`,
+  -- which tears down the outgoing layout's render state without calling
+  -- `destroy`. The `or 0` keeps unit tests that drive `teardown_render`
+  -- against a bare instance (no `init`) working; production instances
+  -- always carry an integer here.
+  self._render_generation = (self._render_generation or 0) + 1
   if self._repaint_bufnr and api.nvim_buf_is_valid(self._repaint_bufnr) then
     pcall(api.nvim_clear_autocmds, { group = repaint_augroup, buffer = self._repaint_bufnr })
   end
@@ -651,6 +719,9 @@ end
 
 ---@override
 function Diff1Inline:destroy()
+  -- `teardown_render` bumps `_render_generation` so any in-flight async
+  -- pass bails on its post-yield guard before `Layout.destroy` closes
+  -- the windows.
   self:teardown_render()
   Layout.destroy(self)
 end
