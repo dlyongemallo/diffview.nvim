@@ -7,6 +7,9 @@ local lazy = require("diffview.lazy")
 
 local Diff1 = lazy.access("diffview.scene.layouts.diff_1", "Diff1") ---@type Diff1|LazyModule
 local Diff1Inline = lazy.access("diffview.scene.layouts.diff_1_inline", "Diff1Inline") ---@type Diff1Inline|LazyModule
+local Diff1InlinePinned =
+  lazy.access("diffview.scene.layouts.diff_1_inline_pinned", "Diff1InlinePinned") ---@type Diff1InlinePinned|LazyModule
+local Diff1Pinned = lazy.access("diffview.scene.layouts.diff_1_pinned", "Diff1Pinned") ---@type Diff1Pinned|LazyModule
 local Diff2 = lazy.access("diffview.scene.layouts.diff_2", "Diff2") ---@type Diff2|LazyModule
 local Diff2Hor = lazy.access("diffview.scene.layouts.diff_2_hor", "Diff2Hor") ---@type Diff2Hor|LazyModule
 local Diff2HorPinned = lazy.access("diffview.scene.layouts.diff_2_hor_pinned", "Diff2HorPinned") ---@type Diff2HorPinned|LazyModule
@@ -34,11 +37,11 @@ function M.diffview_callback(cb_name)
 end
 
 -- Layout aliases used across multiple view kinds and cycle_layouts. The
--- pinned `Diff2` variants (`diff2_*_pinned`) intentionally aren't listed
--- here: they're internal to file-history `pin_local` mode and are
--- selected by the view based on whether `--pin-local` is active, not by
--- direct user configuration. The `LayoutName` alias below still includes
--- them so `name_to_layout` can resolve them internally.
+-- pinned variants (`diff1_*_pinned`, `diff2_*_pinned`) intentionally
+-- aren't listed here: they're internal to file-history `pin_local` mode
+-- and are selected by the view based on whether `--pin-local` is active,
+-- not by direct user configuration. The `LayoutName` alias below still
+-- includes them so `name_to_layout` can resolve them internally.
 ---@alias DiffviewStandardLayout "diff1_plain"|"diff1_inline"|"diff2_horizontal"|"diff2_vertical"
 ---@alias DiffviewMergeLayout "diff1_plain"|"diff3_horizontal"|"diff3_vertical"|"diff3_mixed"|"diff4_mixed"
 ---@alias DiffviewInferredLayout -1
@@ -879,7 +882,9 @@ function M.get_log_options(single_file, t, vcs)
 end
 
 ---@alias LayoutName "diff1_plain"
+---       | "diff1_plain_pinned"
 ---       | "diff1_inline"
+---       | "diff1_inline_pinned"
 ---       | "diff2_horizontal"
 ---       | "diff2_horizontal_pinned"
 ---       | "diff2_vertical"
@@ -891,7 +896,9 @@ end
 
 local layout_map = {
   diff1_plain = Diff1,
+  diff1_plain_pinned = Diff1Pinned,
   diff1_inline = Diff1Inline,
+  diff1_inline_pinned = Diff1InlinePinned,
   diff2_horizontal = Diff2Hor,
   diff2_horizontal_pinned = Diff2HorPinned,
   diff2_vertical = Diff2Ver,

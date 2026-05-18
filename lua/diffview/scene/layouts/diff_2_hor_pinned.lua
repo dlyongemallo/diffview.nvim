@@ -71,10 +71,10 @@ function Diff2HorPinned:detach_files_for_swap(next_entry)
   if self.a then
     self.a:detach_file()
   end
+  -- Without a next entry we have no comparison; preserve the old
+  -- "skip detach" behaviour for callers that haven't migrated to the
+  -- new signature.
   if self.b and next_entry then
-    -- Without a next entry we have no comparison; preserve the old
-    -- "skip detach" behaviour for callers that haven't migrated to the
-    -- new signature.
     local next_layout = next_entry.layout --[[@as Diff2HorPinned ]]
     local next_b = next_layout and next_layout.b and next_layout.b.file
     if next_b ~= self.b.file then

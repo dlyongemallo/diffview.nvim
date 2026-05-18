@@ -4,12 +4,19 @@ local helpers = require("diffview.tests.helpers")
 local utils = require("diffview.utils")
 
 local Diff1 = require("diffview.scene.layouts.diff_1").Diff1
+local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+local Diff1InlinePinned = require("diffview.scene.layouts.diff_1_inline_pinned").Diff1InlinePinned
+local Diff1Pinned = require("diffview.scene.layouts.diff_1_pinned").Diff1Pinned
 local Diff2Hor = require("diffview.scene.layouts.diff_2_hor").Diff2Hor
+local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
 local Diff2Ver = require("diffview.scene.layouts.diff_2_ver").Diff2Ver
+local Diff2VerPinned = require("diffview.scene.layouts.diff_2_ver_pinned").Diff2VerPinned
 local Diff3Hor = require("diffview.scene.layouts.diff_3_hor").Diff3Hor
 local Diff3Ver = require("diffview.scene.layouts.diff_3_ver").Diff3Ver
 local Diff3Mixed = require("diffview.scene.layouts.diff_3_mixed").Diff3Mixed
 local Diff4Mixed = require("diffview.scene.layouts.diff_4_mixed").Diff4Mixed
+local FileHistoryView =
+  require("diffview.scene.views.file_history.file_history_view").FileHistoryView
 
 local eq = helpers.eq
 
@@ -593,5 +600,229 @@ describe("diffview.actions.cycle_layout with custom config", function()
 
     eq(1, #converted_layouts)
     eq(Diff2Hor, converted_layouts[1])
+  end)
+end)
+
+-- Regression: when `pin_local` is on and the cycle list contains a Diff1
+-- layout (e.g. `diff1_inline` auto-inserted by config validation when
+-- `view.file_history.layout` is set to it), `cycle_layout` used to land
+-- on that entry, `resolve_pinned_layout` would collapse it to the default
+-- Diff2's pinned form, and if the cycle was already on that orientation
+-- `convert_layout` was a no-op -- so the user saw cycling stop part-way
+-- (e.g. Ver -> Hor -> stuck on Hor). `pinned_variant` now covers Diff1
+-- and Diff1Inline (mapped to their pin_local-safe pinned siblings), so
+-- the same set of layout NAMES is reachable whether `pin_local` is on or
+-- off; in pin_local mode the active class is the `*_pinned` form, which
+-- declares `shared_symbols = { "b" }` and keeps `FileEntry:destroy` from
+-- tearing down the view-owned working-tree file.
+describe("diffview.actions.cycle_layout pin_local cycling", function()
+  local lib = require("diffview.lib")
+
+  local stubs = {}
+  local converted_layouts
+
+  local function stub(tbl, key, val)
+    stubs[#stubs + 1] = { tbl, key, tbl[key] }
+    tbl[key] = val
+  end
+
+  local original_config
+
+  before_each(function()
+    converted_layouts = {}
+    original_config = vim.deepcopy(config.get_config())
+  end)
+
+  after_each(function()
+    for i = #stubs, 1, -1 do
+      local s = stubs[i]
+      s[1][s[2]] = s[3]
+    end
+    stubs = {}
+
+    local old_warn = utils.warn
+    utils.warn = function() end
+    config.setup(original_config)
+    utils.warn = old_warn
+  end)
+
+  local function mock_file_entry(layout_class)
+    return {
+      layout = {
+        class = layout_class,
+        emitter = require("diffview.events").EventEmitter(),
+      },
+      kind = "working",
+      convert_layout = function(self, next_class)
+        converted_layouts[#converted_layouts + 1] = next_class
+        self.layout.class = next_class
+      end,
+    }
+  end
+
+  -- Mock a FileHistoryView: stub `instanceof` so the action's dispatch
+  -- picks the file-history branch, and inherit the helper methods from
+  -- the real class via `__index` so `unpinned_layout` and
+  -- `resolve_pinned_layout` reflect actual behaviour.
+  local function mock_file_history_view(files, cur_entry, pin_local)
+    return setmetatable({
+      pin_local = pin_local,
+      instanceof = function(self, other)
+        return other == FileHistoryView
+      end,
+      cur_layout = {
+        get_main_win = function()
+          return { id = 1 }
+        end,
+        is_focused = function()
+          return false
+        end,
+        sync_scroll = function() end,
+      },
+      panel = {
+        list_files = function()
+          return files
+        end,
+      },
+      cur_file = function()
+        return cur_entry
+      end,
+      set_file = function() end,
+    }, { __index = FileHistoryView })
+  end
+
+  it("cycles through all entries when cycle has a trailing Diff1 entry", function()
+    -- Reproduces the reported bug: with cycle `{ Ver, Hor, Diff1Inline }`
+    -- and `pin_local`, cycling used to skip Diff1Inline (resolved to the
+    -- default Diff2's pinned form, so the user got Ver -> Hor -> stuck on
+    -- Hor). `pinned_variant` now covers Diff1Inline, so cycling lands on
+    -- `Diff1InlinePinned` (b-side declared shared, view-owned working-tree
+    -- File survives entry teardown) and the cycle visits all three.
+    local old_warn = utils.warn
+    utils.warn = function() end
+    config.setup({
+      view = {
+        file_history = { layout = "diff2_vertical", pin_local = true },
+        cycle_layouts = {
+          default = { "diff2_vertical", "diff2_horizontal", "diff1_inline" },
+        },
+      },
+    })
+    utils.warn = old_warn
+
+    local file = mock_file_entry(Diff2VerPinned)
+    local view = mock_file_history_view({ file }, file, true)
+
+    stub(lib, "get_current_view", function()
+      return view
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
+
+    actions.cycle_layout()
+    eq(1, #converted_layouts)
+    eq(Diff2HorPinned, converted_layouts[1])
+
+    actions.cycle_layout()
+    eq(2, #converted_layouts)
+    eq(Diff1InlinePinned, converted_layouts[2])
+
+    actions.cycle_layout()
+    eq(3, #converted_layouts)
+    eq(Diff2VerPinned, converted_layouts[3])
+  end)
+
+  it("cycles through Diff1-only cycles in pin_local mode", function()
+    -- The cycle list contains only Diff1 variants; both have pinned
+    -- siblings, so cycling stays in the pin_local-safe class space.
+    local old_warn = utils.warn
+    utils.warn = function() end
+    config.setup({
+      view = {
+        file_history = { layout = "diff1_inline", pin_local = true },
+        default = { layout = "diff1_inline" },
+        cycle_layouts = { default = { "diff1_inline", "diff1_plain" } },
+      },
+    })
+    utils.warn = old_warn
+
+    local file = mock_file_entry(Diff1InlinePinned)
+    local view = mock_file_history_view({ file }, file, true)
+
+    stub(lib, "get_current_view", function()
+      return view
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
+
+    actions.cycle_layout()
+    eq(1, #converted_layouts)
+    eq(Diff1Pinned, converted_layouts[1])
+  end)
+
+  it("reaches the same set of layouts whether pin_local is on or off", function()
+    -- Symmetry check: with `cycle_layouts.default = { Hor, Ver, Diff1Inline }`,
+    -- three presses should land on the same sequence of layout NAMES
+    -- regardless of `pin_local` (the pin_local entries differ only by
+    -- carrying the `*_pinned` class for the same orientation).
+    local old_warn = utils.warn
+    utils.warn = function() end
+    config.setup({
+      view = {
+        cycle_layouts = {
+          default = { "diff2_horizontal", "diff2_vertical", "diff1_inline" },
+        },
+      },
+    })
+    utils.warn = old_warn
+
+    local file_off = mock_file_entry(Diff2Hor)
+    local view_off = mock_file_history_view({ file_off }, file_off, false)
+    stub(lib, "get_current_view", function()
+      return view_off
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
+
+    actions.cycle_layout()
+    actions.cycle_layout()
+    actions.cycle_layout()
+    local off_names = {
+      converted_layouts[1].name,
+      converted_layouts[2].name,
+      converted_layouts[3].name,
+    }
+    eq({ "diff2_vertical", "diff1_inline", "diff2_horizontal" }, off_names)
+
+    -- Reset for the pin_local pass.
+    for i = #stubs, 1, -1 do
+      local s = stubs[i]
+      s[1][s[2]] = s[3]
+    end
+    stubs = {}
+    converted_layouts = {}
+
+    local file_on = mock_file_entry(Diff2HorPinned)
+    local view_on = mock_file_history_view({ file_on }, file_on, true)
+    stub(lib, "get_current_view", function()
+      return view_on
+    end)
+    stub(vim.api, "nvim_win_get_cursor", function()
+      return { 1, 0 }
+    end)
+
+    actions.cycle_layout()
+    actions.cycle_layout()
+    actions.cycle_layout()
+    local on_names = {
+      converted_layouts[1].name,
+      converted_layouts[2].name,
+      converted_layouts[3].name,
+    }
+    -- Same orientations, with `*_pinned` variants throughout.
+    eq({ "diff2_vertical_pinned", "diff1_inline_pinned", "diff2_horizontal_pinned" }, on_names)
   end)
 end)

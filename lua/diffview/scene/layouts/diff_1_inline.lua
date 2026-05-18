@@ -657,10 +657,12 @@ end
 ---@override
 ---Diff1Inline owns `a_file` even though it isn't attached to a window, so
 ---expose it through `owned_files()` so `FileEntry:destroy()` can tear it
----down alongside the windowed files.
+---down alongside the windowed files. Defer to `Layout:owned_files` for the
+---windowed slots so `shared_symbols` (e.g. `Diff1InlinePinned`'s borrowed
+---b-side) is honoured in subclasses.
 ---@return vcs.File[]
 function Diff1Inline:owned_files()
-  local out = Layout.files(self)
+  local out = Layout.owned_files(self)
   if self.a_file and not vim.tbl_contains(out, self.a_file) then
     out[#out + 1] = self.a_file
   end

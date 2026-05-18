@@ -40,9 +40,9 @@ function Diff2VerPinned:detach_files_for_swap(next_entry)
   if self.a then
     self.a:detach_file()
   end
+  -- See `Diff2HorPinned:detach_files_for_swap` for the no-next-entry
+  -- carve-out.
   if self.b and next_entry then
-    -- See `Diff2HorPinned:detach_files_for_swap` for the no-next-entry
-    -- carve-out.
     local next_layout = next_entry.layout --[[@as Diff2VerPinned ]]
     local next_b = next_layout and next_layout.b and next_layout.b.file
     if next_b ~= self.b.file then
