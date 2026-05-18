@@ -115,10 +115,47 @@ end
 ---@param self Diff1Inline
 ---@param pivot integer?
 Diff1Inline.create = async.void(function(self, pivot)
+  -- See `_prerender` for rationale.
+  await(self:_prerender())
   await(self:create_wins(pivot, {
     { "b", "aboveleft vsp" },
   }, { "b" }))
-  await(self:_render_inline())
+  -- `_prerender` already laid down the extmarks; only the window-scoped
+  -- state remains.
+  self:_install_window_hooks()
+end)
+
+---@override
+---Scope the inline namespace to the b window before `open_files` yields,
+---closing the redraw window that would otherwise leak `_prerender`'s
+---extmarks into other windows showing the same buffer (issue #156).
+---
+---For `full_width` deletions, follow up with a `_repaint` after the buffer
+---is on screen: the create-path `_prerender` ran before `self.b.id` existed,
+---so the pad target wasn't sized to the window. Gated on `full_width` to
+---keep the render-once invariant for other styles.
+---@param self Diff1Inline
+Diff1Inline.create_post = async.void(function(self)
+  self:open_null()
+  -- `self.b:is_valid()` covers both `self.b.id` being set and the underlying
+  -- window still existing; without it, a torn-down layout would feed `nil`
+  -- into `nvim_win_is_valid` inside `attach_to_window` and throw.
+  if
+    self.b
+    and self.b:is_valid()
+    and self.b.file
+    and self.b.file.bufnr
+    and api.nvim_buf_is_valid(self.b.file.bufnr)
+    and not self.b.file.binary
+  then
+    inline_diff.attach_to_window(self.b.file.bufnr --[[@as integer ]], self.b.id)
+  end
+  await(self:open_files())
+  vim.opt.equalalways = self.state.save_equalalways
+  local inline_opt = config.get_config().view.inline or {}
+  if inline_opt.deletion_highlight == "full_width" then
+    self:_repaint()
+  end
 end)
 
 ---@override
@@ -135,8 +172,13 @@ Diff1Inline.use_entry = async.void(function(self, entry)
   self._cached_old_lines = nil
 
   if self:is_valid() then
+    -- See `_prerender` for rationale.
+    await(self:_prerender())
+    if not self:is_valid() then
+      return
+    end
     await(self:open_files())
-    await(self:_render_inline())
+    self:_install_window_hooks()
   end
 end)
 
@@ -166,15 +208,96 @@ end)
 
 ---Build the options table forwarded to `inline_diff.render`. Merges the
 ---effective global `'diffopt'` with the configured inline style.
+---
+---`winid` is forwarded as the `full_width` pad-target hint so `_prerender`
+---can size deletion padding before the b buffer is displayed.
+---@param winid integer?
 ---@return InlineDiffOpts
-local function render_opts()
+local function render_opts(winid)
   local opts = effective_diffopt()
   local inline_opt = config.get_config().view.inline or {}
   opts.style = inline_opt.style
   opts.deletion_highlight = inline_opt.deletion_highlight
   opts.deletion_treesitter = inline_opt.deletion_treesitter
+  if winid and api.nvim_win_is_valid(winid) then
+    opts.winid = winid
+  end
   return opts
 end
+
+---Render the inline diff onto the b-side buffer BEFORE it becomes visible
+---in the window so the first redraw that shows the buffer also shows its
+---highlights. See issue #172.
+---
+---The `async.scheduler()` step escapes the fast event context that
+---`produce_data` callbacks land in; without it, the caller's next `await`
+---(`open_files` running `vim.cmd("diffoff!")`) would hit `E5560`.
+---@param self Diff1Inline
+Diff1Inline._prerender = async.void(function(self)
+  if not (self.b and self.b.file) then
+    return
+  end
+  -- Skip binary outright (nothing textual to diff). Nulled b-files are not
+  -- skipped: a deletion still needs the old-side content rendered as
+  -- virt_lines (the "1 added empty line" overshoot from issue #172 is
+  -- suppressed below by feeding `render` an empty `new_lines`).
+  if self.b.file.binary then
+    return
+  end
+  if not self.b.file:is_valid() then
+    if not self.b.file.active then
+      return
+    end
+    await(self.b:load_file())
+  end
+
+  -- Re-validate after the load yield: the b-side may have been swapped or
+  -- the buffer destroyed while we were awaiting.
+  if not (self.b and self.b.file and self.b.file:is_valid()) then
+    return
+  end
+  -- `binary` may have been nil before `load_file` ran; `create_buffer`
+  -- resolves it lazily and points `bufnr` at the shared NULL buffer when
+  -- the file turns out to be binary. Re-check before rendering so we don't
+  -- lay extmarks onto NULL_FILE.
+  if self.b.file.binary then
+    return
+  end
+  local bufnr = self.b.file.bufnr --[[@as integer ]]
+  if not api.nvim_buf_is_valid(bufnr) then
+    return
+  end
+
+  if self._cached_old_lines == nil then
+    local old_lines = await(self:_load_old_lines())
+    await(async.scheduler())
+    -- Bail if the b-side file was swapped (bufnr differs) or the buffer
+    -- was destroyed while awaiting; otherwise we'd render onto a stale
+    -- buffer that no longer matches `self.b.file`.
+    if
+      not (self.b and self.b.file and self.b.file.bufnr == bufnr and api.nvim_buf_is_valid(bufnr))
+    then
+      return
+    end
+    self._cached_old_lines = old_lines
+  end
+
+  -- A nulled b-file shares the empty `NULL_FILE` buffer; reading its lines
+  -- yields `{""}` which `vim.diff` would treat as "one added empty line".
+  -- Pass `{}` instead so the diff is a pure deletion of the old content.
+  local new_lines = self.b.file.nulled and {} or api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  -- `self.b.id` is the `full_width` pad-target hint: valid in `use_entry`,
+  -- nil in `create` (where `create_post` fires a follow-up `_repaint` once
+  -- the window exists).
+  inline_diff.render(bufnr, self._cached_old_lines, new_lines, render_opts(self.b.id))
+  -- Scope the namespace synchronously so the caller's next yield can't
+  -- redraw with `M.ns` global and leak the extmarks into other windows
+  -- showing the same buffer (issue #156). The `create` path has no window
+  -- yet; `create_post` does the equivalent scoping for it.
+  if self.b.id and api.nvim_win_is_valid(self.b.id) then
+    inline_diff.attach_to_window(bufnr, self.b.id)
+  end
+end)
 
 ---Re-paint extmarks against the buffer's current contents. Called from
 ---`InsertLeave`/`TextChanged` autocmds so edits are reflected without a
@@ -206,8 +329,12 @@ function Diff1Inline:_repaint()
     return
   end
 
-  local new_lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  inline_diff.render(bufnr, old_lines, new_lines, render_opts())
+  -- A nulled b-file feeds `render` an empty `new_lines` to suppress the
+  -- spurious "1 added empty line" hunk from issue #172 (see `_prerender`).
+  -- Needed here too because the `create_post` full_width follow-up calls
+  -- `_repaint`.
+  local new_lines = self.b.file.nulled and {} or api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  inline_diff.render(bufnr, old_lines, new_lines, render_opts(self.b.id))
 end
 
 ---Install buffer-scoped autocmds that repaint on edits. Fires on any
@@ -305,11 +432,18 @@ local function register_repaint_autocmds(self, bufnr)
   end
 end
 
----Apply inline-view winopts on the displayed window and render the unified
----diff as extmarks on the new-side buffer.
+---Install window-scoped state once the b buffer is visible: turn off
+---native diff mode (so it doesn't fight the extmark rendering), scope the
+---namespace to this window (issue #156), and register repaint autocmds.
+---Idempotent.
 ---@param self Diff1Inline
-Diff1Inline._render_inline = async.void(function(self)
+function Diff1Inline:_install_window_hooks()
   if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then
+    return
+  end
+  -- Binary files have no diff to scope or repaint; skip. Nulled files
+  -- (deletions) still need the namespace scope and the winopts override.
+  if self.b.file.binary then
     return
   end
 
@@ -324,26 +458,48 @@ Diff1Inline._render_inline = async.void(function(self)
   pcall(api.nvim_set_option_value, "foldmethod", "manual", { win = winid })
   pcall(api.nvim_set_option_value, "foldenable", false, { win = winid })
 
+  inline_diff.attach_to_window(bufnr, winid)
+  register_repaint_autocmds(self, bufnr)
+end
+
+---Apply inline-view winopts on the displayed window and render the unified
+---diff as extmarks on the new-side buffer.
+---@param self Diff1Inline
+Diff1Inline._render_inline = async.void(function(self)
+  if not (self.b and self.b:is_valid() and self.b.file and self.b.file:is_valid()) then
+    return
+  end
+  -- See `_prerender` for why only `binary` is skipped here; the nulled
+  -- case is handled by passing `new_lines = {}` to `inline_diff.render`.
+  if self.b.file.binary then
+    return
+  end
+  local bufnr = self.b.file.bufnr --[[@as integer ]]
+
   local old_lines = self._cached_old_lines
   if old_lines == nil then
     old_lines = await(self:_load_old_lines())
     await(async.scheduler())
-    if not (self.b and self.b:is_valid() and api.nvim_buf_is_valid(bufnr)) then
+    -- Bail if the b-side file was swapped (bufnr differs) or the buffer
+    -- was destroyed while awaiting; otherwise we'd render onto a stale
+    -- buffer that no longer matches `self.b.file`.
+    if
+      not (
+        self.b
+        and self.b:is_valid()
+        and self.b.file
+        and self.b.file.bufnr == bufnr
+        and api.nvim_buf_is_valid(bufnr)
+      )
+    then
       return
     end
     self._cached_old_lines = old_lines
   end
 
-  local new_lines = api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  inline_diff.render(bufnr, old_lines, new_lines, render_opts())
-  -- Confine the inline-diff highlights to this window so they don't
-  -- leak into other windows that happen to display the same buffer
-  -- (e.g. a working-tree file the user already has open in a normal
-  -- tab — issue #156). Idempotent across repeated renders on the
-  -- same window, and a no-op on Neovim < 0.11 where window-scoped
-  -- namespaces aren't available.
-  inline_diff.attach_to_window(bufnr, winid)
-  register_repaint_autocmds(self, bufnr)
+  local new_lines = self.b.file.nulled and {} or api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  inline_diff.render(bufnr, old_lines, new_lines, render_opts(self.b.id))
+  self:_install_window_hooks()
 end)
 
 ---Replace the new-side content of every hunk overlapping `[first, last]`

@@ -571,6 +571,549 @@ describe("diffview.layout symbols", function()
     )
   end)
 
+  -- Regression suite for issue #172: the b buffer must not be shown without
+  -- inline-diff extmarks. The fix renders the extmarks onto the b buffer
+  -- BEFORE `open_files` switches the window to that buffer, so the first
+  -- redraw that shows the new buffer also shows its highlights.
+  describe("Diff1Inline:_prerender", function()
+    local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+    local inline_diff = require("diffview.scene.inline_diff")
+    local api = vim.api
+    -- Mirrors `WIN_SCOPE_SUPPORTED` in `inline_diff.lua`: the namespace
+    -- scoping APIs landed in 0.11 (`nvim__ns_set`) / 0.12
+    -- (`nvim_win_add_ns`); on older Neovim `attach_to_window` is a
+    -- one-shot warning and never populates `_scoped_wins_by_buf`.
+    -- Bracket-index `nvim__ns_set` to keep type-check-tests clean.
+    local scope_supported = (api.nvim_win_add_ns ~= nil and api.nvim_win_remove_ns ~= nil)
+      or api["nvim__ns_set"] ~= nil
+
+    it(
+      "renders extmarks on the b buffer before it is opened in a window",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        api.nvim_buf_set_lines(bufnr, 0, -1, false, { "one", "TWO", "three" })
+
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = {
+            bufnr = bufnr,
+            active = true,
+            is_valid = function()
+              return true
+            end,
+          },
+        }
+        inst.a_file = { nulled = false, binary = false }
+        inst._cached_old_lines = { "one", "two", "three" }
+
+        async.await(inst:_prerender())
+
+        -- The mismatch on line 2 should produce at least one extmark.
+        local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+        assert.is_true(#marks > 0)
+
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    it(
+      "is a no-op when b.file is missing",
+      helpers.async_test(function()
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {}
+        async.await(inst:_prerender())
+        -- No exception; nothing else to assert.
+      end)
+    )
+
+    -- A deleted file still needs its old-side content rendered as deletion
+    -- virt_lines. `_prerender` substitutes `new_lines = {}` for the nulled
+    -- buffer so `vim.diff(content, "")` yields a pure deletion, dodging the
+    -- spurious "1 added empty line" hunk from issue #172.
+    it(
+      "renders deletion virt_lines when b.file is nulled but a-side has content",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = {
+            bufnr = bufnr,
+            nulled = true,
+            binary = false,
+            active = true,
+            is_valid = function()
+              return true
+            end,
+          },
+        }
+        inst.a_file = { nulled = false, binary = false }
+        inst._cached_old_lines = { "removed-1", "removed-2" }
+
+        async.await(inst:_prerender())
+
+        local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+        assert.is_true(#marks > 0)
+
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    -- Temp layout (a-side and b-side both nulled) has no content on either
+    -- side: `vim.diff("", "")` returns no hunks, so the render is a true
+    -- no-op. This is the path that produced the green sliver before #172.
+    it(
+      "is a no-op when both a- and b-side are nulled",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = {
+            bufnr = bufnr,
+            nulled = true,
+            binary = false,
+            active = true,
+            is_valid = function()
+              return true
+            end,
+          },
+        }
+        inst.a_file = { nulled = true, binary = false }
+
+        async.await(inst:_prerender())
+
+        local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+        eq(0, #marks)
+
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    it(
+      "is a no-op when b.file is binary",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = {
+            bufnr = bufnr,
+            nulled = false,
+            binary = true,
+            active = true,
+            is_valid = function()
+              return true
+            end,
+          },
+        }
+        inst.a_file = { nulled = false, binary = true }
+
+        async.await(inst:_prerender())
+
+        local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+        eq(0, #marks)
+
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    -- The render call happens before `open_files` yields, so without
+    -- scoping the redraw triggered by that yield would expose extmarks
+    -- in any other window already displaying the same buffer (#156).
+    -- `_prerender` scopes the namespace synchronously after the render.
+    it(
+      "scopes the inline namespace to self.b.id after rendering",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        api.nvim_buf_set_lines(bufnr, 0, -1, false, { "one", "TWO", "three" })
+        local winid = api.nvim_get_current_win()
+
+        -- Clear any prior scope state for this buffer so we're asserting
+        -- the attach made by `_prerender`, not lingering state.
+        inline_diff.detach(bufnr)
+
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = {
+            bufnr = bufnr,
+            active = true,
+            is_valid = function()
+              return true
+            end,
+          },
+          id = winid,
+        }
+        inst.a_file = { nulled = false, binary = false }
+        inst._cached_old_lines = { "one", "two", "three" }
+
+        async.await(inst:_prerender())
+
+        if scope_supported then
+          local set = inline_diff._scoped_wins_by_buf[bufnr]
+          assert.is_not_nil(set)
+          assert.is_true(set[winid])
+        else
+          -- `attach_to_window` is a no-op on this Neovim; just confirm
+          -- `_prerender` didn't error and left the scope table empty.
+          assert.is_nil(inline_diff._scoped_wins_by_buf[bufnr])
+        end
+
+        inline_diff.detach(bufnr)
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    -- The `create` path runs `_prerender` before `create_wins`, so the
+    -- b window doesn't exist yet. The attach call must early-return
+    -- rather than error on a nil/invalid winid; `create_post` handles
+    -- the create-path scoping separately.
+    it(
+      "skips scoping (no error) when self.b.id is not a real window",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        api.nvim_buf_set_lines(bufnr, 0, -1, false, { "one", "TWO", "three" })
+
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = {
+            bufnr = bufnr,
+            active = true,
+            is_valid = function()
+              return true
+            end,
+          },
+          -- No `id`: the create path runs `_prerender` before `create_wins`.
+        }
+        inst.a_file = { nulled = false, binary = false }
+        inst._cached_old_lines = { "one", "two", "three" }
+
+        async.await(inst:_prerender())
+
+        local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+        assert.is_true(#marks > 0)
+
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+  end)
+
+  -- `create_post` runs between `create_wins` (which created `self.b.id`)
+  -- and `open_files` (which yields, allowing a redraw). `_prerender`
+  -- already wrote the extmarks, so the override must scope the
+  -- namespace before the yield to prevent leakage (#156).
+  describe("Diff1Inline.create_post", function()
+    local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+    local inline_diff = require("diffview.scene.inline_diff")
+    local api = vim.api
+    -- See the `_prerender` block's note: on pre-0.11 Neovim there's no
+    -- scoping API, so `attach_to_window` (and by extension `create_post`)
+    -- can't populate `_scoped_wins_by_buf`.
+    local scope_supported = (api.nvim_win_add_ns ~= nil and api.nvim_win_remove_ns ~= nil)
+      or api["nvim__ns_set"] ~= nil
+
+    it(
+      "scopes the inline namespace to self.b.id before open_files runs",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        local winid = api.nvim_get_current_win()
+        inline_diff.detach(bufnr)
+
+        local scope_at_open_files
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = { bufnr = bufnr, binary = false },
+          id = winid,
+          is_valid = function()
+            return true
+          end,
+        }
+        inst.state = { save_equalalways = vim.o.equalalways }
+        inst.open_null = function() end
+        inst.open_files = async.void(function()
+          local set = inline_diff._scoped_wins_by_buf[bufnr]
+          scope_at_open_files = set ~= nil and set[winid] == true
+        end)
+
+        async.await(inst:create_post())
+
+        if scope_supported then
+          assert.is_true(
+            scope_at_open_files,
+            "expected inline namespace to be scoped to self.b.id when open_files starts"
+          )
+        else
+          -- Without the scoping API, `attach_to_window` is a no-op; the
+          -- override still ran without erroring, which is the most we
+          -- can check.
+          assert.is_false(scope_at_open_files)
+        end
+
+        inline_diff.detach(bufnr)
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    -- A binary b-file has no extmarks to scope; skipping the attach
+    -- mirrors the binary skip in `_prerender` and `_install_window_hooks`.
+    it(
+      "skips scoping when b.file is binary",
+      helpers.async_test(function()
+        local bufnr = api.nvim_create_buf(false, true)
+        local winid = api.nvim_get_current_win()
+        inline_diff.detach(bufnr)
+
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = { bufnr = bufnr, binary = true },
+          id = winid,
+          is_valid = function()
+            return true
+          end,
+        }
+        inst.state = { save_equalalways = vim.o.equalalways }
+        inst.open_null = function() end
+        inst.open_files = async.void(function() end)
+
+        async.await(inst:create_post())
+
+        assert.is_nil(inline_diff._scoped_wins_by_buf[bufnr])
+
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    -- The `create` path runs `_prerender` before `create_wins`, so the b
+    -- window doesn't exist yet and `full_width_target` can't size the
+    -- pad against it. After `open_files` displays the buffer, `create_post`
+    -- fires a follow-up `_repaint` so the deletion virt_lines pick up the
+    -- now-known window width.
+    it(
+      "fires a follow-up _repaint after open_files when full_width is configured",
+      helpers.async_test(function()
+        local config = require("diffview.config")
+        local original_config = vim.deepcopy(config.get_config())
+        config.setup({ view = { inline = { deletion_highlight = "full_width" } } })
+
+        local bufnr = api.nvim_create_buf(false, true)
+        local winid = api.nvim_get_current_win()
+        inline_diff.detach(bufnr)
+
+        local repaint_count = 0
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = { bufnr = bufnr, binary = false },
+          id = winid,
+          is_valid = function()
+            return true
+          end,
+        }
+        inst.state = { save_equalalways = vim.o.equalalways }
+        inst.open_null = function() end
+        inst.open_files = async.void(function() end)
+        inst._repaint = function()
+          repaint_count = repaint_count + 1
+        end
+
+        local ok, err = pcall(function()
+          async.await(inst:create_post())
+          eq(1, repaint_count)
+        end)
+
+        inline_diff.detach(bufnr)
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+        config.setup(original_config)
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    -- For `text` / `hanging` deletion extents the pad isn't a function of
+    -- the window width, so the create-path follow-up `_repaint` would be
+    -- a redundant render. The override gates it on `full_width` to keep
+    -- the render-once invariant for the other styles.
+    it(
+      "skips the follow-up _repaint when deletion_highlight isn't full_width",
+      helpers.async_test(function()
+        local config = require("diffview.config")
+        local original_config = vim.deepcopy(config.get_config())
+        config.setup({ view = { inline = { deletion_highlight = "text" } } })
+
+        local bufnr = api.nvim_create_buf(false, true)
+        local winid = api.nvim_get_current_win()
+        inline_diff.detach(bufnr)
+
+        local repaint_count = 0
+        local inst = setmetatable({}, { __index = Diff1Inline })
+        inst.b = {
+          file = { bufnr = bufnr, binary = false },
+          id = winid,
+          is_valid = function()
+            return true
+          end,
+        }
+        inst.state = { save_equalalways = vim.o.equalalways }
+        inst.open_null = function() end
+        inst.open_files = async.void(function() end)
+        inst._repaint = function()
+          repaint_count = repaint_count + 1
+        end
+
+        local ok, err = pcall(function()
+          async.await(inst:create_post())
+          eq(0, repaint_count)
+        end)
+
+        inline_diff.detach(bufnr)
+        pcall(api.nvim_buf_delete, bufnr, { force = true })
+        config.setup(original_config)
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+  end)
+
+  it(
+    "Diff1Inline:_render_inline renders deletion virt_lines when b.file is nulled",
+    helpers.async_test(function()
+      local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+      local inline_diff = require("diffview.scene.inline_diff")
+      local api = vim.api
+
+      local bufnr = api.nvim_create_buf(false, true)
+      local winid = api.nvim_get_current_win()
+
+      local inst = setmetatable({}, { __index = Diff1Inline })
+      inst.b = {
+        file = {
+          bufnr = bufnr,
+          nulled = true,
+          binary = false,
+          is_valid = function()
+            return true
+          end,
+        },
+        is_valid = function()
+          return true
+        end,
+        id = winid,
+      }
+      inst.a_file = { nulled = false, binary = false }
+      inst._cached_old_lines = { "removed-1", "removed-2" }
+
+      async.await(inst:_render_inline())
+
+      local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+      assert.is_true(#marks > 0)
+
+      inst:teardown_render()
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+  )
+
+  -- `_repaint` is invoked by the `create_post` full_width follow-up
+  -- (among other places). Without the nulled handling it would feed
+  -- `inline_diff.render` the NULL_FILE buffer's lone empty line, which
+  -- `vim.diff` reports as a modification (and the "1 added empty line"
+  -- green sliver from issue #172) instead of a pure deletion.
+  it("Diff1Inline:_repaint emits no DiffChange/DiffAdd row hl when b.file is nulled", function()
+    local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+    local inline_diff = require("diffview.scene.inline_diff")
+    local api = vim.api
+
+    local bufnr = api.nvim_create_buf(false, true)
+    local winid = api.nvim_get_current_win()
+
+    local inst = setmetatable({}, { __index = Diff1Inline })
+    inst.b = {
+      file = {
+        bufnr = bufnr,
+        nulled = true,
+        binary = false,
+        is_valid = function()
+          return true
+        end,
+      },
+      is_valid = function()
+        return true
+      end,
+      id = winid,
+    }
+    inst.a_file = { nulled = false, binary = false }
+    inst._cached_old_lines = { "removed-1", "removed-2" }
+
+    inst:_repaint()
+
+    local marks = api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, { details = true })
+    for _, m in ipairs(marks) do
+      local hl = m[4] and m[4].line_hl_group
+      assert(
+        hl ~= "DiffviewDiffChange" and hl ~= "DiffviewDiffAdd",
+        "unexpected line_hl_group: " .. tostring(hl)
+      )
+    end
+
+    inst:teardown_render()
+    pcall(api.nvim_buf_delete, bufnr, { force = true })
+  end)
+
+  it(
+    "Diff1Inline.use_entry renders extmarks before open_files displays the buffer",
+    helpers.async_test(function()
+      -- The fix guarantees that by the time `open_files` (which displays
+      -- the b buffer) starts running, the inline-diff extmarks are already
+      -- on the b buffer. Drive `use_entry` against a real `Diff1Inline`
+      -- instance whose `open_files` records the extmark count at entry,
+      -- then assert it is greater than zero.
+      local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
+      local inline_diff = require("diffview.scene.inline_diff")
+      local api = vim.api
+
+      local bufnr = api.nvim_create_buf(false, true)
+      api.nvim_buf_set_lines(bufnr, 0, -1, false, { "one", "TWO", "three" })
+
+      local marks_at_open_files
+      local b_file = {
+        bufnr = bufnr,
+        active = true,
+        is_valid = function()
+          return true
+        end,
+        symbol = "b",
+      }
+      local a_file = { nulled = true, binary = false }
+      local inst = Diff1Inline({ b = b_file, a = a_file })
+      inst.b.is_valid = function()
+        return true
+      end
+      inst.is_valid = function()
+        return true
+      end
+      -- Override `_load_old_lines` to return a fixed old side synchronously
+      -- so `_prerender` doesn't depend on a real adapter.
+      inst._load_old_lines = async.wrap(function(_, callback)
+        callback({ "one", "two", "three" })
+      end, 2)
+      inst.open_files = async.void(function()
+        marks_at_open_files = #api.nvim_buf_get_extmarks(bufnr, inline_diff.ns, 0, -1, {})
+      end)
+      inst._install_window_hooks = function() end
+
+      local entry = { layout = Diff1Inline({ b = b_file, a = a_file }) }
+
+      async.await(inst:use_entry(entry))
+
+      assert.is_not_nil(marks_at_open_files)
+      assert.is_true(
+        marks_at_open_files > 0,
+        "expected extmarks already on buffer when open_files starts"
+      )
+
+      pcall(api.nvim_buf_delete, bufnr, { force = true })
+    end)
+  )
+
   it("Diff2 declares symbols { 'a', 'b' }", function()
     eq({ "a", "b" }, Diff2.symbols)
   end)
