@@ -3,7 +3,123 @@
 
 CHANGELOG
 
-NOTE: This changelog only encompasses breaking changes.
+NOTE: Breaking changes and notable feature additions are listed here.
+
+                                                *diffview.changelog-jj-adapter*
+
+ISSUE: https://github.com/sindrets/diffview.nvim/issues/562
+
+The Jujutsu (jj) adapter supports `:DiffviewOpen` and
+`:DiffviewFileHistory` end-to-end, and implements `file_restore` via
+`jj restore --from <commit> -- <path>` (with `jj op undo` as the
+suggested undo).
+
+Configure log options under `file_history_panel.log_options.jj` the
+same way as `git`/`hg`. Supported flags: `--revisions <revset>`,
+`--limit <n>`, `--reversed`.
+
+Staging-related actions (`s`/`S`/`U`, restoring from "staged") are
+no-ops in jj — there is no staging index. The adapter surfaces a
+one-time warning when these are invoked instead of failing silently.
+
+The `--pin-local` flag, the line-range `[range]:DiffviewFileHistory`
+form, and the `--cached`/`--staged`/`--imply-local` options remain
+Git-only.
+
+In colocated repos, set `preferred_adapter = "jj"` to use the Jujutsu
+adapter instead of Git.
+
+                                                *diffview.changelog-out-of-vcs-views*
+
+ISSUES: https://github.com/sindrets/diffview.nvim/issues/562,
+        https://github.com/sindrets/diffview.nvim/issues/286
+
+Two new commands open diff views that don't query any VCS, suitable as
+external editor entry points for tools like jj's merge tool and diff
+editor (and for ad-hoc use). They are also the integration point that
+closes issue 286 in the sindrets repo (arbitrary directory
+diffing).
+
+`:DiffviewMergeFiles {output} [{base}] {left} {right}` opens a 3-way or
+4-way merge editor backed by on-disk file paths. `{output}` is the
+editable buffer; the other paths are read-only. See `:h :DiffviewMergeFiles`
+for the `~/.config/jj/config.toml` wiring.
+
+`:DiffviewDiffDirs {left} {right} [{output}]` opens a side-by-side diff
+of two on-disk directories (no VCS involvement); when `{output}` is
+provided the middle buffer points at `{output}/<rel>` and edits flow
+back there. See `:h :DiffviewDiffDirs` for jj's `diff-editor` wiring.
+
+                                                *diffview.changelog-new-adapters*
+
+Two additional VCS adapters are supported beyond `git` and `hg`:
+
+  - **Sapling**, detected automatically through the Mercurial adapter.
+    Use `hg_cmd` to configure the executable (e.g. `hg_cmd = { "sl" }`).
+
+  - **Perforce** (experimental), via the `p4` CLI. Requires `p4` >=
+    2019.1 and the environment variables `P4PORT`, `P4USER`, `P4CLIENT`.
+    Configure log options under `file_history_panel.log_options.p4`.
+
+See also |diffview.changelog-jj-adapter| for the Jujutsu adapter.
+
+                                                *diffview.changelog-breaking-panel-show*
+
+PR: https://github.com/dlyongemallo/diffview.nvim/pull/165
+
+`file_panel.show` previously controlled both `:DiffviewOpen` and
+`:DiffviewFileHistory`. Visibility is now split: set `file_panel.show`
+for diff views and the new `file_history_panel.show` (default `true`)
+for file-history views.
+
+                                                *diffview.changelog-pin-local*
+
+PR: https://github.com/dlyongemallo/diffview.nvim/pull/158
+
+The new `:DiffviewFileHistory --pin-local` flag pins the right-hand
+side of the diff to the working-tree copy of the followed path while
+the left-hand side cycles through commits. Useful for reviewing how a
+file has evolved against its current state.
+
+Configurable via `view.file_history.pin_local`. Multi-file pinning is
+supported through a synthetic `LOCAL` log entry at the top of history.
+Git only. Cannot be combined with `--base`.
+
+                                                *diffview.changelog-diff1-inline*
+
+PR: https://github.com/dlyongemallo/diffview.nvim/pull/120
+
+The new `diff1_inline` layout renders unified diffs in a single window
+via extmark overlays. Tree-sitter highlights are preserved on both
+added text and deleted virt_lines.
+
+Style is configurable via `view.inline.style`:
+
+  - `"unified"` (default): standard unified diff appearance.
+  - `"overleaf"`: inline strikethrough for deletions.
+
+Deletion highlight is configurable via `view.inline.deletion_highlight`.
+
+                                                *diffview.changelog-multi-selection*
+
+PRs: https://github.com/dlyongemallo/diffview.nvim/pull/36,
+     https://github.com/dlyongemallo/diffview.nvim/pull/45,
+     https://github.com/dlyongemallo/diffview.nvim/pull/46
+
+The file panel supports multi-file selection for batch operations.
+Default keymaps: `w` to toggle a selection on the current file, `C`
+to clear all selections. Staging, unstaging, restore, and similar
+actions operate on the selection when present.
+
+Selections persist across Neovim restarts. Selection marks and their
+placement are configurable via `file_panel.mark_placement` and
+`file_panel.always_show_marks`.
+
+                                                *diffview.changelog-breaking-nvim-010*
+
+PR: https://github.com/dlyongemallo/diffview.nvim/pull/11
+
+The minimum required Neovim version has been bumped to 0.10.
 
                                                 *diffview.changelog-271*
 
