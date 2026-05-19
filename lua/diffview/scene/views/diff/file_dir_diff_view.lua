@@ -3,11 +3,12 @@ local oop = require("diffview.oop")
 
 local Diff2Hor = lazy.access("diffview.scene.layouts.diff_2_hor", "Diff2Hor") ---@type Diff2Hor|LazyModule
 local Diff3Hor = lazy.access("diffview.scene.layouts.diff_3_hor", "Diff3Hor") ---@type Diff3Hor|LazyModule
-local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local File = lazy.access("diffview.vcs.file", "File") ---@type vcs.File|LazyModule
 local FileEntry = lazy.access("diffview.scene.file_entry", "FileEntry") ---@type FileEntry|LazyModule
+local NullDiffView = lazy.access("diffview.scene.views.diff.null_diff_view", "NullDiffView") ---@type NullDiffView|LazyModule
 local NullRev = lazy.access("diffview.vcs.adapters.null.rev", "NullRev") ---@type NullRev|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
+local StandardView = lazy.access("diffview.scene.views.standard.standard_view", "StandardView") ---@type StandardView|LazyModule
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local fmt = string.format
@@ -17,18 +18,6 @@ local uv = vim.uv
 local M = {}
 
 local FILES_EQUAL_CHUNK = 65536
-
----Read a file from disk into a list of lines. Returns an empty table when
----the file is missing — for left-only / right-only entries the absent side
----must render as an empty buffer rather than error.
----@param path string
----@return string[]
-local function read_lines(path)
-  if vim.fn.filereadable(path) ~= 1 then
-    return {}
-  end
-  return vim.fn.readfile(path)
-end
 
 ---Content-equality check used to filter out files that exist on both sides
 ---but are identical. Reads both files in 64 KiB chunks via `uv.fs_read` and
@@ -116,12 +105,12 @@ end
 ---both LOCAL and editable. Three-pane mode mirrors jj's diff-editor 3-pane
 ---contract: a = `$left/<rel>` (read-only), b = `$output/<rel>` (LOCAL,
 ---editable), c = `$right/<rel>` (read-only).
----@class FileDirDiffView : DiffView
+---@class FileDirDiffView : NullDiffView
 ---@operator call : FileDirDiffView
 ---@field left_path string Absolute path to the "$left" directory.
 ---@field right_path string Absolute path to the "$right" directory.
 ---@field output_path? string Absolute path to the editable "$output" directory; nil for 2-pane mode.
-local FileDirDiffView = oop.create_class("FileDirDiffView", DiffView.__get())
+local FileDirDiffView = oop.create_class("FileDirDiffView", NullDiffView.__get())
 
 ---@class FileDirDiffView.init.Opt
 ---@field adapter NullAdapter
@@ -192,6 +181,8 @@ function FileDirDiffView:_build_entry(rel, status, a_rev, b_rev, c_rev)
   local right_abs = pl:join(self.right_path, rel)
   local b_abs = three_pane and pl:join(self.output_path, rel) or right_abs
 
+  local read_lines = NullDiffView.__get().read_lines
+
   local function make_file(path, rev, label, reader)
     local f = File({
       adapter = self.adapter,
@@ -241,35 +232,16 @@ function FileDirDiffView:_build_entry(rel, status, a_rev, b_rev, c_rev)
 end
 
 ---@override
-function FileDirDiffView:post_open()
-  vim.cmd("redraw")
-
-  self:init_event_listeners()
-
-  local CommitLogPanel = require("diffview.ui.panels.commit_log_panel").CommitLogPanel
-  self.commit_log_panel = CommitLogPanel(self, self.adapter, {
-    name = fmt("diffview://%s/log/%d/%s", self.adapter.ctx.dir, self.tabpage, "commit_log"),
-  })
-
-  vim.schedule(function()
-    self:file_safeguard()
-    self.is_loading = false
-    self.panel.is_loading = false
-    self.panel:render()
-    self.panel:redraw()
-
-    local files = self.panel:ordered_file_list()
-    if files and files[1] then
-      self:set_file(files[1], false, true)
-    end
-
-    self.ready = true
-  end)
+---Restore the default `StandardView` panel behaviour: a directory diff has
+---N entries and the file panel is genuinely useful, unlike the single-entry
+---`FileDiffView` / `FileMergeView` cases that `NullDiffView` defaults to
+---hiding. We bypass `NullDiffView:init_layout` rather than skip-call its
+---super because there is no `super:super` idiom in this OOP system.
+function FileDirDiffView:init_layout()
+  StandardView.__get().init_layout(self)
 end
 
----@override
----No-op: the file list is static; this view does not query any VCS.
-function FileDirDiffView:update_files() end
+-- `post_open` and `update_files` are inherited from `NullDiffView`.
 
 M.FileDirDiffView = FileDirDiffView
 
