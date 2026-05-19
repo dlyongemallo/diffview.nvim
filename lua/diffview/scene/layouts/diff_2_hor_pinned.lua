@@ -13,16 +13,14 @@ local M = {}
 ---per-path cache), so the b-window's underlying buffer, edits, undo
 ---history, and cursor position survive every entry swap and refresh. The
 ---view is the sole owner of those `vcs.File` instances; entry teardown
----skips them via `shared_symbols`, and the view destroys them in `close()`.
+---skips them via `shared_symbols`, and `Layout:detach_files_for_swap`
+---reads the same set to keep the b-window attached unless the next
+---entry's b is a different `vcs.File` (multi-file pinning crossing rows).
+---The view destroys the cached b-file in `close()`.
 local Diff2HorPinned = oop.create_class("Diff2HorPinned", Diff2Hor)
 
 Diff2HorPinned.name = "diff2_horizontal_pinned"
 
--- The b-side `vcs.File` is owned by the FileHistoryView (its pin_local
--- cache), not by individual FileEntries. Listing "b" here keeps
--- `Layout:owned_files()` from returning it, so `FileEntry:destroy` and
--- `FileEntry:set_active` walk past the borrowed file. The view tears it
--- down in `close()` once.
 Diff2HorPinned.shared_symbols = { "b" }
 
 ---@param opt Diff2.init.Opt
@@ -54,33 +52,6 @@ function Diff2HorPinned.should_null(rev, status, sym)
   end
 
   return Diff2.should_null(rev, status, sym)
-end
-
--- Within the FH view, skip detaching window b across entry swaps when the
--- next entry's b is the same `vcs.File` instance, so the pinned LOCAL
--- buffer's diffview keymaps and edits survive. In multi-file pinning a
--- row change can swap b to a different working-tree File (each path has
--- its own view-owned File); detach the old one in that case so its buffer
--- doesn't keep stale diffview state attached. The inherited
--- `detach_files()` still runs on tab-leave / view-close and detaches
--- everything (including b), so we don't leak diffview state into the
--- user's normal editing windows.
----@override
----@param next_entry? FileEntry
-function Diff2HorPinned:detach_files_for_swap(next_entry)
-  if self.a then
-    self.a:detach_file()
-  end
-  -- Without a next entry we have no comparison; preserve the old
-  -- "skip detach" behaviour for callers that haven't migrated to the
-  -- new signature.
-  if self.b and next_entry then
-    local next_layout = next_entry.layout --[[@as Diff2HorPinned ]]
-    local next_b = next_layout and next_layout.b and next_layout.b.file
-    if next_b ~= self.b.file then
-      self.b:detach_file()
-    end
-  end
 end
 
 M.Diff2HorPinned = Diff2HorPinned

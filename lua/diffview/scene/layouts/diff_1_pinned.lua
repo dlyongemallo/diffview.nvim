@@ -20,27 +20,5 @@ function Diff1Pinned:init(opt)
   self:super(opt)
 end
 
--- Mirror `Diff2HorPinned:detach_files_for_swap`: skip detaching window b
--- when the next entry's b is the same `vcs.File` instance so the pinned
--- LOCAL buffer's diffview keymaps and edits survive the swap. In
--- multi-file pinning a row change can swap b to a different working-tree
--- File (each path has its own view-owned File); detach the old one in
--- that case so its buffer doesn't keep stale diffview state attached.
--- The inherited `detach_files()` still runs on tab-leave / view-close.
----@override
----@param next_entry? FileEntry
-function Diff1Pinned:detach_files_for_swap(next_entry)
-  -- Without a next entry we have no comparison; preserve the old
-  -- "skip detach" behaviour for callers that haven't migrated to the
-  -- new signature.
-  if self.b and next_entry then
-    local next_layout = next_entry.layout --[[@as Diff1Pinned ]]
-    local next_b = next_layout and next_layout.b and next_layout.b.file
-    if next_b ~= self.b.file then
-      self.b:detach_file()
-    end
-  end
-end
-
 M.Diff1Pinned = Diff1Pinned
 return M
