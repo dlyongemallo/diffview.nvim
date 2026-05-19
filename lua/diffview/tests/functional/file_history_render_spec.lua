@@ -364,12 +364,13 @@ describe("file_history_render", function()
       eq("DiffviewCommitRemoteRef", comp.lines[1][1].hl)
       eq(" test", comp.lines[1][1].text)
 
-      -- The selected highlight is layered over the same byte range, so the
-      -- user can customize `DiffviewFilePanelSelected` to bg-only and still
-      -- see the pushed/unpushed colour.
+      -- The selected highlight is layered over the subject's byte range, so
+      -- the user can customize `DiffviewFilePanelSelected` to bg-only and
+      -- still see the pushed/unpushed colour. The leading separator space is
+      -- excluded so a bg customization doesn't bleed into the gap.
       eq(1, #comp.extra_hls)
       eq("DiffviewFilePanelSelected", comp.extra_hls[1].group)
-      eq(0, comp.extra_hls[1].first)
+      eq(#" ", comp.extra_hls[1].first)
       eq(#" test", comp.extra_hls[1].last)
     end)
 
