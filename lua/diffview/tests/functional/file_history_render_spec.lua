@@ -347,7 +347,7 @@ describe("file_history_render", function()
       eq("DiffviewCommitLocalOnly", render_subject_hl(entry, false))
     end)
 
-    it("layers DiffviewFilePanelSelected on top of the ref-aware base when selected", function()
+    it("layers DiffviewCommitSelected on top of the ref-aware base when selected", function()
       local conf = config.get_config()
       conf.file_history_panel.subject_highlight = "ref_aware"
       config.setup(conf)
@@ -365,16 +365,17 @@ describe("file_history_render", function()
       eq(" test", comp.lines[1][1].text)
 
       -- The selected highlight is layered over the subject's byte range, so
-      -- the user can customize `DiffviewFilePanelSelected` to bg-only and
-      -- still see the pushed/unpushed colour. The leading separator space is
+      -- the user can customize `DiffviewCommitSelected` (e.g. with a bg)
+      -- without affecting the active filename's colour, which is controlled
+      -- by `DiffviewFilePanelSelected`. The leading separator space is
       -- excluded so a bg customization doesn't bleed into the gap.
       eq(1, #comp.extra_hls)
-      eq("DiffviewFilePanelSelected", comp.extra_hls[1].group)
+      eq("DiffviewCommitSelected", comp.extra_hls[1].group)
       eq(#" ", comp.extra_hls[1].first)
       eq(#" test", comp.extra_hls[1].last)
     end)
 
-    it("does not layer DiffviewFilePanelSelected when entry is not selected", function()
+    it("does not layer DiffviewCommitSelected when entry is not selected", function()
       local conf = config.get_config()
       conf.file_history_panel.subject_highlight = "ref_aware"
       config.setup(conf)
