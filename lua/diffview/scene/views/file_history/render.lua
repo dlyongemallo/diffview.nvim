@@ -199,13 +199,11 @@ local formatters = {
     local text = " " .. subject
     comp:add_text(text, base_hl)
 
-    -- Layer the commit-selected highlight on top of the ref-aware base so
-    -- users who customize `DiffviewCommitSelected` to define only a
-    -- background still see the pushed/unpushed foreground. With default
-    -- highlight groups (both foreground-only) the layered group wins,
-    -- matching prior behaviour. `DiffviewCommitSelected` is distinct from
-    -- `DiffviewFilePanelSelected` (the active-filename colour) so each can
-    -- be restyled without affecting the other.
+    -- Layer the commit-selected highlight on top of the ref-aware base. The
+    -- default group is bold-only so the pushed/unpushed foreground shows
+    -- through; users can customize `DiffviewCommitSelected` (e.g. with a
+    -- background) without affecting the active-filename colour, which is
+    -- controlled by `DiffviewFilePanelSelected`.
     -- The leading separator space is excluded from the range so a custom
     -- background on `DiffviewCommitSelected` doesn't bleed into the gap
     -- between columns.
