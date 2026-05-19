@@ -604,6 +604,50 @@ function PathLib:readable(path)
   return false
 end
 
+---Recursively enumerate regular files under `dir`, returning their paths
+---relative to `dir` using `self.sep`. Directories are descended into;
+---symlinks are not followed. Returns an empty table when `dir` is not a
+---readable directory.
+---
+---`uv.fs_scandir_next` may report `nil`/`"unknown"` for `ftype` on
+---filesystems that don't expose `d_type` (XFS without `ftype=1`, some NFS
+---mounts). Falling back to `uv.fs_lstat` (not `fs_stat`) keeps such entries
+---visible without following symlinks, so a symlinked directory -- or
+---symlink cycle -- doesn't cause out-of-tree traversal or stack overflow.
+---@param dir string
+---@return string[]
+function PathLib:files_under(dir)
+  local out = {}
+  local sep = self.sep
+
+  local function walk(absdir, prefix)
+    local fd = uv.fs_scandir(absdir)
+    if not fd then
+      return
+    end
+    while true do
+      local name, ftype = uv.fs_scandir_next(fd)
+      if not name then
+        break
+      end
+      local rel = prefix == "" and name or prefix .. sep .. name
+      local abs = absdir .. sep .. name
+      if not ftype or ftype == "unknown" then
+        local st = uv.fs_lstat(abs)
+        ftype = st and st.type
+      end
+      if ftype == "directory" then
+        walk(abs, rel)
+      elseif ftype == "file" then
+        out[#out + 1] = rel
+      end
+    end
+  end
+
+  walk(dir, "")
+  return out
+end
+
 ---@class PathLib.touch.Opt
 ---@field mode? integer
 ---@field parents? boolean
