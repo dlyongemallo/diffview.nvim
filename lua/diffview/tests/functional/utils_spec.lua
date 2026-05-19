@@ -214,3 +214,105 @@ describe("diffview.utils.str_pad wrappers", function()
     eq(" ab  ", utils.str_center_pad("ab", 5))
   end)
 end)
+
+describe("diffview.utils.set_local list-like remove", function()
+  -- Window-local `winhighlight` is the canonical list-like option that the
+  -- gsub-based remove path is meant to handle. Each test seeds the option
+  -- directly, runs `set_local` with `method = "remove"`, then reads back the
+  -- resulting value via `vim.wo`.
+
+  local winid
+
+  before_each(function()
+    winid = vim.api.nvim_get_current_win()
+    vim.wo[winid].winhighlight = ""
+  end)
+
+  after_each(function()
+    vim.wo[winid].winhighlight = ""
+  end)
+
+  it("removes a leading block and consumes its trailing comma", function()
+    -- Regression: previously the trailing comma was left behind, producing a
+    -- malformed `winhighlight` like ",Normal:User".
+    vim.wo[winid].winhighlight = "DiffAdd:DiffviewDiffAdd,Normal:User"
+    utils.set_local(winid, {
+      winhighlight = {
+        "DiffAdd:DiffviewDiffAdd",
+        opt = { method = "remove" },
+      },
+    })
+    eq("Normal:User", vim.wo[winid].winhighlight)
+  end)
+
+  it("removes a trailing block and consumes its leading comma", function()
+    vim.wo[winid].winhighlight = "Normal:User,DiffAdd:DiffviewDiffAdd"
+    utils.set_local(winid, {
+      winhighlight = {
+        "DiffAdd:DiffviewDiffAdd",
+        opt = { method = "remove" },
+      },
+    })
+    eq("Normal:User", vim.wo[winid].winhighlight)
+  end)
+
+  it("removes a middle block without doubling separators", function()
+    vim.wo[winid].winhighlight = "Normal:User,DiffAdd:DiffviewDiffAdd,CursorLine:UserCl"
+    utils.set_local(winid, {
+      winhighlight = {
+        "DiffAdd:DiffviewDiffAdd",
+        opt = { method = "remove" },
+      },
+    })
+    eq("Normal:User,CursorLine:UserCl", vim.wo[winid].winhighlight)
+  end)
+
+  it("removes a multi-entry block prepended ahead of user entries", function()
+    -- Mirrors the `Diff1Raw` flow: `vcs.File` prepends a block, the view then
+    -- removes the same block. The result must keep the user's entries intact.
+    vim.wo[winid].winhighlight = "DiffAdd:DiffviewDiffAdd,DiffDelete:DiffviewDiffDelete,Normal:User"
+    utils.set_local(winid, {
+      winhighlight = {
+        "DiffAdd:DiffviewDiffAdd",
+        "DiffDelete:DiffviewDiffDelete",
+        opt = { method = "remove" },
+      },
+    })
+    eq("Normal:User", vim.wo[winid].winhighlight)
+  end)
+
+  it("clears the option when the removed block is the only entry", function()
+    vim.wo[winid].winhighlight = "DiffAdd:DiffviewDiffAdd"
+    utils.set_local(winid, {
+      winhighlight = {
+        "DiffAdd:DiffviewDiffAdd",
+        opt = { method = "remove" },
+      },
+    })
+    eq("", vim.wo[winid].winhighlight)
+  end)
+
+  it("is a no-op when the value is absent", function()
+    vim.wo[winid].winhighlight = "Normal:User"
+    utils.set_local(winid, {
+      winhighlight = {
+        "DiffAdd:DiffviewDiffAdd",
+        opt = { method = "remove" },
+      },
+    })
+    eq("Normal:User", vim.wo[winid].winhighlight)
+  end)
+
+  it("does not corrupt entries that share a prefix with the removed value", function()
+    -- Regression: substring matching used to strip `DiffDelete:DiffviewDiffDelete`
+    -- out of `DiffDelete:DiffviewDiffDeleteDim`, leaving a stray `Dim` behind.
+    vim.wo[winid].winhighlight = "DiffDelete:DiffviewDiffDeleteDim,Normal:User"
+    utils.set_local(winid, {
+      winhighlight = {
+        "DiffDelete:DiffviewDiffDelete",
+        opt = { method = "remove" },
+      },
+    })
+    eq("DiffDelete:DiffviewDiffDeleteDim,Normal:User", vim.wo[winid].winhighlight)
+  end)
+end)

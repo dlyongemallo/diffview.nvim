@@ -196,10 +196,12 @@ Window.open_file = async.void(function(self)
   end
 
   -- Apply the configured foldlevel before `_save_winopts` so the saved
-  -- value covers the key we're about to override. Always set it, even
-  -- when the incoming winopts omit the key, so a custom `winopts` table
-  -- cannot silently drop the user's configured value.
-  if self.file.winopts then
+  -- value covers the key we're about to override. Scope this to diff
+  -- buffers (where `diff` is not explicitly false), matching the
+  -- documented purpose of `view.foldlevel`; non-diff layouts like
+  -- `diff1_raw` opt out via `diff = false` and supply their own
+  -- foldlevel via the layout winopts.
+  if self.file.winopts and self.file.winopts.diff ~= false then
     self.file.winopts.foldlevel = conf.view.foldlevel
   end
 

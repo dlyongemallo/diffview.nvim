@@ -266,6 +266,40 @@ describe("diffview.scene.window", function()
         vim.api.nvim_buf_delete(bufnr, { force = true })
       end)
     )
+
+    it(
+      "preserves the layout's `foldlevel` for non-diff windows (`diff = false`)",
+      helpers.async_test(function()
+        -- `diff1_raw` opens the buffer as a plain file, so the user's
+        -- `view.foldlevel` (which targets diff buffers) must not clobber
+        -- the layout's high foldlevel.
+        config.setup({ view = { foldlevel = 0 } })
+
+        local adapter = mock_adapter()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local win, file = make_window(adapter)
+        file.bufnr = bufnr
+        file.winopts = {
+          diff = false,
+          scrollbind = false,
+          cursorbind = false,
+          foldmethod = "manual",
+          foldlevel = 99,
+        }
+        win.parent = stub_parent()
+
+        async.await(win:open_file())
+
+        assert.equals(99, vim.wo[win.id].foldlevel)
+
+        if vim.api.nvim_win_is_valid(test_winid) then
+          vim.api.nvim_win_close(test_winid, true)
+        end
+        test_winid = nil
+        Window.winopt_store[bufnr] = nil
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end)
+    )
   end)
 
   it(

@@ -2,6 +2,7 @@ local async = require("diffview.async")
 local lazy = require("diffview.lazy")
 
 local Diff1 = lazy.access("diffview.scene.layouts.diff_1", "Diff1") ---@type Diff1|LazyModule
+local Diff1Raw = lazy.access("diffview.scene.layouts.diff_1_raw", "Diff1Raw") ---@type Diff1Raw|LazyModule
 local Diff2 = lazy.access("diffview.scene.layouts.diff_2", "Diff2") ---@type Diff2|LazyModule
 local Diff3 = lazy.access("diffview.scene.layouts.diff_3", "Diff3") ---@type Diff3|LazyModule
 local Diff4 = lazy.access("diffview.scene.layouts.diff_4", "Diff4") ---@type Diff4|LazyModule
@@ -35,6 +36,31 @@ function StandardView:init(opt)
   self.winopts = opt.winopts
     or {
       diff1 = { a = {} },
+      -- Force `diff` and diff folding off for Diff1Raw's single window,
+      -- and drop only the diff remaps that `vcs.File` prepended so the
+      -- buffer reads like a normal file without clobbering any other
+      -- winhl entries the user inherited from the tab/window (#515).
+      -- Scroll/cursor binding are irrelevant with only one window, but
+      -- explicit `false` avoids inheriting stale binding state when the
+      -- layout class swaps mid-session.
+      diff1_raw = {
+        b = {
+          diff = false,
+          scrollbind = false,
+          cursorbind = false,
+          foldmethod = "manual",
+          foldenable = true,
+          foldcolumn = "0",
+          foldlevel = 99,
+          winhl = {
+            "DiffAdd:DiffviewDiffAdd",
+            "DiffDelete:DiffviewDiffDelete",
+            "DiffChange:DiffviewDiffChange",
+            "DiffText:DiffviewDiffText",
+            opt = { method = "remove" },
+          },
+        },
+      },
       diff2 = { a = {}, b = {} },
       diff3 = { a = {}, b = {}, c = {} },
       diff4 = { a = {}, b = {}, c = {}, d = {} },
@@ -154,7 +180,10 @@ end
 StandardView.use_entry = async.void(function(self, entry)
   local layout_key
 
-  if entry.layout:instanceof(Diff1.__get()) then
+  -- Check Diff1Raw before Diff1 since it's a subclass.
+  if entry.layout:instanceof(Diff1Raw.__get()) then
+    layout_key = "diff1_raw"
+  elseif entry.layout:instanceof(Diff1.__get()) then
     layout_key = "diff1"
   elseif entry.layout:instanceof(Diff2.__get()) then
     layout_key = "diff2"
