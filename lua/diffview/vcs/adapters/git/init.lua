@@ -971,10 +971,10 @@ GitAdapter.file_history_worker = async.void(function(self, out_stream, opt)
   -- from any remote ref. Multi-file `-L` (different paths across specs) is
   -- non-single-file: skip the precompute since a path-less query would defeat
   -- the requested scope.
-  -- Also skipped for repo-wide history (no path args): a path-unrestricted
-  -- `git rev-list --remotes` enumerates every commit reachable from any remote
-  -- ref, which can be slow and memory-hungry on large repos. The
-  -- decoration-based fallback in `LogEntry` still flags remote tips.
+  -- For repo-wide history (no path args) we still precompute via
+  -- `git rev-list --remotes --`, traversing every commit reachable from any
+  -- remote ref. This is cheap on typical repos; users on pathologically large
+  -- repos can opt out with `subject_highlight = "plain"`.
   -- `pushed_paths_seen` lets `fh_extend_pushed_set` (called from the parse
   -- functions when a `--follow` rename is detected) avoid requerying paths
   -- already covered by the initial computation.
@@ -987,7 +987,7 @@ GitAdapter.file_history_worker = async.void(function(self, out_stream, opt)
       pushed_paths = state.path_args
     end
 
-    if pushed_paths and #pushed_paths > 0 then
+    if pushed_paths then
       state.pushed_set = self:fh_compute_pushed_set(pushed_paths)
       if state.pushed_set then
         state.pushed_paths_seen = {}
