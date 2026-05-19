@@ -199,17 +199,20 @@ local formatters = {
     local text = " " .. subject
     comp:add_text(text, base_hl)
 
-    -- Layer the selected highlight on top of the ref-aware base so users who
-    -- customize `DiffviewFilePanelSelected` to define only a background still
-    -- see the pushed/unpushed foreground. With default highlight groups (both
-    -- foreground-only) the layered group wins, matching prior behaviour.
+    -- Layer the commit-selected highlight on top of the ref-aware base so
+    -- users who customize `DiffviewCommitSelected` to define only a
+    -- background still see the pushed/unpushed foreground. With default
+    -- highlight groups (both foreground-only) the layered group wins,
+    -- matching prior behaviour. `DiffviewCommitSelected` is distinct from
+    -- `DiffviewFilePanelSelected` (the active-filename colour) so each can
+    -- be restyled without affecting the other.
     -- The leading separator space is excluded from the range so a custom
-    -- background on `DiffviewFilePanelSelected` doesn't bleed into the gap
+    -- background on `DiffviewCommitSelected` doesn't bleed into the gap
     -- between columns.
     if ctx.panel.cur_item[1] == entry then
       local end_col = #comp.line_buffer
       local start_col = end_col - #subject
-      comp:add_hl("DiffviewFilePanelSelected", #comp.lines, start_col, end_col)
+      comp:add_hl("DiffviewCommitSelected", #comp.lines, start_col, end_col)
     end
   end,
 

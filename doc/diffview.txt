@@ -1034,12 +1034,15 @@ file_history_panel                              *diffview-config-file_history_pa
                 remote-tracking ref (pushed) and `DiffviewCommitLocalOnly`
                 for commits that are not (unpushed). `"plain"` uses a
                 single colour for all.
-                On the selected commit `DiffviewFilePanelSelected` is
+                On the selected commit `DiffviewCommitSelected` is
                 layered on top of the ref-aware highlight; with the
                 default (foreground-only) groups the selected colour
-                wins. To see the pushed/unpushed colour at the same time
-                as the selection marker, link `DiffviewFilePanelSelected`
-                to a background-only highlight, e.g. `Visual`.
+                wins. To see the pushed/unpushed colour at the same
+                time as the selection marker, link
+                `DiffviewCommitSelected` to a background-only
+                highlight, e.g. `Visual`. This is separate from
+                `DiffviewFilePanelSelected`, which governs the active
+                filename colour.
                 Default: `"ref_aware"`
 
             {commit_format} (string[])

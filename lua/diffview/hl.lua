@@ -409,6 +409,7 @@ M.hl_links = {
   FilePanelRootPath = "DiffviewFilePanelTitle",
   FilePanelFileName = "Normal",
   FilePanelSelected = "Type",
+  CommitSelected = "Type",
   FilePanelPath = "Comment",
   FilePanelInsertions = "diffAdded",
   FilePanelDeletions = "diffRemoved",
