@@ -391,6 +391,8 @@ function M.get_hl_groups()
     FilePanelTitle = { fg = M.get_fg("Label") or colors.blue, style = "bold" },
     FilePanelCounter = { fg = M.get_fg("Identifier") or colors.purple, style = "bold" },
     -- FilePanelFileName is linked to Normal in hl_links.
+    -- FilePanelSelected (active filename) is linked to `Type` in hl_links.
+    CommitSelected = { style = "bold" },
     Dim1 = { fg = M.get_fg("Comment") or colors.white },
     Primary = { fg = M.get_fg("Function") or "Purple" },
     Secondary = { fg = M.get_fg("String") or "Orange" },
@@ -409,7 +411,6 @@ M.hl_links = {
   FilePanelRootPath = "DiffviewFilePanelTitle",
   FilePanelFileName = "Normal",
   FilePanelSelected = "Type",
-  CommitSelected = "Type",
   FilePanelPath = "Comment",
   FilePanelInsertions = "diffAdded",
   FilePanelDeletions = "diffRemoved",
