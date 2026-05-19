@@ -203,9 +203,12 @@ local formatters = {
     -- customize `DiffviewFilePanelSelected` to define only a background still
     -- see the pushed/unpushed foreground. With default highlight groups (both
     -- foreground-only) the layered group wins, matching prior behaviour.
+    -- The leading separator space is excluded from the range so a custom
+    -- background on `DiffviewFilePanelSelected` doesn't bleed into the gap
+    -- between columns.
     if ctx.panel.cur_item[1] == entry then
       local end_col = #comp.line_buffer
-      local start_col = end_col - #text
+      local start_col = end_col - #subject
       comp:add_hl("DiffviewFilePanelSelected", #comp.lines, start_col, end_col)
     end
   end,
