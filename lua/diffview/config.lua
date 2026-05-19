@@ -501,11 +501,13 @@ M.defaults = {
     ---@class DiffviewFileHistoryLogOptions
     ---@field git ConfigLogOptions
     ---@field hg ConfigLogOptions
+    ---@field jj ConfigLogOptions
     ---@field p4 ConfigLogOptions
 
     ---@class DiffviewFileHistoryLogOptions.user
     ---@field git? ConfigLogOptions.user Log options for git.
     ---@field hg? ConfigLogOptions.user Log options for hg.
+    ---@field jj? ConfigLogOptions.user Log options for Jujutsu.
     ---@field p4? ConfigLogOptions.user Log options for Perforce.
 
     ---@class ConfigLogOptions
@@ -528,6 +530,11 @@ M.defaults = {
       },
       ---@type ConfigLogOptions.user
       hg = {
+        single_file = {},
+        multi_file = {},
+      },
+      ---@type ConfigLogOptions.user
+      jj = {
         single_file = {},
         multi_file = {},
       },
@@ -764,7 +771,13 @@ M._config = M.defaults
 ---@field exclude? string
 ---@field path_args string[]
 
----@alias LogOptions GitLogOptions|HgLogOptions
+---@class JjLogOptions
+---@field limit integer
+---@field reversed boolean
+---@field revisions? string
+---@field path_args string[]
+
+---@alias LogOptions GitLogOptions|HgLogOptions|JjLogOptions
 
 ---@class GitLogOptions.user
 ---@field follow? boolean
@@ -805,7 +818,13 @@ M._config = M.defaults
 ---@field exclude? string
 ---@field path_args? string[]
 
----@alias LogOptions.user GitLogOptions.user|HgLogOptions.user
+---@class JjLogOptions.user
+---@field limit? integer
+---@field reversed? boolean
+---@field revisions? string
+---@field path_args? string[]
+
+---@alias LogOptions.user GitLogOptions.user|HgLogOptions.user|JjLogOptions.user
 
 M.log_option_defaults = {
   ---@type GitLogOptions
@@ -844,6 +863,13 @@ M.log_option_defaults = {
     exclude = nil,
     path_args = {},
   },
+  ---@type JjLogOptions
+  jj = {
+    limit = 256,
+    reversed = false,
+    revisions = nil,
+    path_args = {},
+  },
 }
 
 ---@return DiffviewConfig
@@ -856,10 +882,11 @@ function M.get_config()
 end
 
 ---@param single_file boolean
----@param t GitLogOptions|HgLogOptions
----@param vcs "git"|"hg"|"p4" # P4 reuses the `HgLogOptions` schema.
----@return GitLogOptions|HgLogOptions
+---@param t? LogOptions|LogOptions.user # Optional overrides; defaults to `{}`. The returned table is a deep copy callers may mutate safely.
+---@param vcs "git"|"hg"|"jj"|"p4" # P4 reuses the `HgLogOptions` schema.
+---@return LogOptions
 function M.get_log_options(single_file, t, vcs)
+  t = t or {}
   local log_options
 
   if single_file then
@@ -868,13 +895,11 @@ function M.get_log_options(single_file, t, vcs)
     log_options = M._config.file_history_panel.log_options[vcs].multi_file
   end
 
-  if t then
-    log_options = vim.tbl_extend("force", log_options, t)
+  log_options = vim.tbl_extend("force", utils.tbl_deep_clone(log_options), t)
 
-    for k, _ in pairs(log_options) do
-      if t[k] == "" then
-        log_options[k] = nil
-      end
+  for k, _ in pairs(log_options) do
+    if t[k] == "" then
+      log_options[k] = nil
     end
   end
 
@@ -1251,9 +1276,9 @@ function M.setup(user_config)
   end
 
   for _, name in ipairs({ "single_file", "multi_file" }) do
-    for _, vcs in ipairs({ "git", "hg" }) do
+    for _, vcs in ipairs({ "git", "hg", "jj" }) do
       local t = M._config.file_history_panel.log_options[vcs]
-      t[name] = vim.tbl_extend("force", M.log_option_defaults[vcs], t[name])
+      t[name] = vim.tbl_extend("force", utils.tbl_deep_clone(M.log_option_defaults[vcs]), t[name])
       for k, _ in pairs(t[name]) do
         if t[name][k] == "" then
           t[name][k] = nil

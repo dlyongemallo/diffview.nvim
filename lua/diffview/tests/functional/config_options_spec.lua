@@ -255,3 +255,98 @@ describe("view.inline.deletion_treesitter", function()
     assert.equals(true, conf.view.inline.deletion_treesitter)
   end)
 end)
+
+describe("file_history_panel.log_options.jj", function()
+  local original
+
+  before_each(function()
+    original = vim.deepcopy(config.get_config())
+  end)
+
+  after_each(function()
+    config.setup(original)
+  end)
+
+  it("exposes a jj sub-table with single_file and multi_file slots", function()
+    local conf = setup_with({})
+    local jj = conf.file_history_panel.log_options.jj
+    assert.is_table(jj)
+    assert.is_table(jj.single_file)
+    assert.is_table(jj.multi_file)
+  end)
+
+  it("merges JjLogOptions defaults into empty single_file/multi_file", function()
+    local conf = setup_with({})
+    local defaults = require("diffview.config").log_option_defaults.jj
+    assert.equals(defaults.limit, conf.file_history_panel.log_options.jj.single_file.limit)
+    assert.equals(defaults.limit, conf.file_history_panel.log_options.jj.multi_file.limit)
+    assert.equals(defaults.reversed, conf.file_history_panel.log_options.jj.single_file.reversed)
+  end)
+
+  it("preserves user overrides while filling in missing defaults", function()
+    local conf = setup_with({
+      file_history_panel = {
+        log_options = {
+          jj = {
+            single_file = { limit = 100, revisions = "main..@" },
+          },
+        },
+      },
+    })
+    local sf = conf.file_history_panel.log_options.jj.single_file
+    assert.equals(100, sf.limit) -- user value preserved
+    assert.equals("main..@", sf.revisions) -- user value preserved
+    assert.equals(false, sf.reversed) -- default filled in
+  end)
+
+  it("get_log_options returns merged single_file options for jj", function()
+    setup_with({
+      file_history_panel = {
+        log_options = {
+          jj = { single_file = { limit = 42 } },
+        },
+      },
+    })
+    local opts = config.get_log_options(true, {}, "jj")
+    assert.equals(42, opts.limit)
+    assert.equals(false, opts.reversed)
+  end)
+
+  it("get_log_options merges per-call overrides on top of config", function()
+    setup_with({
+      file_history_panel = {
+        log_options = {
+          jj = { multi_file = { limit = 50 } },
+        },
+      },
+    })
+    local opts = config.get_log_options(false, { limit = 7 }, "jj")
+    assert.equals(7, opts.limit) -- call-site wins over config
+  end)
+
+  it("get_log_options returns a deep copy callers can mutate", function()
+    setup_with({})
+    local opts = config.get_log_options(true, {}, "jj")
+    table.insert(opts.path_args, "scratch")
+    local conf = config.get_config()
+    -- The stored defaults must not have been mutated through the alias.
+    assert.equals(0, #conf.file_history_panel.log_options.jj.single_file.path_args)
+  end)
+
+  it("get_log_options tolerates a nil overrides table", function()
+    setup_with({})
+    local opts = config.get_log_options(true, nil, "jj")
+    assert.is_table(opts)
+    assert.equals(256, opts.limit)
+  end)
+
+  it("setup gives single_file and multi_file independent list defaults", function()
+    local conf = setup_with({})
+    local sf = conf.file_history_panel.log_options.jj.single_file
+    local mf = conf.file_history_panel.log_options.jj.multi_file
+    -- The shared default `path_args = {}` must not alias across slots or back
+    -- to `log_option_defaults`.
+    assert.is_false(rawequal(sf.path_args, mf.path_args))
+    assert.is_false(rawequal(sf.path_args, config.log_option_defaults.jj.path_args))
+  end)
+end)
