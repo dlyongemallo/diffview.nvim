@@ -2,9 +2,11 @@ local lazy = require("diffview.lazy")
 local oop = require("diffview.oop")
 
 local Diff1 = lazy.access("diffview.scene.layouts.diff_1", "Diff1") ---@type Diff1|LazyModule
+local Diff1Raw = lazy.access("diffview.scene.layouts.diff_1_raw", "Diff1Raw") ---@type Diff1Raw|LazyModule
 local Diff2 = lazy.access("diffview.scene.layouts.diff_2", "Diff2") ---@type Diff2|LazyModule
 local File = lazy.access("diffview.vcs.file", "File") ---@type vcs.File|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
+local config = lazy.require("diffview.config") ---@module "diffview.config"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
 
 local api = vim.api
@@ -280,11 +282,61 @@ end
 ---@field pinned_path? string # Deprecated: when `pinned_b_file` is supplied the layout takes its b-side from that shared File and `pinned_path` is ignored. Retained as a fallback for adapters that haven't been wired to the view's pin_local cache yet.
 ---@field pinned_b_file? vcs.File # The view-owned, shared working-tree `vcs.File` for `pin_local` mode. When set, the layout's b-side reuses this exact instance instead of constructing a fresh one, so identity is preserved across every entry the view ever shows. The instance outlives entry teardown via the layout's `shared_symbols`, and is destroyed by `FileHistoryView:close()`. One carve-out: if the layout's `should_null` says the b-side should render as absent AND the working-tree path no longer exists on disk, the b-side falls back to a one-off nulled file so a status="D" entry doesn't open an empty/editable buffer for a missing path.
 
+---Class-level "is `cls` equal to `target` or a subclass of `target`?". The
+---`instanceof` method on `Object` requires an instance; here we walk the
+---`super_class` chain directly so the check works on raw class tables.
+---@param cls table?
+---@param target table
+---@return boolean
+local function class_descends_from(cls, target)
+  while cls do
+    if cls == target then
+      return true
+    end
+    cls = cls.super_class
+  end
+  return false
+end
+
+---Pick the effective layout class for an entry. Substitutes `Diff1Raw` for a
+---Diff2 when `view.single_pane_for_one_sided` is on and the file's diff is
+---one-sided (status `A`/`?`/`D`). Falls through (returns the input class)
+---when the precondition isn't met, leaving every other layout path untouched.
+---Bails out for pinned-b mode (the view owns the b-side) and for non-Diff2
+---inputs (merge layouts, user-set `diff1_*` layouts, etc.).
+---@param default_class Layout (class)
+---@param opt FileEntry.with_layout.Opt
+---@return Layout (class)
+local function select_layout_for_status(default_class, opt)
+  if not config.get_config().view.single_pane_for_one_sided then
+    return default_class
+  end
+  if opt.pinned_b_file then
+    return default_class
+  end
+  if not vim.tbl_contains({ "A", "?", "D" }, opt.status) then
+    return default_class
+  end
+  if not class_descends_from(default_class, Diff2.__get()) then
+    return default_class
+  end
+  return Diff1Raw.__get()
+end
+
 ---@param layout_class Layout (class)
 ---@param opt FileEntry.with_layout.Opt
 ---@return FileEntry
 function FileEntry.with_layout(layout_class, opt)
   local extra_owned = {}
+  local effective_class = select_layout_for_status(layout_class, opt)
+  local using_raw = effective_class == Diff1Raw.__get()
+  -- For status `D` against a LOCAL/STAGE b-side, Diff2 would null the b-pane.
+  -- Substitute `revs.a` for the b-rev so the single Diff1Raw window shows
+  -- the pre-deletion content instead of being empty.
+  local b_substituted = using_raw
+      and opt.revs.b
+      and try_should_null(Diff2.__get(), opt.revs.b, opt.status, "b")
+    or false
 
   local function create_file(rev, symbol)
     local fallback_for_shared = false
@@ -297,7 +349,7 @@ function FileEntry.with_layout(layout_class, opt)
       -- overlay case (file exists in WT but not in this commit), where
       -- `try_should_null` would also return true but the b-side must
       -- still show the LOCAL file.
-      local null_b = try_should_null(layout_class, rev, opt.status, symbol)
+      local null_b = try_should_null(effective_class, rev, opt.status, symbol)
         and vim.fn.filereadable(opt.pinned_b_file.absolute_path) ~= 1
       if not null_b then
         return opt.pinned_b_file
@@ -318,6 +370,19 @@ function FileEntry.with_layout(layout_class, opt)
       path = opt.path
     end
 
+    -- For Diff1Raw, the windowed b-side is guaranteed non-null (we
+    -- substituted to revs.a when the natural b would have been nulled).
+    -- Unwindowed slots fall back to Diff2's nulled semantics so a
+    -- round-trip via `FileEntry:convert_layout` produces correct flags.
+    local nulled_flag
+    if using_raw and symbol == "b" then
+      nulled_flag = false
+    elseif using_raw then
+      nulled_flag = try_should_null(Diff2.__get(), rev, opt.status, symbol)
+    else
+      nulled_flag = try_should_null(effective_class, rev, opt.status, symbol)
+    end
+
     local file = File({
       adapter = opt.adapter,
       path = path,
@@ -325,7 +390,7 @@ function FileEntry.with_layout(layout_class, opt)
       commit = opt.commit,
       get_data = opt.get_data,
       rev = rev,
-      nulled = utils.sate(opt.nulled, try_should_null(layout_class, rev, opt.status, symbol)),
+      nulled = utils.sate(opt.nulled, nulled_flag),
     }) --[[@as vcs.File ]]
 
     if fallback_for_shared then
@@ -334,6 +399,18 @@ function FileEntry.with_layout(layout_class, opt)
 
     return file
   end
+
+  -- For substituted Diff1Raw, dropping the unwindowed a-side avoids fetching
+  -- the same content twice (the windowed b-side already uses revs.a). The a
+  -- slot is rebuilt on demand by `convert_layout`'s fallback when the user
+  -- cycles back to a Diff2 layout. Use an explicit branch instead of a
+  -- `cond and nil or create_file(...)` ternary, which would always fall
+  -- through to `create_file` because `nil or X == X` in Lua.
+  local a_file
+  if not (using_raw and b_substituted) then
+    a_file = create_file(opt.revs.a, "a")
+  end
+  local b_file = create_file(b_substituted and opt.revs.a or opt.revs.b, "b")
 
   return FileEntry({
     adapter = opt.adapter,
@@ -345,11 +422,12 @@ function FileEntry.with_layout(layout_class, opt)
     commit = opt.commit,
     revs = opt.revs,
     _extra_owned = extra_owned,
-    layout = layout_class({
-      a = create_file(opt.revs.a, "a"),
-      b = create_file(opt.revs.b, "b"),
+    layout = effective_class({
+      a = a_file,
+      b = b_file,
       c = create_file(opt.revs.c, "c"),
       d = create_file(opt.revs.d, "d"),
+      b_substituted = b_substituted,
     }),
   })
 end

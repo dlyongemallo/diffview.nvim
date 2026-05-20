@@ -10,6 +10,7 @@ local Diff1Inline = lazy.access("diffview.scene.layouts.diff_1_inline", "Diff1In
 local Diff1InlinePinned =
   lazy.access("diffview.scene.layouts.diff_1_inline_pinned", "Diff1InlinePinned") ---@type Diff1InlinePinned|LazyModule
 local Diff1Pinned = lazy.access("diffview.scene.layouts.diff_1_pinned", "Diff1Pinned") ---@type Diff1Pinned|LazyModule
+local Diff1Raw = lazy.access("diffview.scene.layouts.diff_1_raw", "Diff1Raw") ---@type Diff1Raw|LazyModule
 local Diff2 = lazy.access("diffview.scene.layouts.diff_2", "Diff2") ---@type Diff2|LazyModule
 local Diff2Hor = lazy.access("diffview.scene.layouts.diff_2_hor", "Diff2Hor") ---@type Diff2Hor|LazyModule
 local Diff2HorPinned = lazy.access("diffview.scene.layouts.diff_2_hor_pinned", "Diff2HorPinned") ---@type Diff2HorPinned|LazyModule
@@ -288,6 +289,7 @@ M.defaults = {
   ---@field merge_tool DiffviewMergeViewTypeConfig
   ---@field file_history DiffviewStandardViewTypeConfig
   ---@field foldlevel integer
+  ---@field single_pane_for_one_sided boolean
   ---@field cycle_layouts DiffviewCycleLayouts
   ---@field inline DiffviewInlineConfig
 
@@ -296,6 +298,7 @@ M.defaults = {
   ---@field merge_tool? DiffviewMergeViewTypeConfig.user Config for conflicted files in diff views during a merge or rebase.
   ---@field file_history? DiffviewStandardViewTypeConfig.user Config for changed files in file history views.
   ---@field foldlevel? integer See `|diffview-config-view.foldlevel|`.
+  ---@field single_pane_for_one_sided? boolean When true, files whose diff is one-sided (status `A`/`?` or `D`) open in a single non-diff window instead of a Diff2 layout with an empty pane. `A`/`?` shows the b-side directly: editable working-tree buffer when b is `LOCAL` (the usual case in diff views), read-only when b is a commit rev (the usual case in file-history views). `D` shows the pre-deletion content from the index/commit in a read-only window. Applies to both diff views and file history views. Has no effect for renames, modifications, or merge conflicts. See `|diffview-config-view.single_pane_for_one_sided|`.
   ---@field cycle_layouts? DiffviewCycleLayouts.user Layouts to cycle through with `cycle_layout`.
   ---@field inline? DiffviewInlineConfig.user Options that apply to the `diff1_inline` layout.
   view = {
@@ -348,6 +351,13 @@ M.defaults = {
     -- Initial 'foldlevel' for diff buffers. Default 0 collapses unchanged
     -- regions; set to a high value (e.g. 99) to keep all folds open.
     foldlevel = 0,
+    -- When true, files whose diff is one-sided (added, untracked, or
+    -- deleted) open in a single non-diff window. Working-tree additions
+    -- and untracked files open as editable buffers backed by the file on
+    -- disk; deletions show the pre-deletion content from the index or
+    -- commit in a single read-only window. Has no effect for renames,
+    -- modifications, or merge conflicts.
+    single_pane_for_one_sided = false,
 
     ---@class DiffviewCycleLayouts
     ---@field default DiffviewStandardLayout[]
@@ -921,6 +931,7 @@ end
 ---       | "diff1_plain_pinned"
 ---       | "diff1_inline"
 ---       | "diff1_inline_pinned"
+---       | "diff1_raw"
 ---       | "diff2_horizontal"
 ---       | "diff2_horizontal_pinned"
 ---       | "diff2_vertical"
@@ -935,6 +946,7 @@ local layout_map = {
   diff1_plain_pinned = Diff1Pinned,
   diff1_inline = Diff1Inline,
   diff1_inline_pinned = Diff1InlinePinned,
+  diff1_raw = Diff1Raw,
   diff2_horizontal = Diff2Hor,
   diff2_horizontal_pinned = Diff2HorPinned,
   diff2_vertical = Diff2Ver,

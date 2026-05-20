@@ -413,7 +413,22 @@ function M.set_local(winids, option_map, opt)
         else
           if o.method == "remove" then
             if is_list_like then
-              vim.opt_local[fullname] = cur_value:gsub(",?" .. vim.pesc(tostring(value)), "")
+              -- Split `cur_value` on commas and drop entries that exactly
+              -- match an entry in `value`. A substring-based `gsub` would
+              -- corrupt entries that share a prefix with `value` (e.g.,
+              -- removing `DiffDelete:DiffviewDiffDelete` from a list that
+              -- also contains `DiffDelete:DiffviewDiffDeleteDim`).
+              local to_remove = {}
+              for entry in tostring(value):gmatch("[^,]+") do
+                to_remove[entry] = true
+              end
+              local kept = {}
+              for entry in cur_value:gmatch("[^,]+") do
+                if not to_remove[entry] then
+                  kept[#kept + 1] = entry
+                end
+              end
+              vim.opt_local[fullname] = table.concat(kept, ",")
             else
               vim.opt_local[fullname]:remove(value)
             end
