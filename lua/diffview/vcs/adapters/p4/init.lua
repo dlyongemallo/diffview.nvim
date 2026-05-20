@@ -298,8 +298,9 @@ function P4Adapter:prepare_fh_options(log_options, single_file)
   if o.limit then
     table.insert(flags, "-m" .. o.limit)
   end
-  -- Add other relevant flags based on HgLogOptions mapping if desired
-  -- if o.user then table.insert(flags, "-u" .. o.user) end -- `p4 changes -u user`
+  if o.user then
+    table.insert(flags, "-u" .. o.user)
+  end
 
   return {
     rev_range = rev_range,
@@ -327,23 +328,17 @@ function P4Adapter:file_history_dry_run(log_opt)
   end
   local description = table.concat(description_parts, ", ")
 
-  -- Command to check: Use 'p4 changes' or 'p4 filelog' with -m1 limit
-  local cmd
-  if single_file then
-    cmd = utils.vec_join(
-      "filelog",
-      "-m1",
-      prepared_opts.flags,
-      prepared_opts.path_args[1] .. (prepared_opts.rev_range or "")
-    )
-  else
-    cmd = utils.vec_join(
-      "changes",
-      "-m1",
-      prepared_opts.flags,
-      (prepared_opts.path_args[1] or "//...") .. (prepared_opts.rev_range or "")
-    )
-  end
+  -- Dry-run is a one-result probe; override the configured limit so we don't
+  -- pass both the user's `-m<n>` and an explicit `-m1`.
+  log_options = utils.tbl_clone(log_options) --[[@as HgLogOptions]]
+  log_options.limit = 1
+  local dry_run_flags = self:prepare_fh_options(log_options, single_file).flags
+
+  -- Probe with `p4 changes` for both single- and multi-file: it matches what
+  -- the worker actually runs and (unlike `p4 filelog`) accepts the `-u` user
+  -- filter, so a configured user doesn't break the dry-run.
+  local path = prepared_opts.path_args[1] or "//..."
+  local cmd = utils.vec_join("changes", dry_run_flags, path .. (prepared_opts.rev_range or ""))
 
   local out, code = self:exec_sync(cmd, {
     cwd = self.ctx.toplevel,

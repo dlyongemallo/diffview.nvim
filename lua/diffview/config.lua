@@ -870,6 +870,17 @@ M.log_option_defaults = {
     revisions = nil,
     path_args = {},
   },
+  ---@type HgLogOptions # P4 reuses the `HgLogOptions` schema; see `P4Adapter.config_key`.
+  p4 = {
+    limit = 256,
+    user = nil,
+    no_merges = false,
+    rev = nil,
+    keyword = nil,
+    include = nil,
+    exclude = nil,
+    path_args = {},
+  },
 }
 
 ---@return DiffviewConfig
@@ -1276,7 +1287,7 @@ function M.setup(user_config)
   end
 
   for _, name in ipairs({ "single_file", "multi_file" }) do
-    for _, vcs in ipairs({ "git", "hg", "jj" }) do
+    for _, vcs in ipairs({ "git", "hg", "jj", "p4" }) do
       local t = M._config.file_history_panel.log_options[vcs]
       t[name] = vim.tbl_extend("force", utils.tbl_deep_clone(M.log_option_defaults[vcs]), t[name])
       for k, _ in pairs(t[name]) do
