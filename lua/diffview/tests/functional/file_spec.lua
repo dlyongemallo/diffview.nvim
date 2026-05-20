@@ -335,4 +335,359 @@ describe("diffview.vcs.file", function()
       )
     end)
   end)
+
+  -- `is_valid()` must require `loaded`, not just a `bufnr`, so that a
+  -- concurrent caller arriving mid-load doesn't proceed with an empty
+  -- placeholder buffer. Concurrent callers on the same File instance
+  -- await the in-flight load via `_loading` and share its outcome.
+  describe("loaded flag and concurrent create_buffer coordination", function()
+    it("starts with loaded=false; flips to true after content is populated", function()
+      local file = File({
+        adapter = {
+          ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
+          is_binary = function()
+            return false
+          end,
+          show = async.wrap(function(_, _, _, callback)
+            callback(nil, { "content" })
+          end),
+        },
+        path = "loaded_initial.txt",
+        kind = "working",
+        rev = GitRev(RevType.COMMIT, "abc1234"),
+      })
+
+      assert.is_false(file.loaded)
+      assert.is_false(file:is_valid())
+
+      async.await(file:create_buffer())
+      assert.is_true(file.loaded)
+      assert.is_true(file:is_valid())
+
+      File.safe_delete_buf(file.bufnr)
+    end)
+
+    it("NULL_FILE is loaded so callers checking is_valid() accept it", function()
+      assert.is_true(File.NULL_FILE.loaded)
+    end)
+
+    it(
+      "concurrent caller waits for the in-flight create_buffer and gets the same bufnr",
+      helpers.async_test(function()
+        local yield_signal = Signal("yield_concurrent")
+        local produce_data_started = Signal("produce_data_started_concurrent")
+        local show_call_count = 0
+
+        local adapter = {
+          ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
+          is_binary = function()
+            return false
+          end,
+          show = async.wrap(function(_, _, _, callback)
+            show_call_count = show_call_count + 1
+            produce_data_started:send()
+            async.await(yield_signal)
+            callback(nil, { "concurrent_line1", "concurrent_line2" })
+          end),
+        }
+
+        local file = File({
+          adapter = adapter,
+          path = "concurrent_load.txt",
+          kind = "working",
+          rev = GitRev(RevType.COMMIT, "abc1234"),
+        })
+
+        -- First caller starts the load. It will yield inside `show`.
+        local first_bufnr, second_bufnr
+        local first_done, second_done = false, false
+        local first_thread = async.void(function()
+          first_bufnr = async.await(file:create_buffer())
+          first_done = true
+        end)
+        first_thread()
+
+        -- Wait until the first caller is mid-load: bufnr created, content
+        -- not yet populated. `is_valid()` must report false here.
+        async.await(produce_data_started)
+        local mid_load_bufnr = file.bufnr
+        assert.is_not_nil(mid_load_bufnr)
+        assert.is_true(vim.api.nvim_buf_is_valid(mid_load_bufnr))
+        assert.is_false(file.loaded)
+        assert.is_false(file:is_valid()) -- the load-not-done guard
+        assert.is_not_nil(file._loading)
+
+        -- Second caller starts mid-load. It should see `_loading` and
+        -- await rather than racing through.
+        local second_thread = async.void(function()
+          second_bufnr = async.await(file:create_buffer())
+          second_done = true
+        end)
+        second_thread()
+        async.await(async.scheduler())
+        assert.is_false(second_done) -- still waiting on the in-flight load
+        assert.equals(1, show_call_count) -- and didn't restart the show job
+
+        -- Release the in-flight load. Both callers settle with the same bufnr.
+        yield_signal:send()
+        vim.wait(2000, function()
+          return first_done and second_done
+        end, 5)
+
+        assert.is_true(first_done)
+        assert.is_true(second_done)
+        assert.equals(mid_load_bufnr, first_bufnr)
+        assert.equals(mid_load_bufnr, second_bufnr)
+        assert.is_true(file.loaded)
+        assert.equals(1, show_call_count) -- exactly one git show, shared
+
+        File.safe_delete_buf(file.bufnr)
+      end)
+    )
+
+    it(
+      "concurrent caller propagates cancellation when the in-flight load is cancelled",
+      helpers.async_test(function()
+        local yield_signal = Signal("yield_cancel")
+        local produce_data_started = Signal("produce_data_started_cancel")
+
+        local adapter = {
+          ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
+          is_binary = function()
+            return false
+          end,
+          show = async.wrap(function(_, _, _, callback)
+            produce_data_started:send()
+            async.await(yield_signal)
+            callback(nil, { "cancel_line" })
+          end),
+        }
+
+        local file = File({
+          adapter = adapter,
+          path = "concurrent_cancel.txt",
+          kind = "working",
+          rev = GitRev(RevType.COMMIT, "abc1234"),
+        })
+
+        local first_ok, first_err
+        local first_thread = async.void(function()
+          first_ok, first_err = async.pawait(file.create_buffer, file)
+        end)
+        first_thread()
+
+        async.await(produce_data_started)
+
+        -- Concurrent caller arrives mid-load.
+        local second_ok, second_err
+        local second_thread = async.void(function()
+          second_ok, second_err = async.pawait(file.create_buffer, file)
+        end)
+        second_thread()
+        async.await(async.scheduler())
+
+        -- Cancel the in-flight load by deactivating the file, then let
+        -- the yielded `show` resume so the first caller hits the
+        -- post-produce_data cancellation branch.
+        file.active = false
+        yield_signal:send()
+
+        vim.wait(2000, function()
+          return first_ok ~= nil and second_ok ~= nil
+        end, 5)
+
+        assert.is_false(first_ok)
+        assert.is_string(first_err)
+        assert.is_not_nil(first_err:find(File.CANCELLED, 1, true))
+
+        -- The second caller must also see the failure, not return a
+        -- half-built bufnr.
+        assert.is_false(second_ok)
+        assert.is_string(second_err)
+        assert.is_not_nil(second_err:find(File.CANCELLED, 1, true))
+        assert.is_false(file.loaded)
+      end)
+    )
+
+    it(
+      "waiter receives the in-flight load's original error message",
+      helpers.async_test(function()
+        local yield_signal = Signal("yield_err")
+        local produce_data_started = Signal("produce_data_started_err")
+        local distinctive_err = "produce_data exploded: something specific"
+
+        local adapter = {
+          ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
+          is_binary = function()
+            return false
+          end,
+          show = async.wrap(function(_, _, _, callback)
+            produce_data_started:send()
+            async.await(yield_signal)
+            callback({ distinctive_err })
+          end),
+        }
+
+        local file = File({
+          adapter = adapter,
+          path = "concurrent_err.txt",
+          kind = "working",
+          rev = GitRev(RevType.COMMIT, "abc1234"),
+        })
+
+        local first_ok, first_err
+        local first_thread = async.void(function()
+          first_ok, first_err = async.pawait(file.create_buffer, file)
+        end)
+        first_thread()
+
+        async.await(produce_data_started)
+
+        local second_ok, second_err
+        local second_thread = async.void(function()
+          second_ok, second_err = async.pawait(file.create_buffer, file)
+        end)
+        second_thread()
+        async.await(async.scheduler())
+
+        yield_signal:send()
+
+        vim.wait(2000, function()
+          return first_ok ~= nil and second_ok ~= nil
+        end, 5)
+
+        assert.is_false(first_ok)
+        assert.is_string(first_err)
+        assert.is_not_nil(first_err:find(distinctive_err, 1, true))
+
+        -- The waiter must see the in-flight load's original message,
+        -- not a generic "Concurrent buffer load failed" placeholder.
+        assert.is_false(second_ok)
+        assert.is_string(second_err)
+        assert.is_not_nil(second_err:find(distinctive_err, 1, true))
+      end)
+    )
+
+    it(
+      "wipes the freshly-created buffer when produce_data fails",
+      helpers.async_test(function()
+        local adapter = {
+          ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
+          is_binary = function()
+            return false
+          end,
+          show = async.wrap(function(_, _, _, callback)
+            callback({ "boom" })
+          end),
+        }
+
+        local file = File({
+          adapter = adapter,
+          path = "produce_data_failure.txt",
+          kind = "working",
+          rev = GitRev(RevType.COMMIT, "abc1234"),
+        })
+
+        local ok, err = async.pawait(file.create_buffer, file)
+
+        assert.is_false(ok)
+        assert.is_string(err)
+        assert.is_not_nil(err:find("boom", 1, true))
+        -- The half-built `diffview://` buffer must not survive: otherwise
+        -- a retry would find it via `find_named_buffer` and short-circuit
+        -- with empty content.
+        assert.is_nil(file.bufnr)
+        assert.is_false(file.loaded)
+      end)
+    )
+
+    it(
+      "errors when find_named_buffer returns an unmarked buffer",
+      helpers.async_test(function()
+        -- Anchor on the production-computed buffer name by letting a
+        -- successful run create it, then deliberately unset the marker
+        -- to simulate a stale placeholder.
+        local rev = GitRev(RevType.COMMIT, "abc1234567")
+        local cwd = vim.uv.cwd()
+        local adapter = {
+          ctx = { toplevel = cwd, dir = cwd },
+          is_binary = function()
+            return false
+          end,
+          show = async.wrap(function(_, _, _, callback)
+            callback(nil, { "first" })
+          end),
+        }
+
+        local first = File({
+          adapter = adapter,
+          path = "unmarked.txt",
+          kind = "working",
+          rev = rev,
+        })
+
+        local bufnr = async.await(first:create_buffer())
+        assert.is_not_nil(bufnr)
+        assert.is_true(vim.b[bufnr].diffview_loaded)
+
+        vim.b[bufnr].diffview_loaded = nil
+
+        local second = File({
+          adapter = adapter,
+          path = "unmarked.txt",
+          kind = "working",
+          rev = rev,
+        })
+
+        local ok, err = async.pawait(second.create_buffer, second)
+        assert.is_false(ok)
+        assert.is_string(err)
+        assert.is_not_nil(err:find("unloaded", 1, true))
+        -- The second File should not have adopted the unmarked buffer.
+        assert.is_nil(second.bufnr)
+        assert.is_false(second.loaded)
+
+        pcall(vim.api.nvim_buf_delete, bufnr, { force = true })
+      end)
+    )
+
+    it(
+      "reuses a marked buffer when a second File resolves to the same fullname",
+      helpers.async_test(function()
+        local rev = GitRev(RevType.COMMIT, "abc1234567")
+        local adapter = {
+          ctx = { toplevel = vim.uv.cwd(), dir = vim.uv.cwd() },
+          is_binary = function()
+            return false
+          end,
+          show = async.wrap(function(_, _, _, callback)
+            callback(nil, { "shared" })
+          end),
+        }
+
+        local first = File({
+          adapter = adapter,
+          path = "shared_loaded.txt",
+          kind = "working",
+          rev = rev,
+        })
+        local first_bufnr = async.await(first:create_buffer())
+        assert.is_not_nil(first_bufnr)
+        assert.is_true(vim.b[first_bufnr].diffview_loaded)
+
+        local second = File({
+          adapter = adapter,
+          path = "shared_loaded.txt",
+          kind = "working",
+          rev = rev,
+        })
+        local second_bufnr = async.await(second:create_buffer())
+
+        assert.equals(first_bufnr, second_bufnr)
+        assert.is_true(second.loaded)
+
+        pcall(vim.api.nvim_buf_delete, first_bufnr, { force = true })
+      end)
+    )
+  end)
 end)
