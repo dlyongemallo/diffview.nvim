@@ -36,6 +36,10 @@ command("DiffviewMergeFiles", function(ctx)
   diffview.merge_files(arg_parser.scan(ctx.args).args)
 end, { nargs = "+", complete = completion })
 
+command("DiffviewDiffDirs", function(ctx)
+  diffview.dir_diff(arg_parser.scan(ctx.args).args)
+end, { nargs = "+", complete = completion })
+
 command("DiffviewFileHistory", function(ctx)
   local range
 

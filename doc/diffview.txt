@@ -197,6 +197,36 @@ COMMANDS                                        *diffview-commands*
             :DiffviewDiffFiles path/to/my\ file.txt path/to/other\ file.txt
 <
 
+                                                *:DiffviewDiffDirs*
+:DiffviewDiffDirs {left} {right} [{output}]
+
+        Opens a diff view comparing two directories on disk, with no VCS
+        involvement. The file panel lists every path that differs between
+        {left} and {right} (in content or existence). Each entry opens a
+        side-by-side diff backed by the on-disk files; saving a buffer
+        writes through to its path.
+
+        When {output} is omitted (2-pane mode), both sides are editable and
+        mirror |:DiffviewDiffFiles| semantics. When {output} is provided
+        (3-pane mode), the left and right sides are read-only references
+        and the middle buffer points at the matching `{output}/{relpath}`
+        file, which is what the user edits.
+
+        This is the integration point for tools like Jujutsu's diff editor
+        (`jj squash -i`, `jj split -i`, `jj diffedit`). Example
+        `~/.config/jj/config.toml`: >toml
+
+            [ui]
+            diff-editor = "diffview"
+
+            [merge-tools.diffview]
+            program = "nvim"
+            edit-args = [
+              "-c", "DiffviewDiffDirs $left $right $output",
+            ]
+<
+        Drop the `$output` argument for 2-pane mode.
+
                                                 *:DiffviewMergeFiles*
 :DiffviewMergeFiles {output} [{base}] {left} {right}
 

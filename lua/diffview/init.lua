@@ -158,6 +158,14 @@ function M.merge_files(args)
   end
 end
 
+---@param args string[]
+function M.dir_diff(args)
+  local view = lib.diffview_dir_diff(args)
+  if view then
+    view:open()
+  end
+end
+
 ---@param tabpage? integer
 ---@param opts? diffview.View.CloseOpts # Forwarded to `view:close`. With
 ---`force = false`, `DiffView` aborts when stage buffers are modified.
@@ -263,6 +271,10 @@ M.completers = {
   ---@param ctx CmdLineContext
   DiffviewMergeFiles = function(ctx)
     return vim.fn.getcompletion(ctx.arg_lead, "file", false)
+  end,
+  ---@param ctx CmdLineContext
+  DiffviewDiffDirs = function(ctx)
+    return vim.fn.getcompletion(ctx.arg_lead, "dir", false)
   end,
   ---@param ctx CmdLineContext
   DiffviewFileHistory = function(ctx)

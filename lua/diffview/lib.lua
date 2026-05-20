@@ -5,6 +5,8 @@ require("diffview.bootstrap")
 
 local DiffView = lazy.access("diffview.scene.views.diff.diff_view", "DiffView") ---@type DiffView|LazyModule
 local FileDiffView = lazy.access("diffview.scene.views.diff.file_diff_view", "FileDiffView") ---@type FileDiffView|LazyModule
+local FileDirDiffView =
+  lazy.access("diffview.scene.views.diff.file_dir_diff_view", "FileDirDiffView") ---@type FileDirDiffView|LazyModule
 local FileMergeView = lazy.access("diffview.scene.views.diff.file_merge_view", "FileMergeView") ---@type FileMergeView|LazyModule
 local FileHistoryView =
   lazy.access("diffview.scene.views.file_history.file_history_view", "FileHistoryView") ---@type FileHistoryView|LazyModule
@@ -313,6 +315,65 @@ function M.diffview_merge_files(args)
 
   table.insert(M.views, v)
   logger:debug("FileMergeView instantiation successful!")
+
+  return v
+end
+
+---Entry point for external diff-editor drivers (jj's `diff-editor`, etc.)
+---that hand the editor two directories plus optionally an editable
+---`$output` directory. Argument order matches jj's documented `$left
+---$right $output` substitution order; omit the third arg for 2-pane mode.
+---@param args string[]
+function M.diffview_dir_diff(args)
+  local argo = arg_parser.parse(args)
+
+  logger:info("[command call] :DiffviewDiffDirs " .. table.concat(args, " "))
+
+  if #argo.args ~= 2 and #argo.args ~= 3 then
+    utils.err("DiffviewDiffDirs requires two or three directory paths: <left> <right> [<output>].")
+    return
+  end
+
+  local left_path = pl:absolute(pl:vim_expand(argo.args[1]))
+  local right_path = pl:absolute(pl:vim_expand(argo.args[2]))
+  local output_path = argo.args[3] and pl:absolute(pl:vim_expand(argo.args[3])) or nil
+
+  for _, p in ipairs({ left_path, right_path, output_path }) do
+    if p and not pl:is_dir(p) then
+      utils.err(("Not a directory: %s"):format(p))
+      return
+    end
+  end
+
+  -- Walk before constructing the view so we can bail out with a clear
+  -- message when the two sides match: an empty `FileDirDiffView` would
+  -- otherwise present an editor with no file panel content, which is
+  -- particularly opaque for external diff-editor drivers like jj.
+  local FileDirDiffViewMod = require("diffview.scene.views.diff.file_dir_diff_view")
+  local diffs = FileDirDiffViewMod.diff_dirs(left_path, right_path)
+  if next(diffs) == nil then
+    utils.info("No differences between the given directories.")
+    return
+  end
+
+  local toplevel = output_path or right_path
+  ---@diagnostic disable-next-line: missing-parameter, param-type-mismatch
+  local adapter = NullAdapter.create({ toplevel = toplevel })
+
+  local v = FileDirDiffView({
+    adapter = adapter,
+    left_path = left_path,
+    right_path = right_path,
+    output_path = output_path,
+    diffs = diffs,
+  })
+
+  if not v:is_valid() then
+    return
+  end
+
+  table.insert(M.views, v)
+  logger:debug("FileDirDiffView instantiation successful!")
 
   return v
 end
