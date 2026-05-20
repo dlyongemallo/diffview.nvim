@@ -434,6 +434,7 @@ M.hl_links = {
   StatusIgnored = "Comment",
   CommitRemoteRef = "Function",
   CommitLocalOnly = "WarningMsg",
+  CommitMerged = "String",
   DiffAdd = "DiffAdd",
   DiffDelete = "DiffDelete",
   DiffChange = "DiffChange",

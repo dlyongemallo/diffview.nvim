@@ -128,7 +128,7 @@ DEFAULT CONFIG                                  *diffview.defaults*
     },
     file_history_panel = {
       stat_style = "number",              -- "number" (e.g. "5, 3"), "bar" (e.g. "| 8 +++++---"), or "both".
-      subject_highlight = "ref_aware",    -- "ref_aware" (colour by pushed/unpushed) or "plain".
+      subject_highlight = "ref_aware",    -- "ref_aware" (pushed vs unpushed), "merge_aware" (adds merged-to-main/master), or "plain".
       -- Ordered list of components to show for each commit entry.
       -- Available: "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date"
       commit_format = { "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date" },

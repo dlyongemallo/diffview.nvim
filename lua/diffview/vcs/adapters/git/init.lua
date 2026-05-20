@@ -879,6 +879,15 @@ end
 ---to colour pushed vs unpushed commits accurately (i.e. not only at the tip
 ---of a remote branch). Returns an empty set if the repository has no
 ---remote-tracking refs, or `nil` if the command fails.
+---
+---Note: this is broader than lazygit's "pushed" check. Lazygit asks whether
+---the commit is reachable from the current branch's configured upstream
+---(`@{u}`); we ask whether it's reachable from any `refs/remotes/*/*`. In
+---a fork-and-upstream workflow that gap is visible: a commit on
+---`refs/remotes/upstream/<branch>` but not yet on your fork's branch tip
+---is "pushed" here but "unpushed" in lazygit. The broader check stays
+---branch-independent (so it works for repo-wide history and detached HEAD)
+---and surfaces "already on `origin/main`" as a useful signal.
 ---@param path_args string[]
 ---@return table<string, true>?
 function GitAdapter:fh_compute_pushed_set(path_args)
@@ -928,6 +937,92 @@ function GitAdapter:fh_extend_pushed_set(state, path)
   end
 end
 
+---Find local and remote-tracking refs that name a "main" branch. Used by the
+---file history view to colour commits reachable from trunk distinctly. Names
+---hard-coded to the conventional set (`main`, `master`); matching remote-
+---tracking refs (e.g. `refs/remotes/origin/main`) are included too so commits
+---that are merged on the remote but not yet pulled locally still count.
+---@return string[]
+function GitAdapter:_find_main_branch_refs()
+  local out, code = self:exec_sync({
+    "for-each-ref",
+    "--format=%(refname)",
+    "refs/heads/main",
+    "refs/heads/master",
+    "refs/remotes/*/main",
+    "refs/remotes/*/master",
+  }, {
+    cwd = self.ctx.toplevel,
+    log_opt = { label = "GitAdapter:_find_main_branch_refs()" },
+  })
+
+  if code ~= 0 then
+    return {}
+  end
+
+  local refs = {}
+  for _, line in ipairs(out) do
+    if #line > 0 then
+      table.insert(refs, line)
+    end
+  end
+  return refs
+end
+
+---Collect the set of commit hashes reachable from any "main" branch ref (see
+---`_find_main_branch_refs`), restricted to commits affecting `path_args`.
+---Used by the file history view to colour commits that have landed on trunk
+---distinctly from commits that are merely pushed. Returns an empty set if no
+---main branch refs exist, or `nil` if the command fails.
+---@param main_refs string[] Refs to traverse from, e.g. as returned by `_find_main_branch_refs`.
+---@param path_args string[]
+---@return table<string, true>?
+function GitAdapter:fh_compute_merged_set(main_refs, path_args)
+  if #main_refs == 0 then
+    return {}
+  end
+
+  local out, code = self:exec_sync(utils.vec_join("rev-list", main_refs, "--", path_args), {
+    cwd = self.ctx.toplevel,
+    log_opt = { label = "GitAdapter:fh_compute_merged_set()" },
+  })
+
+  if code ~= 0 then
+    return nil
+  end
+
+  local set = {}
+  for _, sha in ipairs(out) do
+    if #sha > 0 then
+      set[sha] = true
+    end
+  end
+  return set
+end
+
+---Counterpart to `fh_extend_pushed_set` for the merged set: when a `--follow`
+---rename is detected, top up the merged set with commits that touched the
+---file under its previous name and are reachable from a main branch ref.
+---@param state GitAdapter.FHState
+---@param path string Path the file had before the detected rename.
+function GitAdapter:fh_extend_merged_set(state, path)
+  if not state.merged_set or not state.merged_paths_seen or not state.main_refs then
+    return
+  end
+  if state.merged_paths_seen[path] then
+    return
+  end
+  state.merged_paths_seen[path] = true
+
+  local extra = self:fh_compute_merged_set(state.main_refs, { path })
+  if not extra then
+    return
+  end
+  for sha in pairs(extra) do
+    state.merged_set[sha] = true
+  end
+end
+
 ---@class GitAdapter.FHState
 ---@field path_args string[]
 ---@field log_options GitLogOptions
@@ -937,6 +1032,9 @@ end
 ---@field old_path string?
 ---@field pushed_set? table<string, true> Hashes of commits reachable from any remote-tracking ref. Absent if not computed (e.g. `subject_highlight = "plain"`).
 ---@field pushed_paths_seen? table<string, true> Paths already queried while building `pushed_set`. Used to keep the rename extension (`fh_extend_pushed_set`) idempotent.
+---@field main_refs? string[] Refs (local and remote-tracking) that name a "main" branch, resolved once at worker start. Only set in `merge_aware` mode.
+---@field merged_set? table<string, true> Hashes of commits reachable from any main branch ref. Absent unless `subject_highlight = "merge_aware"`.
+---@field merged_paths_seen? table<string, true> Paths already queried while building `merged_set`; idempotency mirror of `pushed_paths_seen`.
 
 ---@param self GitAdapter
 ---@param out_stream AsyncListStream
@@ -978,7 +1076,11 @@ GitAdapter.file_history_worker = async.void(function(self, out_stream, opt)
   -- `pushed_paths_seen` lets `fh_extend_pushed_set` (called from the parse
   -- functions when a `--follow` rename is detected) avoid requerying paths
   -- already covered by the initial computation.
-  if config.get_config().file_history_panel.subject_highlight == "ref_aware" then
+  -- `merge_aware` adds a third state for commits reachable from a "main"
+  -- branch (see `_find_main_branch_refs`). It needs both the pushed and
+  -- merged sets, so it implies the `ref_aware` precompute too.
+  local subj_hl = config.get_config().file_history_panel.subject_highlight
+  if subj_hl == "ref_aware" or subj_hl == "merge_aware" then
     local pushed_paths
     if is_trace then
       local scope = self:history_scope(state.path_args, log_options)
@@ -993,6 +1095,17 @@ GitAdapter.file_history_worker = async.void(function(self, out_stream, opt)
         state.pushed_paths_seen = {}
         for _, p in ipairs(pushed_paths) do
           state.pushed_paths_seen[p] = true
+        end
+      end
+
+      if subj_hl == "merge_aware" then
+        state.main_refs = self:_find_main_branch_refs()
+        state.merged_set = self:fh_compute_merged_set(state.main_refs, pushed_paths)
+        if state.merged_set then
+          state.merged_paths_seen = {}
+          for _, p in ipairs(pushed_paths) do
+            state.merged_paths_seen[p] = true
+          end
         end
       end
     end
@@ -1261,6 +1374,7 @@ function GitAdapter:parse_fh_data(data, commit, state)
       -- under its previous name. Those commits aren't in the initial pushed
       -- set (computed for the current path only), so extend the set now.
       self:fh_extend_pushed_set(state, entry.oldname)
+      self:fh_extend_merged_set(state, entry.oldname)
     end
 
     local rev_a, rev_b
@@ -1302,6 +1416,12 @@ function GitAdapter:parse_fh_data(data, commit, state)
   if state.pushed_set then
     is_pushed = state.pushed_set[commit.hash] == true
   end
+  -- `is_merged` has no decoration-based fallback, so we just pass `nil`
+  -- when the set wasn't computed and let `LogEntry` default it to false.
+  local is_merged
+  if state.merged_set then
+    is_merged = state.merged_set[commit.hash] == true
+  end
 
   if files[1] then
     return true,
@@ -1311,6 +1431,7 @@ function GitAdapter:parse_fh_data(data, commit, state)
         files = files,
         single_file = state.single_file,
         is_pushed = is_pushed,
+        is_merged = is_merged,
       })
   end
 
@@ -1327,6 +1448,7 @@ function GitAdapter:parse_fh_data(data, commit, state)
       commit = commit,
       single_file = state.single_file,
       is_pushed = is_pushed,
+      is_merged = is_merged,
     })
 end
 
@@ -1348,6 +1470,7 @@ function GitAdapter:parse_fh_line_trace_data(data, commit, state)
       -- and so streams pre-rename commits too. The initial pushed set lacks
       -- those because it was queried with the current path only.
       self:fh_extend_pushed_set(state, oldpath)
+      self:fh_extend_merged_set(state, oldpath)
     end
 
     local rev_a, rev_b
@@ -1386,6 +1509,10 @@ function GitAdapter:parse_fh_line_trace_data(data, commit, state)
   if state.pushed_set then
     is_pushed = state.pushed_set[commit.hash] == true
   end
+  local is_merged
+  if state.merged_set then
+    is_merged = state.merged_set[commit.hash] == true
+  end
 
   if files[1] then
     return true,
@@ -1395,6 +1522,7 @@ function GitAdapter:parse_fh_line_trace_data(data, commit, state)
         files = files,
         single_file = state.single_file,
         is_pushed = is_pushed,
+        is_merged = is_merged,
       })
   end
 

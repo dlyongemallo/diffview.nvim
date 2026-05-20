@@ -190,7 +190,16 @@ local formatters = {
     end
 
     local base_hl
-    if ctx.conf.file_history_panel.subject_highlight == "ref_aware" then
+    local subj_hl = ctx.conf.file_history_panel.subject_highlight
+    if subj_hl == "merge_aware" then
+      if entry.is_merged then
+        base_hl = "DiffviewCommitMerged"
+      elseif entry.is_pushed then
+        base_hl = "DiffviewCommitRemoteRef"
+      else
+        base_hl = "DiffviewCommitLocalOnly"
+      end
+    elseif subj_hl == "ref_aware" then
       base_hl = entry.is_pushed and "DiffviewCommitRemoteRef" or "DiffviewCommitLocalOnly"
     else
       base_hl = "DiffviewFilePanelFileName"
@@ -199,11 +208,11 @@ local formatters = {
     local text = " " .. subject
     comp:add_text(text, base_hl)
 
-    -- Layer the commit-selected highlight on top of the ref-aware base. The
-    -- default group is bold-only so the pushed/unpushed foreground shows
-    -- through; users can customize `DiffviewCommitSelected` (e.g. with a
-    -- background) without affecting the active-filename colour, which is
-    -- controlled by `DiffviewFilePanelSelected`.
+    -- Layer the commit-selected highlight on top of the subject base. The
+    -- default group is bold-only so the base foreground shows through;
+    -- users can customize `DiffviewCommitSelected` (e.g. with a background)
+    -- without affecting the active-filename colour, which is controlled by
+    -- `DiffviewFilePanelSelected`.
     -- The leading separator space is excluded from the range so a custom
     -- background on `DiffviewCommitSelected` doesn't bleed into the gap
     -- between columns.
