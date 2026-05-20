@@ -197,6 +197,40 @@ COMMANDS                                        *diffview-commands*
             :DiffviewDiffFiles path/to/my\ file.txt path/to/other\ file.txt
 <
 
+                                                *:DiffviewMergeFiles*
+:DiffviewMergeFiles {output} [{base}] {left} {right}
+
+        Opens a 3-way or 4-way merge view backed by on-disk file paths,
+        suitable for use as an external merge tool. Unlike |:DiffviewOpen|,
+        this command does not require a VCS repository and does not query
+        any VCS state: every window's content comes straight from disk.
+
+        {output} is the editable buffer; saving it writes the resolved
+        content back to that path. The other paths open read-only.
+
+        When {base} is provided, the view starts in a 4-way layout
+        (OURS / BASE / THEIRS on top, OUTPUT below); otherwise it starts
+        in a 3-way horizontal layout (OURS | OUTPUT | THEIRS).
+
+        The conflict-marker actions described under |diffview-merge-tool|
+        operate on the {output} buffer and work unchanged here.
+
+        This is the integration point for tools like Jujutsu's
+        |jj-merge-tool|. Example `~/.config/jj/config.toml`: >toml
+
+            [merge-tools.diffview]
+            program = "nvim"
+            merge-args = [
+              "-c", "DiffviewMergeFiles $output $base $left $right",
+            ]
+            merge-tool-edits-conflict-markers = true
+<
+        With `merge-tool-edits-conflict-markers = true`, Jujutsu writes
+        conflict markers into {output} before the editor opens. Saving the
+        file (`:wqa`) returns control to Jujutsu, which checks for
+        remaining markers to decide whether the conflict is resolved. To
+        abort, exit with a non-zero status (`:cq`).
+
                                                 *:DiffviewFileHistory*
 :[range]DiffviewFileHistory [paths] [options]
 
