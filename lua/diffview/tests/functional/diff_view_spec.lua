@@ -667,4 +667,8 @@ describe("diffview.scene.views.diff.DiffView", function()
       config.setup(original_config)
     end)
   end)
+
+  -- `_set_file` rapid-navigation coalescing is exercised against
+  -- `StandardView` (the shared owner of the worker) in
+  -- `standard_view_spec.lua`; DiffView inherits the behavior unchanged.
 end)

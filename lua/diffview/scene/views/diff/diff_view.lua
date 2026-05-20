@@ -409,29 +409,6 @@ function DiffView:close(opts)
   return true
 end
 
----@private
----@param self DiffView
----@param file FileEntry
-DiffView._set_file = async.void(function(self, file)
-  self.panel:render()
-  self.panel:redraw()
-  vim.cmd("redraw")
-
-  self.cur_layout:detach_files()
-  local cur_entry = self.cur_entry
-  self.emitter:emit("file_open_pre", file, cur_entry)
-  self.nulled = false
-
-  await(self:use_entry(file))
-
-  self.emitter:emit("file_open_post", file, cur_entry)
-
-  if not self.cur_entry.opened then
-    self.cur_entry.opened = true
-    DiffviewGlobal.emitter:emit("file_open_new", file)
-  end
-end)
-
 ---Open the next file.
 ---@param highlight? boolean Bring the cursor to the file entry in the panel.
 ---@return FileEntry?
