@@ -142,6 +142,10 @@ DEFAULT CONFIG                                  *diffview.defaults*
           single_file = {},
           multi_file = {},
         },
+        jj = {
+          single_file = {},
+          multi_file = {},
+        },
         p4 = {
           single_file = {},
           multi_file = {},

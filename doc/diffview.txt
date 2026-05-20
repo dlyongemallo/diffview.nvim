@@ -1180,17 +1180,33 @@ log_options                                     *diffview-config-log_options*
         top-level config field.
 
         This table allows you to control the default options that are passed
-        to git-log in order to produce the file history. The table is divided
-        into the sub-tables `single_file`, and `multi_file`. This allows you
-        to define different default log options for history targeting singular
-        files, and history targeting multiple paths, and/or directories.
+        to the underlying VCS log command in order to produce the file
+        history. The table is keyed by adapter name (`git`, `hg`, `jj`, `p4`),
+        and each adapter table is divided into the sub-tables `single_file`
+        and `multi_file`. This allows you to define different default log
+        options per VCS, and within each VCS for history targeting singular
+        files versus history targeting multiple paths and/or directories.
+
+        Note: The available fields differ per adapter, because each schema
+        mirrors the flags of the underlying VCS log command. Only the Git
+        schema is documented in detail in this help file
+        (|diffview.git.LogOptions|); the field lists for the other adapters
+        live alongside their type definitions (`HgLogOptions`,
+        `JjLogOptions`) in `lua/diffview/config.lua`. Perforce (`p4`) reuses
+        the Mercurial (`hg`) schema.
 
         Fields: ~
-            {single_file} (`LogOptions`)
-                See |diffview.git.LogOptions|.
+            {git} (`{ single_file: GitLogOptions, multi_file: GitLogOptions }`)
+                Log options for Git. See |diffview.git.LogOptions|.
 
-            {multi_file} (`LogOptions`)
-                See |diffview.git.LogOptions|.
+            {hg} (`{ single_file: HgLogOptions, multi_file: HgLogOptions }`)
+                Log options for Mercurial.
+
+            {jj} (`{ single_file: JjLogOptions, multi_file: JjLogOptions }`)
+                Log options for Jujutsu.
+
+            {p4} (`{ single_file: HgLogOptions, multi_file: HgLogOptions }`)
+                Log options for Perforce (reuses the `HgLogOptions` schema).
 
 default_args                                    *diffview-config-default_args*
         Type: `table<string, string[]>`, Default: `{}`
