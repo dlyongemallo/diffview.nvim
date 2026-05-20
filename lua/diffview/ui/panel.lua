@@ -395,9 +395,15 @@ function Panel:close()
   end
 
   if self:is_open() then
-    local num_wins = api.nvim_tabpage_list_wins(api.nvim_win_get_tabpage(self.winid))
+    -- Count normal windows only, to match `pivot_producer`'s `was_only_win`
+    -- check: floats (LSP/completion/treesitter-context) don't anchor a
+    -- tabpage. Skip when the panel is itself a float, so closing a float
+    -- panel can't spuriously split an unrelated sole editor window.
+    local tabpage = api.nvim_win_get_tabpage(self.winid)
+    local is_normal_panel = api.nvim_win_get_config(self.winid).relative == ""
+    local normal_wins = utils.tabpage_list_normal_wins(tabpage)
 
-    if #num_wins == 1 then
+    if is_normal_panel and #normal_wins == 1 then
       -- Ensure that the tabpage doesn't close if the panel is the last window.
       api.nvim_win_call(self.winid, function()
         vim.cmd("sp")

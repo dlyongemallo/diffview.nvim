@@ -337,6 +337,105 @@ describe("diffview.ui.panel", function()
     assert_panel_interface(FileHistoryPanel, "FileHistoryPanel")
   end)
 
+  describe("close with only floating sibling windows", function()
+    -- A normal panel sharing the tab with only floats must still get the
+    -- temp split, since floats don't anchor a tabpage. Surfaced as a
+    -- diffview tab disappearing on a layout swap.
+
+    local api = vim.api
+
+    it("creates a temp split when only floats accompany the panel", function()
+      vim.cmd("tabnew")
+      local tabpage = api.nvim_get_current_tabpage()
+      local panel = Panel({ bufname = "TestCloseFloats", config = Panel.default_config_split })
+      panel.update_components = function() end
+      panel.render = function() end
+      panel:open()
+      assert.truthy(panel:is_open())
+
+      -- Reduce the tab to the panel only to match the post-`old_layout:destroy`
+      -- state during a layout swap.
+      for _, w in ipairs(api.nvim_tabpage_list_wins(tabpage)) do
+        if w ~= panel.winid and api.nvim_win_get_config(w).relative == "" then
+          api.nvim_win_close(w, true)
+        end
+      end
+
+      local float_buf = api.nvim_create_buf(false, true)
+      local float_win = api.nvim_open_win(float_buf, false, {
+        relative = "editor",
+        row = 0,
+        col = 0,
+        width = 10,
+        height = 5,
+        style = "minimal",
+      })
+
+      panel:close()
+
+      assert.is_true(api.nvim_tabpage_is_valid(tabpage))
+      local remaining = api.nvim_tabpage_list_wins(tabpage)
+      local normals = vim.tbl_filter(function(w)
+        return api.nvim_win_get_config(w).relative == ""
+      end, remaining)
+      assert.is_true(#normals >= 1)
+
+      if api.nvim_win_is_valid(float_win) then
+        api.nvim_win_close(float_win, true)
+      end
+      if api.nvim_buf_is_valid(float_buf) then
+        api.nvim_buf_delete(float_buf, { force = true })
+      end
+      panel:destroy()
+      if api.nvim_tabpage_is_valid(tabpage) then
+        api.nvim_set_current_tabpage(tabpage)
+        vim.cmd("tabclose")
+      end
+    end)
+
+    it("does not split when a float panel closes alongside an editor window", function()
+      -- Closing a float panel (`HelpPanel`, `CommitLogPanel`) must leave
+      -- a lone editor window untouched, since the panel itself doesn't
+      -- count toward `normal_wins`.
+      vim.cmd("tabnew")
+      local tabpage = api.nvim_get_current_tabpage()
+      local editor_win = api.nvim_get_current_win()
+      local editor_buf = api.nvim_win_get_buf(editor_win)
+
+      local float_config = vim.tbl_deep_extend("force", Panel.default_config_float, {
+        width = 20,
+        height = 5,
+        row = 1,
+        col = 1,
+      })
+      local panel = Panel({ bufname = "TestFloatPanelClose", config = float_config })
+      panel.update_components = function() end
+      panel.render = function() end
+      panel:open()
+      assert.truthy(panel:is_open())
+      assert.are.equal("editor", api.nvim_win_get_config(panel.winid).relative)
+
+      local editor_wins_before = #vim.tbl_filter(function(w)
+        return api.nvim_win_get_config(w).relative == ""
+      end, api.nvim_tabpage_list_wins(tabpage))
+
+      panel:close()
+
+      local editor_wins_after = #vim.tbl_filter(function(w)
+        return api.nvim_win_get_config(w).relative == ""
+      end, api.nvim_tabpage_list_wins(tabpage))
+      assert.are.equal(editor_wins_before, editor_wins_after)
+      assert.is_true(api.nvim_win_is_valid(editor_win))
+      assert.are.equal(editor_buf, api.nvim_win_get_buf(editor_win))
+
+      panel:destroy()
+      if api.nvim_tabpage_is_valid(tabpage) then
+        api.nvim_set_current_tabpage(tabpage)
+        vim.cmd("tabclose")
+      end
+    end)
+  end)
+
   describe("FilePanel multi-selection", function()
     local FilePanel = require("diffview.scene.views.diff.file_panel").FilePanel
 
