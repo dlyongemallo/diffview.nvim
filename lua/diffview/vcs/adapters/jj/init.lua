@@ -1,6 +1,12 @@
+local AsyncListStream = require("diffview.stream").AsyncListStream
+local Commit = require("diffview.vcs.adapters.jj.commit").JjCommit
+local Diff2Hor = require("diffview.scene.layouts.diff_2_hor").Diff2Hor
 local FileEntry = require("diffview.scene.file_entry").FileEntry
+local FlagOption = require("diffview.vcs.flag_option").FlagOption
 local Job = require("diffview.job").Job
 local JjRev = require("diffview.vcs.adapters.jj.rev").JjRev
+local JobStatus = require("diffview.vcs.utils").JobStatus
+local LogEntry = require("diffview.vcs.log_entry").LogEntry
 local RevType = require("diffview.vcs.rev").RevType
 local VCSAdapter = require("diffview.vcs.adapter").VCSAdapter
 local arg_parser = require("diffview.arg_parser")
@@ -15,6 +21,7 @@ local await = async.await
 local fmt = string.format
 local logger = DiffviewGlobal.logger
 local pl = lazy.access(utils, "path") --[[@as PathLib ]]
+local uv = vim.uv
 
 local M = {}
 
@@ -453,13 +460,638 @@ function JjAdapter:diffview_options(argo)
   return { left = left, right = right, options = options }
 end
 
+---@param path_args string[]?
+---@param lflags? string[] # Ignored; jj has no `-L` line-trace mode.
+---@diagnostic disable-next-line: unused-local
+function JjAdapter:is_single_file(path_args, lflags)
+  if path_args and self.ctx.toplevel then
+    return #path_args == 1
+      and not pl:is_dir(path_args[1])
+      and #self:exec_sync(
+          utils.vec_join("file", "list", "-r", "@", "--", path_args),
+          { cwd = self.ctx.toplevel, silent = true }
+        )
+        < 2
+  end
+  return true
+end
+
+---@override
+---@param path_args string[]
+---@param log_options JjLogOptions
+---@return vcs.adapter.HistoryScope
+function JjAdapter:history_scope(path_args, log_options) ---@diagnostic disable-line: unused-local
+  -- jj has no `-L` line-trace mode (`file_history_options` rejects `range`),
+  -- so the scope question reduces to "is this a single-file pathspec?".
+  if not (path_args and #path_args == 1 and self.ctx.toplevel) then
+    return { single_file = false }
+  end
+  if pl:is_dir(path_args[1]) then
+    return { single_file = false }
+  end
+  -- See `GitAdapter:history_scope` for why we resolve through `jj file list`
+  -- instead of using `path_args[1]` raw. We diverge from git on `#out == 0`:
+  -- git uses `path = path_args[1]` as a `--follow` rename anchor, but jj has
+  -- no `--follow` and callers consume `scope.path` as a literal post-filter
+  -- against `f.target().path()`. Returning a non-canonical `path_args[1]`
+  -- (`./foo.txt`, `glob:*`, ...) there would empty otherwise-valid history.
+  local out = self:exec_sync(
+    utils.vec_join("file", "list", "-r", "@", "--", path_args),
+    { cwd = self.ctx.toplevel, silent = true }
+  )
+  if #out == 1 then
+    return { single_file = true, path = out[1] }
+  end
+  if #out == 0 then
+    -- Still single-file (matches `is_single_file`'s `< 2`), but the path
+    -- isn't tracked at `@` so we can't canonicalise it. Omit `path` and let
+    -- callers fall back to `compute_fh_scope_args`, which handles both
+    -- literal and non-literal shapes.
+    return { single_file = true }
+  end
+  return { single_file = false }
+end
+
+---Detect a non-literal jj pathspec. jj recognises prefixes such as `glob:`,
+---`root:`, `cwd:`, `cwd-glob:`, and `file-list:`; the per-path canonicalise
+---in `compute_fh_scope_args` can't resolve any of these. Glob metacharacters
+---outside a prefix (`*.lua`) are also non-literal. Requires at least two
+---characters before `:` so Windows drive letters (`C:/...`) stay literal.
+---@param p string
+---@return boolean
+local function is_non_literal_pathspec(p)
+  if p == "." or p == "" then
+    return false
+  end
+  if p:match("^[%w_-][%w_-]+:") then
+    return true
+  end
+  if p:match("[*?%[%]]") then
+    return true
+  end
+  return false
+end
+
+---Resolve `path_args` to workspace-relative paths used by `parse_fh_data`'s
+---`in_scope` post-filter. The per-path canonicalise handles literal paths
+---(absolute or cwd-relative). Non-literal jj pathspecs (e.g. `glob:*.lua`)
+---can't be canonicalised that way, so we ask jj to list the matching files
+---at `@` and use that as the scope set. When jj returns nothing (a deleted
+---path or a pathspec matching no current file), we drop the post-filter
+---rather than silently emptying the history `jj log` already found.
+---
+---Literal paths are routed through `pl:absolute` then `pl:relative` so a
+---`./foo.txt`, a bare `foo.txt` issued from a subdir of the workspace, and an
+---absolute `/repo/foo.txt` all collapse to the same workspace-relative form
+---that `f.target().path()` emits. Without that, the `in_scope` post-filter
+---would reject every file and the history would come back empty.
+---@param path_args string[]
+---@return string[]
+function JjAdapter:compute_fh_scope_args(path_args)
+  local toplevel = self.ctx.toplevel
+  for _, p in ipairs(path_args) do
+    if is_non_literal_pathspec(p) then
+      local out = self:exec_sync(
+        utils.vec_join("file", "list", "-r", "@", "--", path_args),
+        { cwd = toplevel, silent = true }
+      )
+      return #out > 0 and out or {}
+    end
+  end
+  return vim.tbl_map(function(p)
+    if p == "." or p == "" then
+      return p
+    end
+    return pl:relative(pl:absolute(p), toplevel)
+  end, path_args) --[[@as string[] ]]
+end
+
 ---@param range? { [1]: integer, [2]: integer }
 ---@param paths string[]
 ---@param argo ArgObject
----@return string[]?
+---@return JjLogOptions?
 function JjAdapter:file_history_options(range, paths, argo)
-  utils.err("The Jujutsu adapter currently supports only ':DiffviewOpen'.")
-  return nil
+  if range then
+    utils.err("Line ranges are not supported for jj!")
+    return
+  end
+
+  local rel_paths = vim.tbl_map(function(v)
+    return v == "." and "." or pl:relative(v, ".")
+  end, paths) --[[@as string[] ]]
+
+  local log_flag_names = {
+    { "revisions", "r" },
+    { "limit", "n" },
+    { "reversed", "R" },
+  }
+
+  ---@type JjLogOptions
+  ---@diagnostic disable-next-line: missing-fields
+  local log_options = {}
+  for _, names in ipairs(log_flag_names) do
+    local key = names[1]:gsub("%-", "_")
+    local v = argo:get_flag(names, {
+      expect_string = type(config.log_option_defaults[self.config_key][key]) ~= "boolean",
+    })
+    log_options[key] = v
+  end
+
+  log_options.path_args = paths
+
+  local ok, opt_description = self:file_history_dry_run(log_options)
+
+  if not ok then
+    local msg = "No jj history for the target(s) given the current options! Targets: %s\n"
+      .. "Current options: [ %s ]"
+
+    if #rel_paths == 0 then
+      utils.info(fmt(msg, "':(top)'", opt_description))
+    else
+      local msg_paths = vim.tbl_map(utils.str_quote, rel_paths)
+      utils.info(fmt(msg, table.concat(msg_paths, ", "), opt_description))
+    end
+
+    return
+  end
+
+  return log_options
+end
+
+---@class JjAdapter.PreparedLogOpts
+---@field revisions? string
+---@field path_args string[]
+---@field flags string[]
+
+---@class JjAdapter.FHState
+---@field path_args string[]
+---@field scope_args string[] # Workspace-relative form of `path_args`, used by `parse_fh_data` to filter the per-commit file list.
+---@field log_options JjLogOptions
+---@field prepared_log_opts JjAdapter.PreparedLogOpts
+---@field layout_opt vcs.adapter.LayoutOpt
+---@field single_file boolean
+
+---@param log_options JjLogOptions
+---@param single_file boolean
+---@return JjAdapter.PreparedLogOpts
+function JjAdapter:prepare_fh_options(log_options, single_file) ---@diagnostic disable-line: unused-local
+  local o = log_options
+  return {
+    revisions = o.revisions,
+    path_args = log_options.path_args,
+    flags = utils.vec_join(
+      o.limit and { "--limit=" .. o.limit } or nil,
+      o.reversed and { "--reversed" } or nil
+    ),
+  }
+end
+
+---@param log_opt JjLogOptions
+---@return boolean ok, string description
+function JjAdapter:file_history_dry_run(log_opt)
+  local single_file = self:is_single_file(log_opt.path_args)
+  local log_options = config.get_log_options(single_file, log_opt, self.config_key) --[[@as JjLogOptions ]]
+
+  local options = vim.tbl_map(function(v)
+    return vim.fn.shellescape(v)
+  end, self:prepare_fh_options(log_options, single_file).flags) --[[@as vector ]]
+
+  local description = utils.vec_join(
+    fmt("Top-level path: '%s'", pl:vim_fnamemodify(self.ctx.toplevel, ":~")),
+    log_options.revisions and fmt("Revisions: '%s'", log_options.revisions) or nil,
+    fmt("Flags: %s", table.concat(options, " "))
+  )
+
+  -- Probe for at least one matching commit by re-running with limit=1 and a
+  -- minimal template. `--no-graph` keeps the output one line per commit.
+  log_options = utils.tbl_clone(log_options) --[[@as JjLogOptions ]]
+  log_options.limit = 1
+  options = self:prepare_fh_options(log_options, single_file).flags
+
+  local cmd = utils.vec_join(
+    "log",
+    "--no-graph",
+    "-T",
+    'commit_id ++ "\n"',
+    log_options.revisions and { "-r", log_options.revisions } or nil,
+    options,
+    "--",
+    log_options.path_args
+  )
+
+  local out, code = self:exec_sync(cmd, {
+    cwd = self.ctx.toplevel,
+    log_opt = { label = "JjAdapter:file_history_dry_run()" },
+  })
+
+  local ok = code == 0 and #out > 0
+  if not ok then
+    logger:fmt_debug("[JjAdapter:file_history_dry_run] Dry run failed.")
+  end
+
+  return ok, table.concat(description, ", ")
+end
+
+---Template fed to `jj log -T ...` by the file-history worker.
+---
+---Each commit produces exactly one line terminated by `\n`. Fields within a
+---commit are separated by `\x01` (ASCII SOH). The final field is the file
+---list, where individual file entries are separated by `\x1e` (ASCII RS)
+---and each entry's `<status, path>` pair is separated by `\x1f` (ASCII US).
+---
+---Choosing a one-line-per-commit format -- rather than the line-per-field
+---layout used by the hg adapter -- sidesteps two problems unique to jj:
+---  1. Fields like `author.email()` can be legitimately empty, which
+---     collides with the diffview job runner's habit of dropping empty
+---     lines (and dispatching phantom empties at chunk boundaries when a
+---     chunk ends on a `\n`).
+---  2. Files-per-commit is variable, so a fixed line-index parse would
+---     drift; here it's a single trailing field.
+---
+---Three distinct control chars (`\x01`, `\x1e`, `\x1f`) are needed because
+---the file-list field contains nested separators: if the outer field
+---separator and the inner `<status, path>` separator were the same byte, a
+---single top-level split would shred each file entry into two fields.
+---
+---Field order, by index:
+---  1. commit_id (full hash)
+---  2. change_id
+---  3. parent commit_ids (space-separated; empty for the root commit)
+---  4. author email
+---  5. author timestamp (unix epoch, UTC)
+---  6. author timestamp offset (e.g. `+0200`, `-0500`)
+---  7. relative date (e.g. `2 minutes ago`)
+---  8. ref names (comma-separated local bookmarks + tags)
+---  9. subject (first line of description)
+---  10. files blob (`\x1e`-separated entries, each `<status>\x1f<path>`)
+local FH_TEMPLATE = table.concat({
+  [[ commit_id ++ "\x01" ]],
+  [[ ++ change_id ++ "\x01" ]],
+  [[ ++ parents.map(|p| p.commit_id()).join(" ") ++ "\x01" ]],
+  [[ ++ author.email() ++ "\x01" ]],
+  [[ ++ author.timestamp().format("%s") ++ "\x01" ]],
+  [[ ++ author.timestamp().format("%z") ++ "\x01" ]],
+  [[ ++ author.timestamp().ago() ++ "\x01" ]],
+  [[ ++ separate(", ", local_bookmarks, tags) ++ "\x01" ]],
+  [[ ++ description.first_line() ++ "\x01" ]],
+  [[ ++ diff.files().map(|f| f.status_char() ++ "\x1f" ++ f.target().path()).join("\x1e") ++ "\n" ]],
+}, "")
+
+---Parse one line of jj log output (a single `\x01`-separated commit record)
+---into the table shape that `parse_fh_data` consumes.
+---@param line string
+---@return table?
+local function structure_fh_data(line)
+  local fields = vim.split(line, "\x01", { plain = true })
+  local commit_id = fields[1]
+  if not commit_id or commit_id == "" then
+    return nil
+  end
+  -- The root commit's hash is all zeros and has no description, parents, or
+  -- diff entries. Skip it: it doesn't belong in the file-history list.
+  if commit_id == JjRev.NULL_TREE_SHA then
+    return nil
+  end
+
+  -- Strip empty and null-tree parent slots: empty appears when the parents
+  -- field rendered to `""` (no parents on the root commit); null-tree
+  -- appears when jj surfaces the synthetic zero-hash root as a parent.
+  local function clean_parent(p)
+    if not p or p == "" or p == JjRev.NULL_TREE_SHA then
+      return nil
+    end
+    return p
+  end
+
+  local parents = utils.str_split(fields[3] or "")
+  local left_hash = clean_parent(parents[1])
+  local merge_hash = clean_parent(parents[2])
+
+  -- The trailing field is a `\x1e`-separated list of `status\x1fpath` pairs.
+  local namestat = {}
+  local files_blob = fields[10] or ""
+  if files_blob ~= "" then
+    for _, entry in ipairs(vim.split(files_blob, "\x1e", { plain = true })) do
+      -- Reuse the line format the old per-line parser expected so
+      -- `parse_fh_data` doesn't need to change shape: `"<status> <path>"`.
+      local sep = entry:find("\x1f", 1, true)
+      if sep then
+        local status = entry:sub(1, sep - 1)
+        local path = entry:sub(sep + 1)
+        if status ~= "" and path ~= "" then
+          namestat[#namestat + 1] = status .. " " .. path
+        end
+      end
+    end
+  end
+
+  return {
+    right_hash = commit_id,
+    left_hash = left_hash,
+    merge_hash = merge_hash,
+    author = fields[4] or "",
+    time = tonumber(fields[5] or "0") or 0,
+    time_offset = fields[6] or "",
+    rel_date = fields[7] or "",
+    ref_names = fields[8] or "",
+    subject = fields[9] or "",
+    namestat = namestat,
+  }
+end
+
+---@param state JjAdapter.FHState
+---@return AsyncListStream
+function JjAdapter:stream_fh_data(state)
+  ---@type AsyncListStream
+  local stream
+  ---@type diffview.Job
+  local job
+
+  local function on_stdout(_, line)
+    if line == "" then
+      -- Skip the empty trailing element vim.split produces after the final
+      -- newline of a chunk.
+      return
+    end
+    local log_data = structure_fh_data(line)
+    if log_data then
+      stream:push({ JobStatus.PROGRESS, log_data })
+    end
+  end
+
+  stream = AsyncListStream({
+    ---@param shutdown? SignalConsumer
+    on_close = function(shutdown)
+      if shutdown and shutdown:check() then
+        if job:is_running() then
+          logger:warn("Received shutdown signal. Killing file history job...")
+          job:kill(64)
+        else
+          logger:warn("Received shutdown signal, but job is not running.")
+        end
+
+        stream:push({ JobStatus.KILLED })
+        return
+      end
+
+      if job.code ~= 0 then
+        stream:push({
+          JobStatus.ERROR,
+          nil,
+          table.concat(job.stderr or {}, "\n"),
+        })
+      else
+        stream:push({ JobStatus.SUCCESS })
+      end
+    end,
+  })
+
+  local prepared = state.prepared_log_opts
+  job = Job({
+    command = self:bin(),
+    args = utils.vec_join(
+      self:args(),
+      "log",
+      "--no-graph",
+      "-T",
+      FH_TEMPLATE,
+      prepared.revisions and { "-r", prepared.revisions } or nil,
+      prepared.flags,
+      "--",
+      prepared.path_args
+    ),
+    cwd = self.ctx.toplevel,
+    log_opt = { label = "JjAdapter:stream_fh_data()" },
+    on_stdout = on_stdout,
+    on_exit = utils.hard_bind(stream.close, stream),
+  })
+  job:start()
+
+  return stream
+end
+
+---@param self JjAdapter
+---@param out_stream AsyncListStream
+---@param opt vcs.adapter.FileHistoryWorkerSpec
+JjAdapter.file_history_worker = async.void(function(self, out_stream, opt)
+  -- Use `history_scope` rather than bare `is_single_file` so that a
+  -- single-file scope resolved from a non-literal pathspec (e.g. `glob:*.lua`,
+  -- `file:foo`) is canonicalised to its concrete workspace-relative path.
+  -- `parse_fh_data`'s `in_scope` matches files literally, so without this
+  -- the post-filter would drop every file and the history would come back
+  -- empty.
+  local log_opt = opt.log_opt.single_file --[[@as JjLogOptions ]]
+  local scope = self:history_scope(log_opt.path_args, log_opt)
+  local single_file = scope.single_file
+
+  -- When `history_scope` resolved a concrete workspace-relative path (from
+  -- `jj file list`), use it for both the `jj log` pathspec and the scope
+  -- filter. Otherwise fall through to the raw `path_args` for the query and
+  -- `compute_fh_scope_args` for the filter (which handles literal and
+  -- non-literal shapes, but would mis-resolve an already-canonical path if
+  -- the user's cwd isn't the workspace toplevel).
+  local path_args = scope.path and { scope.path } or log_opt.path_args
+
+  local log_options = config.get_log_options(
+    single_file,
+    single_file and opt.log_opt.single_file or opt.log_opt.multi_file,
+    "jj"
+  ) --[[@as JjLogOptions ]]
+  log_options.path_args = path_args
+
+  -- Precompute the workspace-relative scope here, before the per-commit loop
+  -- enters a fast event context. `pl:vim_expand` calls Vimscript's `expand()`
+  -- which errors out in a fast context, so doing this once up front (instead
+  -- of per commit inside `parse_fh_data`) both saves work and keeps the
+  -- post-filter callable from the stream listener.
+  local scope_args = scope.path and { scope.path } or self:compute_fh_scope_args(path_args)
+
+  ---@type JjAdapter.FHState
+  local state = {
+    path_args = path_args,
+    scope_args = scope_args,
+    log_options = log_options,
+    prepared_log_opts = self:prepare_fh_options(log_options, single_file),
+    layout_opt = opt.layout_opt,
+    single_file = single_file,
+  }
+
+  logger:info(
+    "[FileHistory] Updating with options:",
+    vim.inspect(state.prepared_log_opts, { newline = " ", indent = "" })
+  )
+
+  local in_stream = self:stream_fh_data(state)
+
+  ---@param shutdown? SignalConsumer
+  out_stream:on_close(function(shutdown)
+    if shutdown then
+      in_stream:close(shutdown)
+    end
+  end)
+
+  local last_wait = uv.hrtime()
+  local interval = (1000 / 15) * 1E6
+
+  for _, item in in_stream:iter() do
+    ---@type JobStatus, table?, string?
+    local status, new_data, msg = unpack(item, 1, 3)
+
+    -- Yield periodically so the editor stays responsive.
+    local now = uv.hrtime()
+    if now - last_wait > interval then
+      last_wait = now
+      await(async.schedule_now())
+    end
+
+    if status == JobStatus.KILLED then
+      logger:warn("File history processing was killed.")
+      out_stream:push({ status })
+      out_stream:close()
+      return
+    elseif status == JobStatus.ERROR then
+      out_stream:push({ status, nil, msg })
+      out_stream:close()
+      return
+    elseif status == JobStatus.SUCCESS then
+      out_stream:push({ status })
+      out_stream:close()
+      return
+    elseif status ~= JobStatus.PROGRESS then
+      error("Unexpected state!")
+    end
+
+    assert(new_data, "No data received from scheduler!")
+
+    local commit = Commit({
+      hash = new_data.right_hash,
+      author = new_data.author,
+      time = tonumber(new_data.time),
+      time_offset = new_data.time_offset,
+      rel_date = new_data.rel_date,
+      ref_names = new_data.ref_names,
+      subject = new_data.subject,
+    })
+
+    local ok, entry = self:parse_fh_data(new_data, commit, state)
+
+    if ok then
+      out_stream:push({ JobStatus.PROGRESS, entry })
+    end
+  end
+end)
+
+---@param data table
+---@param commit JjCommit
+---@param state JjAdapter.FHState
+---@return boolean success
+---@return LogEntry|string ret
+function JjAdapter:parse_fh_data(data, commit, state)
+  local files = {}
+  -- jj's `diff.files()` template ignores the CLI pathspec, so the per-commit
+  -- file list contains every file the commit changed. Re-apply the path
+  -- scope (precomputed by `file_history_worker` in workspace-relative form)
+  -- so single-file/scoped history doesn't drag in unrelated files from
+  -- commits that happen to touch the requested path.
+  local scope_args = state.scope_args or {}
+
+  ---@param path string
+  ---@return boolean
+  local function in_scope(path)
+    if #scope_args == 0 then
+      return true
+    end
+    for _, p in ipairs(scope_args) do
+      if p == "." or p == "" then
+        return true
+      end
+      local trimmed = p:gsub("/+$", "")
+      if path == trimmed or vim.startswith(path, trimmed .. "/") then
+        return true
+      end
+    end
+    return false
+  end
+
+  -- `--pin-local` is rejected upstream for jj (see `lib.file_history`), so we
+  -- always diff each commit against its parent. The pin-local code paths
+  -- mirroring the git/hg adapters are deferred until `build_local_log_entry`
+  -- lands for jj.
+  for _, line in ipairs(data.namestat) do
+    local status, path = line:match("^(%S)%s+(.+)$")
+    if status and path and in_scope(path) then
+      -- TODO: surface rename source. jj exposes `f.source().path()` on
+      -- TreeDiffEntry; threading it into the template + parser is a follow-up.
+      local oldname = nil
+
+      local rev_a = data.left_hash and JjRev(RevType.COMMIT, data.left_hash)
+        or JjRev.new_null_tree()
+      local rev_b = JjRev(RevType.COMMIT, data.right_hash)
+
+      table.insert(
+        files,
+        self:build_pin_local_file_entry({
+          layout_class = state.layout_opt.default_layout or Diff2Hor,
+          layout_opt = state.layout_opt,
+          path = path,
+          oldpath = oldname,
+          status = status,
+          stats = nil,
+          commit = commit,
+          rev_a = rev_a,
+          rev_b = rev_b,
+          single_file = state.single_file,
+        })
+      )
+    end
+  end
+
+  if files[1] then
+    return true,
+      LogEntry({
+        path_args = state.path_args,
+        commit = commit,
+        files = files,
+        single_file = state.single_file,
+      })
+  end
+
+  if state.path_args[1] then
+    logger:warn("[JjAdapter:parse_fh_data] Encountered commit with no file data:", data)
+    return false, "Found no relevant file data with given path args!"
+  end
+
+  -- Commit had no file changes (e.g. empty commit). Return a null entry so
+  -- the file-history panel still surfaces it.
+  return true,
+    LogEntry({
+      path_args = state.path_args,
+      commit = commit,
+      single_file = state.single_file,
+      nulled = true,
+      files = { FileEntry.new_null_entry(self) },
+    })
+end
+
+JjAdapter.flags = {
+  ---@type FlagOption[]
+  switches = {
+    FlagOption("-R", "--reversed", "Show revisions oldest-first"),
+  },
+  ---@type FlagOption[]
+  options = {
+    FlagOption("=r", "--revisions=", "Revset", { prompt_label = "(Revset)" }),
+    FlagOption("=n", "--limit=", "Limit the number of revisions"),
+  },
+}
+
+-- Add reverse lookups so the option panel can look up a FlagOption by its
+-- `key` slug. Mirrors the pattern used by the hg adapter.
+for _, list in pairs(JjAdapter.flags) do
+  for i, option in ipairs(list) do
+    list[i] = option
+    list[option.key] = option
+  end
 end
 
 ---@param opt? VCSAdapter.show_untracked.Opt
@@ -730,7 +1362,21 @@ function JjAdapter:init_completion()
   self.comp.open:put({ "selected-file" }, function(_, arg_lead)
     return vim.fn.getcompletion(arg_lead, "file")
   end)
+
+  self.comp.file_history:put({ "--revisions", "-r" }, function(_, arg_lead)
+    return self:rev_candidates(arg_lead, { accept_range = true })
+  end)
+
+  self.comp.file_history:put({ "--reversed", "-R" })
+  self.comp.file_history:put({ "--limit", "-n" }, {})
 end
 
 M.JjAdapter = JjAdapter
+-- Internals exposed for unit testing only. Do not consume from outside the
+-- adapter; the shape is unstable.
+M._test = {
+  structure_fh_data = structure_fh_data,
+  FH_TEMPLATE = FH_TEMPLATE,
+  is_non_literal_pathspec = is_non_literal_pathspec,
+}
 return M

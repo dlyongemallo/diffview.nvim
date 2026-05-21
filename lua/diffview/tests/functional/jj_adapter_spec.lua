@@ -607,6 +607,155 @@ describe("diffview.vcs.adapters.jj", function()
         end)
       )
     end)
+    describe("file_history_worker", function()
+      it(
+        "streams one entry per commit",
+        helpers.async_test(function()
+          if not jj_available() then
+            pending("jj not installed")
+            return
+          end
+
+          repo.write("a.txt", "alpha\n")
+          repo.jj({ "describe", "-m", "add a" })
+          repo.jj({ "new" })
+          repo.write("b.txt", "beta\n")
+          repo.jj({ "describe", "-m", "add b" })
+
+          local adapter = repo.adapter()
+          local AsyncListStream = require("diffview.stream").AsyncListStream
+          local JobStatus = require("diffview.vcs.utils").JobStatus
+
+          local stream = AsyncListStream()
+          adapter:file_history_worker(stream, {
+            log_opt = {
+              single_file = { path_args = {}, revisions = "::@" },
+              multi_file = { path_args = {}, revisions = "::@" },
+            },
+            layout_opt = { default_layout = Diff2, merge_layout = Diff2 },
+          })
+
+          local entries = {}
+          local statuses = {}
+          for _, item in stream:iter() do
+            local status, log_entry = unpack(item, 1, 2)
+            statuses[#statuses + 1] = status
+            if status == JobStatus.PROGRESS and log_entry then
+              entries[#entries + 1] = log_entry
+            end
+          end
+
+          assert.equals(JobStatus.SUCCESS, statuses[#statuses])
+          -- Expect at least the two described commits ("add a" and the
+          -- working-copy "add b"); the `>=` tolerates extra entries from
+          -- repo initialization.
+          assert.is_true(#entries >= 2)
+
+          -- Build a path -> status map from the most recent entry.
+          local subjects = {}
+          for _, e in ipairs(entries) do
+            subjects[e.commit.subject] = true
+          end
+          assert.is_true(subjects["add a"], "missing 'add a' in entries")
+          assert.is_true(subjects["add b"], "missing 'add b' in entries")
+        end)
+      )
+
+      it(
+        "canonicalises a glob pathspec to the matched file",
+        helpers.async_test(function()
+          if not jj_available() then
+            pending("jj not installed")
+            return
+          end
+
+          repo.write("only.txt", "alpha\n")
+          repo.jj({ "describe", "-m", "add only" })
+
+          local adapter = repo.adapter()
+          local AsyncListStream = require("diffview.stream").AsyncListStream
+          local JobStatus = require("diffview.vcs.utils").JobStatus
+
+          -- A `glob:*.txt` pathspec resolves to a single tracked file. Before
+          -- the canonicalisation fix, `parse_fh_data`'s post-filter would
+          -- compare each file in the commit against the literal `"glob:*.txt"`
+          -- and drop everything, returning an empty history.
+          local stream = AsyncListStream()
+          adapter:file_history_worker(stream, {
+            log_opt = {
+              single_file = { path_args = { "glob:*.txt" }, revisions = "::@" },
+              multi_file = { path_args = { "glob:*.txt" }, revisions = "::@" },
+            },
+            layout_opt = { default_layout = Diff2, merge_layout = Diff2 },
+          })
+
+          local entries = {}
+          for _, item in stream:iter() do
+            local status, log_entry = unpack(item, 1, 2)
+            if status == JobStatus.PROGRESS and log_entry then
+              entries[#entries + 1] = log_entry
+            end
+          end
+
+          local found_only_txt = false
+          for _, e in ipairs(entries) do
+            for _, f in ipairs(e.files) do
+              if f.path == "only.txt" then
+                found_only_txt = true
+              end
+            end
+          end
+          assert.is_true(found_only_txt, "glob pathspec dropped the matched file from history")
+        end)
+      )
+
+      it(
+        "canonicalises a multi-file glob pathspec",
+        helpers.async_test(function()
+          if not jj_available() then
+            pending("jj not installed")
+            return
+          end
+
+          repo.write("a.txt", "alpha\n")
+          repo.write("b.txt", "beta\n")
+          repo.write("c.md", "gamma\n")
+          repo.jj({ "describe", "-m", "add multiple files" })
+
+          local adapter = repo.adapter()
+          local AsyncListStream = require("diffview.stream").AsyncListStream
+          local JobStatus = require("diffview.vcs.utils").JobStatus
+
+          -- A `glob:*.txt` pathspec resolves to multiple files (`a.txt` and
+          -- `b.txt`), forcing multi-file mode. Before the fix, the post-filter
+          -- would compare files against the literal `"glob:*.txt"` and drop
+          -- every entry; the `.md` file should be excluded but the two `.txt`
+          -- files must appear.
+          local stream = AsyncListStream()
+          adapter:file_history_worker(stream, {
+            log_opt = {
+              single_file = { path_args = { "glob:*.txt" }, revisions = "::@" },
+              multi_file = { path_args = { "glob:*.txt" }, revisions = "::@" },
+            },
+            layout_opt = { default_layout = Diff2, merge_layout = Diff2 },
+          })
+
+          local seen_paths = {}
+          for _, item in stream:iter() do
+            local status, log_entry = unpack(item, 1, 2)
+            if status == JobStatus.PROGRESS and log_entry then
+              for _, f in ipairs(log_entry.files) do
+                seen_paths[f.path] = true
+              end
+            end
+          end
+
+          assert.is_true(seen_paths["a.txt"], "expected a.txt in history")
+          assert.is_true(seen_paths["b.txt"], "expected b.txt in history")
+          assert.is_nil(seen_paths["c.md"], "c.md should have been filtered out")
+        end)
+      )
+    end)
 
     describe("file_restore", function()
       it(
@@ -630,6 +779,341 @@ describe("diffview.vcs.adapters.jj", function()
           eq('print("v1")\n', repo.read("src/main.lua"))
         end)
       )
+    end)
+  end)
+  describe("structure_fh_data", function()
+    local structure_fh_data = require("diffview.vcs.adapters.jj")._test.structure_fh_data
+    local JjRev = require("diffview.vcs.adapters.jj.rev").JjRev
+
+    local SOH = "\x01" -- outer field separator
+    local US = "\x1f" -- status/path separator within a file entry
+    local RS = "\x1e" -- between file entries
+
+    local function build_line(fields)
+      return table.concat(fields, SOH)
+    end
+
+    it("parses a full commit record", function()
+      local files = "M" .. US .. "a.txt" .. RS .. "A" .. US .. "b.txt"
+      local data = structure_fh_data(build_line({
+        "deadbeef",
+        "qpzqyx",
+        "cafebabe",
+        "alice@example.com",
+        "1700000000",
+        "+0200",
+        "5 minutes ago",
+        "main",
+        "feat: add b",
+        files,
+      }))
+
+      assert.is_not_nil(data)
+      assert.equals("deadbeef", data.right_hash)
+      assert.equals("cafebabe", data.left_hash)
+      assert.is_nil(data.merge_hash)
+      assert.equals("alice@example.com", data.author)
+      assert.equals(1700000000, data.time)
+      assert.equals("+0200", data.time_offset)
+      assert.equals("5 minutes ago", data.rel_date)
+      assert.equals("main", data.ref_names)
+      assert.equals("feat: add b", data.subject)
+      eq({ "M a.txt", "A b.txt" }, data.namestat)
+    end)
+
+    it("returns nil for the root commit (null-tree hash)", function()
+      local line = build_line({
+        JjRev.NULL_TREE_SHA,
+        "zzzz",
+        "",
+        "",
+        "0",
+        "+0000",
+        "56 years ago",
+        "",
+        "",
+        "",
+      })
+      assert.is_nil(structure_fh_data(line))
+    end)
+
+    it("drops a null-tree parent so the entry is treated as a root-child", function()
+      local line = build_line({
+        "abc123",
+        "qpzqyx",
+        JjRev.NULL_TREE_SHA, -- parent is the synthetic root
+        "",
+        "1700000000",
+        "+0000",
+        "",
+        "",
+        "init",
+        "",
+      })
+      local data = structure_fh_data(line)
+      assert.is_nil(data.left_hash)
+    end)
+
+    it("tolerates empty optional fields without shifting downstream slots", function()
+      -- Empty author email and empty bookmarks/subject -- the case that broke
+      -- the previous line-per-field parser.
+      local line = build_line({
+        "abc",
+        "xyz",
+        "parent",
+        "", -- no author email
+        "1700000000",
+        "+0000",
+        "",
+        "", -- no ref names
+        "", -- no subject
+        "M" .. US .. "f.txt",
+      })
+      local data = structure_fh_data(line)
+      assert.equals("abc", data.right_hash)
+      assert.equals("", data.author)
+      assert.equals(1700000000, data.time)
+      assert.equals("", data.ref_names)
+      assert.equals("", data.subject)
+      eq({ "M f.txt" }, data.namestat)
+    end)
+
+    it("yields an empty namestat when the commit has no diff", function()
+      local data = structure_fh_data(build_line({
+        "abc",
+        "xyz",
+        "parent",
+        "",
+        "1700000000",
+        "+0000",
+        "",
+        "",
+        "empty commit",
+        "",
+      }))
+      eq({}, data.namestat)
+    end)
+
+    it("splits multiple file entries on the RS separator", function()
+      local files = "A" .. US .. "x" .. RS .. "M" .. US .. "y" .. RS .. "D" .. US .. "z"
+      local data = structure_fh_data(build_line({
+        "abc",
+        "xyz",
+        "parent",
+        "",
+        "1700000000",
+        "+0000",
+        "",
+        "",
+        "multi",
+        files,
+      }))
+      eq({ "A x", "M y", "D z" }, data.namestat)
+    end)
+  end)
+
+  describe("parse_fh_data", function()
+    local Diff2 = require("diffview.scene.layouts.diff_2").Diff2
+
+    local saved_bootstrap
+
+    before_each(function()
+      saved_bootstrap = vim.deepcopy(JjAdapter.bootstrap)
+    end)
+
+    after_each(function()
+      if saved_bootstrap then
+        JjAdapter.bootstrap = saved_bootstrap
+        saved_bootstrap = nil
+      end
+    end)
+
+    -- Construct a JjAdapter without invoking `jj`. parse_fh_data only needs
+    -- a toplevel and stubbed bootstrap state to assemble file entries from
+    -- the supplied data table.
+    local function make_adapter()
+      local repo = vim.fn.tempname()
+      vim.fn.mkdir(repo, "p")
+
+      JjAdapter.bootstrap.done = true
+      JjAdapter.bootstrap.ok = true
+
+      return JjAdapter({ toplevel = repo, path_args = {} }), repo
+    end
+
+    it("matches a file against workspace-relative scope_args", function()
+      local adapter, repo = make_adapter()
+
+      local state = {
+        -- `path_args` retains the user-supplied form (absolute here); the
+        -- post-filter now consumes `scope_args`, which `file_history_worker`
+        -- has already resolved to workspace-relative form.
+        path_args = { repo .. "/foo.txt" },
+        scope_args = { "foo.txt" },
+        log_options = {},
+        prepared_log_opts = {},
+        layout_opt = { default_layout = Diff2 },
+        single_file = true,
+      }
+
+      local data = {
+        left_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        right_hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        namestat = { "M foo.txt" },
+      }
+
+      local success, log_entry = adapter:parse_fh_data(data, {}, state)
+      assert.True(success)
+      ---@cast log_entry LogEntry
+
+      assert.equals(1, #log_entry.files)
+      assert.equals("foo.txt", log_entry.files[1].path)
+
+      pcall(vim.fn.delete, repo, "rf")
+    end)
+
+    it("filters out files outside the scope_args set", function()
+      local adapter, repo = make_adapter()
+
+      local state = {
+        path_args = { repo .. "/keep.txt" },
+        scope_args = { "keep.txt" },
+        log_options = {},
+        prepared_log_opts = {},
+        layout_opt = { default_layout = Diff2 },
+        single_file = true,
+      }
+
+      local data = {
+        left_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        right_hash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        namestat = { "M unrelated.txt" },
+      }
+
+      local success, msg = adapter:parse_fh_data(data, {}, state)
+      assert.False(success)
+      assert.equals("Found no relevant file data with given path args!", msg)
+
+      pcall(vim.fn.delete, repo, "rf")
+    end)
+  end)
+
+  describe("history_scope", function()
+    local saved_bootstrap
+
+    before_each(function()
+      saved_bootstrap = vim.deepcopy(JjAdapter.bootstrap)
+    end)
+
+    after_each(function()
+      if saved_bootstrap then
+        JjAdapter.bootstrap = saved_bootstrap
+        saved_bootstrap = nil
+      end
+    end)
+
+    it("returns single_file for a real tracked file in a jj repo", function()
+      local jj_available = vim.fn.executable("jj") == 1
+      if not jj_available then
+        pending("jj not installed")
+        return
+      end
+
+      local repo_dir = vim.fn.tempname()
+      vim.fn.mkdir(repo_dir, "p")
+      vim.system({ "jj", "git", "init" }, { cwd = repo_dir }):wait()
+      vim.system({ "jj", "config", "set", "--repo", "user.name", "T" }, { cwd = repo_dir }):wait()
+      vim
+        .system({ "jj", "config", "set", "--repo", "user.email", "t@t" }, { cwd = repo_dir })
+        :wait()
+      local f = assert(io.open(repo_dir .. "/foo.txt", "w"))
+      f:write("hello\n")
+      f:close()
+      vim.system({ "jj", "describe", "-m", "add" }, { cwd = repo_dir }):wait()
+
+      JjAdapter.bootstrap.done = true
+      JjAdapter.bootstrap.ok = true
+      local adapter = JjAdapter({ toplevel = repo_dir, path_args = {} })
+      local scope = adapter:history_scope({ repo_dir .. "/foo.txt" }, {})
+      assert.is_true(scope.single_file)
+
+      vim.fn.delete(repo_dir, "rf")
+    end)
+
+    it("returns multi_file for an empty path_args", function()
+      local jj_available = vim.fn.executable("jj") == 1
+      if not jj_available then
+        pending("jj not installed")
+        return
+      end
+
+      local repo_dir = vim.fn.tempname()
+      vim.fn.mkdir(repo_dir, "p")
+      vim.system({ "jj", "git", "init" }, { cwd = repo_dir }):wait()
+
+      JjAdapter.bootstrap.done = true
+      JjAdapter.bootstrap.ok = true
+      local adapter = JjAdapter({ toplevel = repo_dir, path_args = {} })
+      local scope = adapter:history_scope({}, {})
+      assert.is_false(scope.single_file)
+
+      vim.fn.delete(repo_dir, "rf")
+    end)
+
+    it("returns multi_file for a directory pathspec", function()
+      local jj_available = vim.fn.executable("jj") == 1
+      if not jj_available then
+        pending("jj not installed")
+        return
+      end
+
+      local repo_dir = vim.fn.tempname()
+      vim.fn.mkdir(repo_dir .. "/sub", "p")
+      vim.system({ "jj", "git", "init" }, { cwd = repo_dir }):wait()
+
+      JjAdapter.bootstrap.done = true
+      JjAdapter.bootstrap.ok = true
+      local adapter = JjAdapter({ toplevel = repo_dir, path_args = {} })
+      local scope = adapter:history_scope({ repo_dir .. "/sub" }, {})
+      assert.is_false(scope.single_file)
+
+      vim.fn.delete(repo_dir, "rf")
+    end)
+  end)
+
+  describe("is_non_literal_pathspec", function()
+    local is_non_literal_pathspec =
+      require("diffview.vcs.adapters.jj")._test.is_non_literal_pathspec
+
+    it("treats `.` and the empty string as literal", function()
+      assert.is_false(is_non_literal_pathspec("."))
+      assert.is_false(is_non_literal_pathspec(""))
+    end)
+
+    it("flags jj pathspec prefixes", function()
+      assert.is_true(is_non_literal_pathspec("glob:*.lua"))
+      assert.is_true(is_non_literal_pathspec("root:foo"))
+      assert.is_true(is_non_literal_pathspec("cwd:foo"))
+      assert.is_true(is_non_literal_pathspec("cwd-glob:**/*.lua"))
+      assert.is_true(is_non_literal_pathspec("file-list:paths.txt"))
+    end)
+
+    it("flags shell glob metacharacters", function()
+      assert.is_true(is_non_literal_pathspec("*.lua"))
+      assert.is_true(is_non_literal_pathspec("src/?.lua"))
+      assert.is_true(is_non_literal_pathspec("[abc].lua"))
+    end)
+
+    it("keeps Windows drive letters literal", function()
+      assert.is_false(is_non_literal_pathspec("C:/foo.txt"))
+      assert.is_false(is_non_literal_pathspec("D:\\bar.txt"))
+    end)
+
+    it("keeps bare relative and absolute paths literal", function()
+      assert.is_false(is_non_literal_pathspec("foo.txt"))
+      assert.is_false(is_non_literal_pathspec("src/foo.txt"))
+      assert.is_false(is_non_literal_pathspec("/abs/foo.txt"))
+      assert.is_false(is_non_literal_pathspec("./foo.txt"))
     end)
   end)
 end)

@@ -265,10 +265,12 @@ COMMANDS                                        *diffview-commands*
 :[range]DiffviewFileHistory [paths] [options]
 
         Opens a new file history view that lists all commits that affected the
-        given paths. This is a porcelain interface for git-log. Both [paths]
-        and [options] may be specified in any order, even interchangeably.
+        given paths. This is a porcelain interface for the underlying VCS's
+        log command (e.g. `git log`, `hg log`, `jj log`). Both [paths] and
+        [options] may be specified in any order, even interchangeably.
 
-        NOTE: The Jujutsu adapter currently supports only |:DiffviewOpen|.
+        NOTE: The Jujutsu adapter does not support `--pin-local` or
+        [range]/`-L` line-trace history yet.
 
         If no [paths] are given, defaults to the top-level of the working
         tree. The top-level will be inferred from the current buffer when
@@ -278,7 +280,7 @@ COMMANDS                                        *diffview-commands*
 
         If [range] is given, the file history view will trace the line
         evolution of the given range in the current file (see the `-L` flag
-        below).
+        below). Not supported by the Jujutsu adapter.
 
         From the file history panel (the panel listing the commits) you can
         open an option panel by pressing `g!`. The option panel will allow you
@@ -481,6 +483,19 @@ COMMANDS                                        *diffview-commands*
 
         --exclude={pattern}
                 Exclude commits touching files as specified in the {pattern}.
+
+    Jujutsu Options: ~
+
+        -r{revset}, --revisions={revset}
+                Show only commits matching the specified jj revset. See
+                `jj help revsets` for the full list of operators and
+                functions.
+
+        -n{n}, --limit={n}
+                Limit the number of revisions shown.
+
+        -R, --reversed
+                Show revisions oldest-first.
 
                                                 *:DiffviewClose*
 :DiffviewClose[!]       Close the active Diffview. Aborts with an error if
