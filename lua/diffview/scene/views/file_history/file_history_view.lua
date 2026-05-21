@@ -157,40 +157,16 @@ function FileHistoryView:_destroy_pinned_b_files()
   self._pinned_b_files = {}
 end
 
----@private
----@param self FileHistoryView
----@param file FileEntry
-FileHistoryView._set_file = async.void(function(self, file)
-  self.panel:render()
-  self.panel:redraw()
-  vim.cmd("redraw")
-
-  -- Use the swap variant so pinned layouts can keep the pinned (b) window
-  -- bound across the swap; tab-leave / view-close still call `detach_files`
-  -- and tear down everything. Passing the next entry lets pinned variants
-  -- compare the upcoming b-file against the current one and detach when
-  -- they differ (multi-file pinning crossing a row to a different path).
-  self.cur_layout:detach_files_for_swap(file)
-  local cur_entry = self.cur_entry
-  self.emitter:emit("file_open_pre", file, cur_entry)
-  self.nulled = false
-
-  await(self:use_entry(file))
-
-  -- NOTE: Do NOT set foldmethod=manual on these diff windows. The
-  -- combination of diff=true and foldmethod=manual triggers a Neovim bug
-  -- where the screen redraw enters an infinite loop for certain buffer
-  -- pairs, permanently freezing the editor. Neovim's built-in
-  -- foldmethod=diff already folds unchanged regions in the diff.
-  -- See: sindrets/diffview.nvim#552
-
-  self.emitter:emit("file_open_post", file, cur_entry)
-
-  if not self.cur_entry.opened then
-    self.cur_entry.opened = true
-    DiffviewGlobal.emitter:emit("file_open_new", file)
-  end
-end)
+---@override
+---Use the swap variant so pinned layouts can keep the pinned (b) window
+---bound across the swap; tab-leave / view-close still call `detach_files`
+---and tear down everything. Passing the next entry lets pinned variants
+---compare the upcoming b-file against the current one and detach when
+---they differ (multi-file pinning crossing a row to a different path).
+---@param next_file FileEntry
+function FileHistoryView:_detach_files_for_next(next_file)
+  self.cur_layout:detach_files_for_swap(next_file)
+end
 
 function FileHistoryView:next_item()
   self:ensure_layout()

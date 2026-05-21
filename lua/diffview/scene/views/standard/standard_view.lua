@@ -24,6 +24,8 @@ local M = {}
 ---@field cur_layout Layout
 ---@field cur_entry FileEntry
 ---@field layouts table<Layout, Layout>
+---@field package _set_file_in_flight Future? # Active `_set_file` worker; queued callers await this so `await(set_file)` returns only after the latest pending file is opened.
+---@field package _set_file_pending FileEntry? # Newest file queued while `_set_file_in_flight` is set; the worker picks it up before terminating.
 local StandardView = oop.create_class("StandardView", View.__get())
 
 ---StandardView constructor
@@ -231,6 +233,78 @@ StandardView.use_entry = async.void(function(self, entry)
     end
   end
 end)
+
+---Set the active file. Coalesces rapid navigation: if a previous
+---`_set_file` is still running (e.g., user mashing `<Tab>` faster than
+---the async HEAD~ git fetch can complete), only the newest pending file
+---is kept; the in-flight worker picks it up after finishing its current
+---target. Without this guard, two concurrent `_set_file` coroutines
+---share the same windows: the second's `Layout.use_entry` overwrites
+---`win.file`, and the first's `open_file` then runs `set_win_buf`
+---against the second file's bufnr while its content is still loading,
+---placing an empty buffer in the window so `]c` in
+---`jump_to_first_change` finds no changes and leaves the cursor at line
+---1.
+---
+---This is a plain (non-async) function so non-awaited callers (rapid
+---`next_file`/`prev_file` taps) don't spawn a wrapper task per call;
+---they just update the pending slot and reuse the existing worker
+---Future. Awaited callers (e.g., `set_file` from conflict resolution)
+---can still `await(view:_set_file(item))` and resume only once the view
+---has actually switched to the latest pending file.
+---@param file FileEntry
+---@return Future
+function StandardView:_set_file(file)
+  self._set_file_pending = file
+  if self._set_file_in_flight and not self._set_file_in_flight:is_done() then
+    return self._set_file_in_flight
+  end
+  self._set_file_in_flight = self:_drain_set_file_pending()
+  return self._set_file_in_flight
+end
+
+---@param self StandardView
+StandardView._drain_set_file_pending = async.void(function(self)
+  while self._set_file_pending do
+    local target = self._set_file_pending --[[@as FileEntry]]
+    self._set_file_pending = nil
+
+    self.panel:render()
+    self.panel:redraw()
+    vim.cmd("redraw")
+
+    self:_detach_files_for_next(target)
+    local cur_entry = self.cur_entry
+    self.emitter:emit("file_open_pre", target, cur_entry)
+    self.nulled = false
+
+    await(self:use_entry(target))
+
+    -- NOTE: Do NOT set foldmethod=manual on these diff windows. The
+    -- combination of diff=true and foldmethod=manual triggers a Neovim bug
+    -- where the screen redraw enters an infinite loop for certain buffer
+    -- pairs, permanently freezing the editor. Neovim's built-in
+    -- foldmethod=diff already folds unchanged regions in the diff.
+    -- See: sindrets/diffview.nvim#552
+
+    self.emitter:emit("file_open_post", target, cur_entry)
+
+    if not self.cur_entry.opened then
+      self.cur_entry.opened = true
+      DiffviewGlobal.emitter:emit("file_open_new", target)
+    end
+  end
+  self._set_file_in_flight = nil
+end)
+
+---Detach files from the current layout before switching to `next_file`.
+---Subclasses override when the swap semantics differ (e.g., pinned
+---layouts in `FileHistoryView` keep specific windows bound across the
+---swap).
+---@param next_file FileEntry
+function StandardView:_detach_files_for_next(next_file) ---@diagnostic disable-line: unused-local
+  self.cur_layout:detach_files()
+end
 
 M.StandardView = StandardView
 
