@@ -1140,15 +1140,24 @@ file_history_panel                              *diffview-config-file_history_pa
                 "5, 3", `"bar"` shows e.g. "| 8 +++++---". Default:
                 `"number"`
 
-            {subject_highlight} ("ref_aware"|"plain")
+            {subject_highlight} ("ref_aware"|"merge_aware"|"plain")
                 How to highlight commit subjects. `"ref_aware"` uses
                 `DiffviewCommitRemoteRef` for commits reachable from a
                 remote-tracking ref (pushed) and `DiffviewCommitLocalOnly`
-                for commits that are not (unpushed). `"plain"` uses a
-                single colour for all.
+                for commits that are not (unpushed). `"merge_aware"`
+                adds a third group, `DiffviewCommitMerged`, for
+                commits reachable from a local or remote-tracking
+                `main`/`master` branch, giving a three-state
+                distinction (merged / pushed-but-unmerged /
+                local-only) in the same spirit as lazygit's
+                commits view. Currently only the Git adapter
+                populates the merged set; under other adapters
+                `"merge_aware"` falls back to the same colouring
+                as `"ref_aware"`. `"plain"` uses a single colour
+                for all.
                 On the selected commit `DiffviewCommitSelected` is
-                layered on top of the ref-aware highlight. The default
-                is bold-only, so the pushed/unpushed foreground shows
+                layered on top of the subject highlight. The default
+                is bold-only, so the base subject foreground shows
                 through. Override `DiffviewCommitSelected` (e.g. with
                 a `bg`) to restyle the selected subject without
                 touching the active-filename colour, which is governed

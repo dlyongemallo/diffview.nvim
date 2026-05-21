@@ -479,7 +479,7 @@ M.defaults = {
   },
 
   ---@alias DiffviewStatStyle "number"|"bar"|"both"
-  ---@alias DiffviewSubjectHighlight "ref_aware"|"plain"
+  ---@alias DiffviewSubjectHighlight "ref_aware"|"merge_aware"|"plain"
   ---@alias DiffviewCommitFormatField "status"|"files"|"stats"|"hash"|"reflog"|"ref"|"subject"|"author"|"date"
   ---@alias DiffviewDateFormat "auto"|"relative"|"iso"
   ---@class DiffviewFileHistoryPanelConfig
@@ -494,7 +494,7 @@ M.defaults = {
 
   ---@class DiffviewFileHistoryPanelConfig.user
   ---@field stat_style? DiffviewStatStyle "number", "bar", or "both".
-  ---@field subject_highlight? DiffviewSubjectHighlight "ref_aware" colours by pushed/unpushed; "plain" is uniform.
+  ---@field subject_highlight? DiffviewSubjectHighlight "ref_aware" colours by pushed/unpushed; "merge_aware" adds a third colour for commits reachable from a main/master branch; "plain" is uniform.
   ---@field commit_format? DiffviewCommitFormatField[] Ordered components shown per commit entry.
   ---@field log_options? DiffviewFileHistoryLogOptions.user Log options per adapter. See `|diffview-config-log_options|`.
   ---@field win_config? DiffviewFileHistoryPanelWinConfig.user File history panel window config.
@@ -503,7 +503,7 @@ M.defaults = {
   ---@field date_format? DiffviewDateFormat "auto", "relative", or "iso".
   file_history_panel = {
     stat_style = "number", -- "number" (e.g. "5, 3"), "bar" (e.g. "| 8 +++++---"), or "both".
-    subject_highlight = "ref_aware", -- "ref_aware" (colour by pushed/unpushed) or "plain".
+    subject_highlight = "ref_aware", -- "ref_aware" (pushed vs unpushed), "merge_aware" (adds a third colour for merged-to-main/master), or "plain".
     -- Ordered list of components to show for each commit entry.
     -- Available: "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date"
     commit_format = { "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date" },

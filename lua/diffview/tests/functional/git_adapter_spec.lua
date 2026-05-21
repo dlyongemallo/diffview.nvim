@@ -1474,4 +1474,272 @@ describe("diffview.vcs.adapters.git", function()
       end)
     )
   end)
+
+  describe("_find_main_branch_refs", function()
+    it(
+      "returns an empty list when no main/master refs exist",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- The branch from `git init` may be `main` or `master` depending on
+          -- the user's `init.defaultBranch`. Rename it out of the way so we
+          -- can assert "no main refs" deterministically.
+          run({ "git", "branch", "-m", "feature" }, repo)
+
+          local refs = adapter:_find_main_branch_refs()
+          assert.equals(0, #refs)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "finds local main/master and remote-tracking variants",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Force a stable starting state: rename whatever the default
+          -- branch is so it doesn't get picked up by accident, then set up
+          -- exactly the refs we want to assert against.
+          run({ "git", "branch", "-m", "scratch" }, repo)
+          local head = run({ "git", "rev-parse", "HEAD" }, repo)
+          run({ "git", "update-ref", "refs/heads/main", head }, repo)
+          run({ "git", "update-ref", "refs/remotes/origin/master", head }, repo)
+
+          local refs = adapter:_find_main_branch_refs()
+          table.sort(refs)
+          assert.equals(2, #refs)
+          assert.equals("refs/heads/main", refs[1])
+          assert.equals("refs/remotes/origin/master", refs[2])
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+  end)
+
+  describe("fh_compute_merged_set", function()
+    it(
+      "marks ancestors of a main branch ref as merged, not only the tip",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Build a small linear history of three commits, then pin a "main"
+          -- ref at the second so the third is unmerged.
+          local hashes = {}
+          for i = 1, 3 do
+            local p = ("%s/f%d.txt"):format(repo, i)
+            local f = assert(io.open(p, "w"))
+            f:write(("file %d\n"):format(i))
+            f:close()
+            run({ "git", "add", ("f%d.txt"):format(i) }, repo)
+            run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c" .. i }, repo)
+            hashes[i] = run({ "git", "rev-parse", "HEAD" }, repo)
+          end
+
+          run({ "git", "update-ref", "refs/heads/main", hashes[2] }, repo)
+
+          local set = adapter:fh_compute_merged_set({ "refs/heads/main" }, {})
+          assert.is_not_nil(set, "fh_compute_merged_set must not return nil on success")
+          assert.True(set[hashes[1]], "first commit must be in the merged set")
+          assert.True(set[hashes[2]], "second commit (the main tip) must be in the merged set")
+          assert.is_nil(set[hashes[3]], "third commit must NOT be in the merged set")
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "returns an empty set when no main refs are supplied",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          local set = adapter:fh_compute_merged_set({}, {})
+          assert.is_not_nil(set)
+          assert.is_nil(next(set), "set must be empty when there are no main refs to walk")
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+  end)
+
+  -- Mirrors `fh_extend_pushed_set`: when `--follow` (or line-trace) walks past
+  -- a rename, the initial merged-set query missed the old name; the extension
+  -- backfills it.
+  describe("fh_extend_merged_set", function()
+    it(
+      "adds hashes that touched the pre-rename path to the existing set",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Same rename scaffold as the pushed-set test, but pin `main` (not
+          -- a remote ref) at c3 so c1..c3 count as "merged".
+          local original = repo .. "/original.txt"
+          local f = assert(io.open(original, "w"))
+          f:write("v1\n")
+          f:close()
+          run({ "git", "add", "original.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c1" }, repo)
+          local c1 = run({ "git", "rev-parse", "HEAD" }, repo)
+
+          f = assert(io.open(original, "w"))
+          f:write("v2\n")
+          f:close()
+          run({ "git", "add", "original.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c2" }, repo)
+          local c2 = run({ "git", "rev-parse", "HEAD" }, repo)
+
+          run({ "git", "mv", "original.txt", "renamed.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c3" }, repo)
+          local c3 = run({ "git", "rev-parse", "HEAD" }, repo)
+
+          f = assert(io.open(repo .. "/renamed.txt", "w"))
+          f:write("v3\n")
+          f:close()
+          run({ "git", "add", "renamed.txt" }, repo)
+          run({ "git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", "c4" }, repo)
+          local c4 = run({ "git", "rev-parse", "HEAD" }, repo)
+
+          -- Pin `refs/heads/main` at c3 AFTER c4 is committed: if the default
+          -- branch (per `init.defaultBranch`) is `main`, an earlier `update-ref`
+          -- would be silently advanced when the next commit lands on HEAD.
+          run({ "git", "update-ref", "refs/heads/main", c3 }, repo)
+
+          local main_refs = { "refs/heads/main" }
+          local state = {
+            main_refs = main_refs,
+            merged_set = adapter:fh_compute_merged_set(main_refs, { "renamed.txt" }),
+            merged_paths_seen = { ["renamed.txt"] = true },
+          }
+          assert.is_not_nil(state.merged_set)
+          assert.True(state.merged_set[c3], "rename commit must be in initial set")
+          assert.is_nil(state.merged_set[c2], "pre-rename c2 must be absent initially")
+          assert.is_nil(state.merged_set[c1], "pre-rename c1 must be absent initially")
+          assert.is_nil(state.merged_set[c4], "local-only c4 must never be present")
+
+          adapter:fh_extend_merged_set(state, "original.txt")
+
+          assert.True(state.merged_set[c1], "c1 must be in the extended set")
+          assert.True(state.merged_set[c2], "c2 must be in the extended set")
+          assert.True(state.merged_set[c3], "c3 must still be in the set")
+          assert.is_nil(state.merged_set[c4], "c4 must remain absent (local-only)")
+          assert.True(state.merged_paths_seen["original.txt"])
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "is idempotent: a second call with the same path does not rerun rev-list",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local calls = 0
+        local real = adapter.fh_compute_merged_set
+        adapter.fh_compute_merged_set = function(self, main_refs, path_args)
+          calls = calls + 1
+          return real(self, main_refs, path_args)
+        end
+
+        local ok, err = pcall(function()
+          local state = {
+            main_refs = { "refs/heads/main" },
+            merged_set = {},
+            merged_paths_seen = {},
+          }
+
+          adapter:fh_extend_merged_set(state, "original.txt")
+          assert.equals(1, calls)
+          assert.True(state.merged_paths_seen["original.txt"])
+
+          adapter:fh_extend_merged_set(state, "original.txt")
+          assert.equals(1, calls, "second call must not invoke fh_compute_merged_set")
+        end)
+
+        adapter.fh_compute_merged_set = real
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+
+    it(
+      "is a no-op when the merged set was never computed",
+      test_utils.async_test(function()
+        local repo, adapter = make_repo_and_adapter()
+
+        local ok, err = pcall(function()
+          -- Mirrors `subject_highlight ~= "merge_aware"`: the worker skips the
+          -- initial query and leaves the fields nil. The extension must not
+          -- materialise a set in that case.
+          local state = {}
+
+          adapter:fh_extend_merged_set(state, "original.txt")
+
+          assert.is_nil(state.merged_set)
+          assert.is_nil(state.merged_paths_seen)
+          assert.is_nil(state.main_refs)
+        end)
+
+        vim.schedule(function()
+          pcall(vim.fn.delete, repo, "rf")
+        end)
+        async.await(async.scheduler())
+
+        if not ok then
+          error(err)
+        end
+      end)
+    )
+  end)
 end)

@@ -347,6 +347,34 @@ describe("file_history_render", function()
       eq("DiffviewCommitLocalOnly", render_subject_hl(entry, false))
     end)
 
+    it("uses DiffviewCommitMerged for 'merge_aware' on merged commit", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "merge_aware"
+      config.setup(conf)
+
+      -- A merged commit is also pushed; the merged check must win.
+      local entry = { is_pushed = true, is_merged = true }
+      eq("DiffviewCommitMerged", render_subject_hl(entry, false))
+    end)
+
+    it("uses DiffviewCommitRemoteRef for 'merge_aware' on pushed-but-unmerged commit", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "merge_aware"
+      config.setup(conf)
+
+      local entry = { is_pushed = true, is_merged = false }
+      eq("DiffviewCommitRemoteRef", render_subject_hl(entry, false))
+    end)
+
+    it("uses DiffviewCommitLocalOnly for 'merge_aware' on unpushed commit", function()
+      local conf = config.get_config()
+      conf.file_history_panel.subject_highlight = "merge_aware"
+      config.setup(conf)
+
+      local entry = { is_pushed = false, is_merged = false }
+      eq("DiffviewCommitLocalOnly", render_subject_hl(entry, false))
+    end)
+
     it("layers DiffviewCommitSelected on top of the ref-aware base when selected", function()
       local conf = config.get_config()
       conf.file_history_panel.subject_highlight = "ref_aware"
