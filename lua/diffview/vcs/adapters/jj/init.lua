@@ -574,30 +574,104 @@ function JjAdapter:is_binary(path, rev)
   return false
 end
 
+---Emit a warning at most once per adapter instance for a given key. The file
+---panel batches stage/unstage by retrying file-by-file when a batch fails, so
+---an unconditional `utils.warn` would fire N+1 times for a selection of N
+---files. Keying lets us coalesce all "no staging in jj" surfaces into a single
+---visible message per session.
+---@param key string
+---@param msg string
+function JjAdapter:_warn_once(key, msg)
+  self._warned = self._warned or {}
+  if self._warned[key] then
+    return
+  end
+  self._warned[key] = true
+  utils.warn(msg)
+end
+
 ---@param path string
 ---@param kind vcs.FileKind
 ---@param commit string?
 ---@param callback fun(ok: boolean, undo?: string)
 JjAdapter.file_restore = async.wrap(function(self, path, kind, commit, callback)
-  callback(false)
+  if kind == "staged" then
+    self:_warn_once(
+      "no_staging",
+      "Jujutsu has no staging index; staging-related operations are not supported."
+    )
+    callback(false)
+    return
+  end
+
+  -- `jj restore --from <commit> -- <path>` rewrites the working copy from the
+  -- source commit. When `commit` is nil this defaults to `@-` (the parent),
+  -- which matches "discard local changes" semantics.
+  local from = commit or "@-"
+  local abs_path = pl:join(self.ctx.toplevel, path)
+  local _, code, stderr = self:exec_sync(
+    { "restore", "--from", from, "--", path },
+    { cwd = self.ctx.toplevel }
+  )
+
+  if code ~= 0 then
+    utils.err(
+      utils.vec_join(
+        fmt("Failed to restore %s from %s!", utils.str_quote(path), utils.str_quote(from)),
+        "Jujutsu output:",
+        stderr
+      )
+    )
+    callback(false)
+    return
+  end
+
+  -- Refresh any open buffer for the restored file so its contents are picked
+  -- up from disk instead of staying stale.
+  await(async.scheduler())
+  local bn = utils.find_file_buffer(abs_path)
+  if bn then
+    vim.cmd(fmt("checktime %d", bn))
+  end
+
+  callback(true, ":!jj op undo")
 end)
+
+-- The staging methods below are deliberate no-ops: jj has no staging index, so
+-- there is nothing to do. We return `true` (rather than `false`) because the
+-- diff-view staging listeners surface a "Failed to stage/unstage" error on a
+-- `false` return, and the user has already been told via `_warn_once` that the
+-- operation is unsupported. A `true` return signals "request handled" without
+-- piling a misleading error on top of the warning.
 
 ---@param file vcs.File
 ---@return boolean
-function JjAdapter:stage_index_file(file)
-  return false
+function JjAdapter:stage_index_file(file) ---@diagnostic disable-line: unused-local
+  self:_warn_once(
+    "no_staging",
+    "Jujutsu has no staging index; staging-related operations are not supported."
+  )
+  return true
 end
 
 ---@param paths string[]?
 ---@return boolean
-function JjAdapter:reset_files(paths)
-  return false
+function JjAdapter:reset_files(paths) ---@diagnostic disable-line: unused-local
+  self:_warn_once(
+    "no_staging",
+    "Jujutsu has no staging index; staging-related operations are not supported."
+  )
+  return true
 end
 
 ---@param paths string[]
 ---@return boolean
-function JjAdapter:add_files(paths)
-  return false
+function JjAdapter:add_files(paths) ---@diagnostic disable-line: unused-local
+  self:_warn_once(
+    "no_staging",
+    "Jujutsu has no staging index; staging-related operations are not supported."
+  )
+  return true
 end
 
 ---@param arg_lead string

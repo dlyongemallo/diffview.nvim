@@ -81,6 +81,7 @@ and committing workflows.
   with no `[rev]` the entries under "Changes" will have the index buffer
   on the left side, and the entries under "Staged changes" will have it on the
   right side). Once you write to an index buffer the index will be updated.
+  (Note: Staging is a Git concept. These actions are no-ops on Jujutsu.)
 
 ## Commands
 
