@@ -147,9 +147,10 @@ end
 ---@private
 ---@param pipe uv_pipe_t
 ---@param out string[]
+---@param on_eof fun()
 ---@param err? string
 ---@param data? string
-function Job:buffered_reader(pipe, out, err, data)
+function Job:buffered_reader(pipe, out, on_eof, err, data)
   if err then
     logger:error("[Job:buffered_reader()] " .. err)
   end
@@ -158,14 +159,16 @@ function Job:buffered_reader(pipe, out, err, data)
     out[#out + 1] = data
   else
     try_close(pipe)
+    on_eof()
   end
 end
 
 ---@private
 ---@param pipe uv_pipe_t
 ---@param out string[]
+---@param on_eof fun()
 ---@param line_listeners? diffview.Job.OnOutCallback[]
-function Job:line_reader(pipe, out, line_listeners)
+function Job:line_reader(pipe, out, on_eof, line_listeners)
   local line_buffer
 
   ---@param err? string
@@ -207,6 +210,7 @@ function Job:line_reader(pipe, out, line_listeners)
       end
 
       try_close(pipe)
+      on_eof()
     end
   end
 end
@@ -215,15 +219,16 @@ end
 ---@param pipe uv_pipe_t
 ---@param out string[]
 ---@param kind StdioKind
-function Job:handle_reader(pipe, out, kind)
+---@param on_eof fun()
+function Job:handle_reader(pipe, out, kind, on_eof)
   if self.buffered_std then
-    pipe:read_start(utils.bind(self.buffered_reader, self, pipe, out))
+    pipe:read_start(utils.bind(self.buffered_reader, self, pipe, out, on_eof))
   else
     local listeners = ({
       out = self.on_stdout_listeners,
       err = self.on_stderr_listeners,
     })[kind] or {}
-    pipe:read_start(self:line_reader(pipe, out, listeners))
+    pipe:read_start(self:line_reader(pipe, out, on_eof, listeners))
   end
 end
 
@@ -296,26 +301,29 @@ Job.start = async.wrap(function(self, callback)
 
   local handle, pid
 
-  handle, pid = uv.spawn(self.command, {
-    args = self.args,
-    stdio = { self.p_in, self.p_out, self.p_err },
-    cwd = self.cwd,
-    env = self.env,
-    hide = true,
-  }, function(code, signal)
-    ---@cast handle -?
-    handle:close()
-    self.p_out:read_stop()
-    self.p_err:read_stop()
+  -- The process-exit callback and the stdio EOF callbacks can fire in any
+  -- order on the libuv loop. Closing the pipes from the exit callback (via
+  -- `read_stop` / `try_close`) drops any chunks still queued behind it, so
+  -- gather both signals before finalising. Each pipe's reader calls `on_eof`
+  -- when libuv delivers `data == nil`; process exit sets `process_exited`;
+  -- whichever event fires last triggers the actual finalisation.
+  local process_exited = false
+  local pending_eofs = 2
+  local exit_code, exit_signal
+
+  local function finalize()
+    if not (process_exited and pending_eofs == 0) then
+      return
+    end
 
     if not self.code then
-      self.code = code
+      self.code = exit_code
     end
     if not self.signal then
-      self.signal = signal
+      self.signal = exit_signal
     end
 
-    try_close(self.p_out, self.p_err, self.p_in)
+    try_close(self.p_in)
 
     if self.buffered_std then
       self.stdout = process_chunks(self.stdout)
@@ -354,6 +362,26 @@ Job.start = async.wrap(function(self, callback)
     end
 
     callback(ok, err)
+  end
+
+  local function on_eof()
+    pending_eofs = pending_eofs - 1
+    finalize()
+  end
+
+  handle, pid = uv.spawn(self.command, {
+    args = self.args,
+    stdio = { self.p_in, self.p_out, self.p_err },
+    cwd = self.cwd,
+    env = self.env,
+    hide = true,
+  }, function(code, signal)
+    ---@cast handle -?
+    handle:close()
+    exit_code = code
+    exit_signal = signal
+    process_exited = true
+    finalize()
   end)
 
   if not handle then
@@ -364,8 +392,8 @@ Job.start = async.wrap(function(self, callback)
   self.handle = handle
   self.pid = pid --[[@as integer ]]
 
-  self:handle_reader(self.p_out, self.stdout, "out")
-  self:handle_reader(self.p_err, self.stderr, "err")
+  self:handle_reader(self.p_out, self.stdout, "out", on_eof)
+  self:handle_reader(self.p_err, self.stderr, "err", on_eof)
 
   if self.p_in then
     self:handle_writer(self.p_in, self.writer)
