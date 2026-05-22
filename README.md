@@ -1,6 +1,6 @@
 # Diffview.nvim
 
-> **Note:** This is an **actively maintained fork** of [sindrets/diffview.nvim](https://github.com/sindrets/diffview.nvim) with bug fixes and improvements applied. The original repository has not been updated since June 2024.
+> **Note:** This is an **actively maintained fork** of [sindrets/diffview.nvim](https://github.com/sindrets/diffview.nvim) with bug fixes and improvements applied. The original repository has not been updated since June 2024. See [`doc/diffview_changelog.txt`](doc/diffview_changelog.txt) (`:h diffview.changelog`) for breaking changes and notable additions.
 
 ## Introduction
 
@@ -83,6 +83,19 @@ and committing workflows.
   right side). Once you write to an index buffer the index will be updated.
   (Note: Staging is a Git concept. These actions are no-ops on Jujutsu.)
 
+- **Unified Inline Diff** — `diff1_inline` layout renders adds/deletes
+  in a single window via extmark overlays, with tree-sitter highlights
+  preserved on both added and deleted lines. Configurable via
+  `view.inline.style` (`"unified"` / `"overleaf"`).
+
+- **Multi-file Selection** — Select multiple files in the file panel
+  (`w` to toggle, `C` to clear) for batch stage / unstage / restore.
+  Selections persist across Neovim restarts.
+
+- **Pin Local in File History** — Run `:DiffviewFileHistory --pin-local`
+  to keep the working tree on one side while cycling commits on the
+  other (Git only).
+
 ## Commands
 
 | Command | Description |
@@ -90,6 +103,8 @@ and committing workflows.
 | `:DiffviewOpen [rev] [options] [ -- {paths...}]` | Open a diff view |
 | `:DiffviewFileHistory [paths] [options]` | Browse file/commit history |
 | `:DiffviewDiffFiles {file1} {file2}` | Diff two arbitrary files |
+| `:DiffviewMergeFiles {output} [{base}] {left} {right}` | 3-way / 4-way merge editor (no VCS required) |
+| `:DiffviewDiffDirs {left} {right} [{output}]` | Compare two on-disk directories (no VCS required) |
 | `:DiffviewClose` | Close the current diffview. You can also use `:tabclose`. |
 | `:DiffviewToggleFiles` | Toggle the file panel |
 | `:DiffviewFocusFiles` | Bring focus to the file panel |
@@ -108,10 +123,14 @@ Examples:
 
 #### VCS Adapter Notes
 
-- **Jujutsu** supports `:DiffviewOpen` and `:DiffviewFileHistory`, but not
-  `--pin-local` or line-range history (`:'<,'>DiffviewFileHistory`). The
-  options `--cached`, `--staged`, and `--imply-local` are Git-only. In
-  colocated repos, set `preferred_adapter = "jj"` to use the Jujutsu adapter.
+- **Jujutsu** supports `:DiffviewOpen`, `:DiffviewFileHistory`, and works as
+  jj's external merge tool (`:DiffviewMergeFiles`) and diff editor
+  (`:DiffviewDiffDirs`); see `:h :DiffviewMergeFiles` and
+  `:h :DiffviewDiffDirs` for `~/.config/jj/config.toml` wiring. The options
+  `--cached`, `--staged`, `--imply-local`, the `--pin-local` flag, and
+  line-range history (`:'<,'>DiffviewFileHistory`) are not supported;
+  staging actions are no-ops (jj has no staging index). In colocated
+  repos, set `preferred_adapter = "jj"` to use the Jujutsu adapter.
 - **Sapling** is detected automatically through the Mercurial adapter. Use
   `hg_cmd` to configure the executable (e.g. `hg_cmd = { "sl" }`).
 - **Perforce** support is experimental. Requires the `p4` CLI ≥ 2019.1
