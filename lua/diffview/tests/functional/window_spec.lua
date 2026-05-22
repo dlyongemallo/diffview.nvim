@@ -223,6 +223,7 @@ describe("diffview.scene.window", function()
         local bufnr = vim.api.nvim_create_buf(false, true)
         local win, file = make_window(adapter)
         file.bufnr = bufnr
+        file.loaded = true
         win.parent = stub_parent()
 
         async.await(win:open_file())
@@ -249,6 +250,7 @@ describe("diffview.scene.window", function()
         local bufnr = vim.api.nvim_create_buf(false, true)
         local win, file = make_window(adapter)
         file.bufnr = bufnr
+        file.loaded = true
         -- Custom winopts table that lacks a `foldlevel` key: the fix must
         -- still populate it from config so the user override is not dropped.
         file.winopts = { diff = true, scrollbind = true, cursorbind = true }
@@ -279,6 +281,7 @@ describe("diffview.scene.window", function()
         local bufnr = vim.api.nvim_create_buf(false, true)
         local win, file = make_window(adapter)
         file.bufnr = bufnr
+        file.loaded = true
         file.winopts = {
           diff = false,
           scrollbind = false,

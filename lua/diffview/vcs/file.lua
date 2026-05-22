@@ -4,6 +4,7 @@ local oop = require("diffview.oop")
 
 local GitRev = lazy.access("diffview.vcs.adapters.git.rev", "GitRev") ---@type GitRev|LazyModule
 local RevType = lazy.access("diffview.vcs.rev", "RevType") ---@type RevType|LazyModule
+local Signal = lazy.access("diffview.control", "Signal") ---@type Signal|LazyModule
 local config = lazy.require("diffview.config") ---@module "diffview.config"
 local lib = lazy.require("diffview.lib") ---@module "diffview.lib"
 local utils = lazy.require("diffview.utils") ---@module "diffview.utils"
@@ -34,12 +35,15 @@ local M = {}
 ---@field bufnr? integer
 ---@field binary boolean
 ---@field active boolean
+---@field loaded boolean # True once the buffer's content is fully populated. Required by `is_valid()` to distinguish a fully-loaded buffer from a mid-load placeholder.
 ---@field ready boolean
 ---@field winbar string?
 ---@field winopts WindowOptions
 ---@field _orig_ts_context_disable? boolean # Saved `ts_context_disable` before diffview overrode it.
 ---@field _orig_context_enabled? boolean # Saved `context_enabled` before diffview overrode it.
 ---@field _context_state_saved? boolean # Whether the two saved values above are populated.
+---@field package _loading? Signal # Owned by the in-flight `create_buffer` call; concurrent callers await it before reading `bufnr`.
+---@field package _loading_error? string # Error from the most recent failed `create_buffer`, exposed to concurrent waiters once the signal fires.
 local File = oop.create_class("vcs.File")
 
 ---@type table<integer, vcs.File.AttachState>
@@ -81,6 +85,7 @@ function File:init(opt)
   self.symbol = opt.symbol
   self.get_data = opt.get_data
   self.active = true
+  self.loaded = false
   self.ready = false
 
   self.winopts = opt.winopts
@@ -217,199 +222,270 @@ File.create_buffer = async.wrap(function(self, callback)
   if self == File.NULL_FILE then
     callback(File._get_null_buffer())
     return
-  elseif self:is_valid() then
+  end
+
+  if self:is_valid() then
     callback(self.bufnr)
     return
   end
 
-  -- Bail out if the file was deactivated during the scheduler yield
-  -- (e.g. user navigated away). This covers all code paths below: binary
-  -- check, local buffer creation, stage blob lookup, and produce_data.
-  if not self.active then
-    error(File.CANCELLED)
-    return
-  end
-
-  if self.binary == nil and not config.get_config().diff_binaries then
-    self.binary = self.adapter:is_binary(self.path, self.rev)
-  end
-
-  if self.nulled or self.binary then
-    self.bufnr = File._get_null_buffer()
-    self:post_buf_created()
-    callback(self.bufnr)
-    return
-  end
-
-  if self.rev.type == RevType.LOCAL then
-    self:_create_local_buffer()
-    callback(self.bufnr)
-    return
-  end
-
-  -- Unmerged entries may not have all stage blobs (e.g. delete/modify
-  -- conflicts). Missing stage blobs should render as null buffers.
-  if self.rev.type == RevType.STAGE and self.rev.stage > 0 and self.adapter.file_blob_hash then
-    if not self.adapter:file_blob_hash(self.path, ":" .. self.rev.stage) then
-      self.nulled = true
-      self.bufnr = File._get_null_buffer()
-      self:post_buf_created()
+  -- An in-flight `create_buffer` on this same File has set `bufnr` but
+  -- hasn't finished populating its content. Wait for it instead of
+  -- returning a half-built buffer.
+  if self._loading then
+    await(self._loading)
+    if self:is_valid() then
       callback(self.bufnr)
       return
     end
+    -- The in-flight call exited without marking the file loaded. Re-raise
+    -- the same error it observed so all waiters share its outcome
+    -- (cancellation, `produce_data` failure, etc.).
+    error(self._loading_error or ("Concurrent buffer load failed for: " .. tostring(self.path)))
   end
 
-  local context
-  if self.rev.type == RevType.COMMIT then
-    context = self.rev:abbrev(11)
-  elseif self.rev.type == RevType.STAGE then
-    context = fmt(":%d:", self.rev.stage)
-  elseif self.rev.type == RevType.CUSTOM then
-    context = "[custom]"
-  end
+  -- First caller: install the signal that concurrent callers will await.
+  -- It must be sent on every exit path (success, error, cancellation) so
+  -- waiters never hang.
+  local loading = Signal()
+  self._loading = loading
 
-  local fullname = pl:join("diffview://", self.adapter.ctx.dir, context, self.path)
-
-  self.bufnr = utils.find_named_buffer(fullname)
-
-  if self.bufnr then
-    callback(self.bufnr)
-    return
-  end
-
-  -- Create buffer and set name *before* calling `produce_data()` to ensure
-  -- that multiple file instances won't ever try to create the same file.
-  self.bufnr = api.nvim_create_buf(false, false)
-  api.nvim_buf_set_name(self.bufnr, fullname)
-
-  -- If the file was deactivated (e.g. the user navigated away) before we
-  -- start the expensive produce_data call, clean up and bail out.
-  if not self.active then
-    pcall(api.nvim_buf_delete, self.bufnr, { force = true })
+  -- Clear stale state from any prior successful load. A buffer wiped
+  -- outside `dispose_buffer` (e.g. user `:bdelete`) leaves `loaded=true`
+  -- with an invalid `bufnr`; without this reset, a concurrent caller
+  -- would short-circuit on `is_valid()` as soon as we allocate the fresh
+  -- bufnr below but before its content is populated.
+  self.loaded = false
+  if self.bufnr and not api.nvim_buf_is_valid(self.bufnr) then
     self.bufnr = nil
-    error(File.CANCELLED)
-    return
   end
 
-  local err, lines = await(self:produce_data())
-  if err then
-    error(table.concat(err, "\n"))
-  end
+  -- Tracks a `diffview://` buffer freshly allocated by this call. On any
+  -- post-creation error we wipe it so a retry (or a sibling File instance)
+  -- doesn't pick up the half-built placeholder via `find_named_buffer`.
+  local created_fresh_bufnr
 
-  await(async.scheduler())
+  local ok, err = pcall(function()
+    -- Bail out if the file was deactivated during the scheduler yield
+    -- (e.g. user navigated away). This covers all code paths below:
+    -- binary check, local buffer creation, stage blob lookup, and
+    -- produce_data.
+    if not self.active then
+      error(File.CANCELLED)
+    end
 
-  -- If the file was deactivated while produce_data was running, clean up.
-  if not self.active then
-    pcall(api.nvim_buf_delete, self.bufnr, { force = true })
-    self.bufnr = nil
-    error(File.CANCELLED)
-    return
-  end
+    if self.binary == nil and not config.get_config().diff_binaries then
+      self.binary = self.adapter:is_binary(self.path, self.rev)
+    end
 
-  -- Revalidate buffer in case the file was destroyed before `produce_data()`
-  -- returned.
-  if not api.nvim_buf_is_valid(self.bufnr) then
-    error("The buffer has been invalidated!")
-    return
-  end
-  local bufopts = vim.deepcopy(File.bufopts)
+    if self.nulled or self.binary then
+      self.bufnr = File._get_null_buffer()
+      self:post_buf_created()
+      return
+    end
 
-  if self.rev.type == RevType.STAGE and self.rev.stage == 0 then
-    self.blob_hash = self.adapter:file_blob_hash(self.path)
-    bufopts.modifiable = true
-    bufopts.buftype = "acwrite"
-    bufopts.undolevels = nil
-    utils.tbl_set(File.index_bufmap, { self.adapter.ctx.toplevel, self.path }, self.bufnr)
+    if self.rev.type == RevType.LOCAL then
+      self:_create_local_buffer()
+      return
+    end
 
-    api.nvim_create_autocmd("BufWriteCmd", {
-      buffer = self.bufnr,
-      nested = true,
-      callback = function()
-        self.adapter:stage_index_file(self)
-      end,
-    })
-  end
-
-  for option, value in pairs(bufopts) do
-    vim.bo[self.bufnr][option] = value
-  end
-
-  local last_modifiable = vim.bo[self.bufnr].modifiable
-  local last_modified = vim.bo[self.bufnr].modified
-  vim.bo[self.bufnr].modifiable = true
-  api.nvim_buf_set_lines(self.bufnr, 0, -1, false, lines)
-
-  -- Prevent LSP clients from attaching to diffview:// buffers. LSP servers
-  -- may not support the custom URI scheme, and the buffer content may be
-  -- from a different revision making LSP features incorrect or harmful.
-  api.nvim_create_autocmd("LspAttach", {
-    buffer = self.bufnr,
-    callback = function(ev)
-      local client_id = ev.data and ev.data.client_id
-      if not client_id then
+    -- Unmerged entries may not have all stage blobs (e.g. delete/modify
+    -- conflicts). Missing stage blobs should render as null buffers.
+    if self.rev.type == RevType.STAGE and self.rev.stage > 0 and self.adapter.file_blob_hash then
+      if not self.adapter:file_blob_hash(self.path, ":" .. self.rev.stage) then
+        self.nulled = true
+        self.bufnr = File._get_null_buffer()
+        self:post_buf_created()
         return
       end
-      vim.schedule(function()
-        if api.nvim_buf_is_valid(ev.buf) then
-          pcall(vim.lsp.buf_detach_client, ev.buf, client_id)
+    end
+
+    local context
+    if self.rev.type == RevType.COMMIT then
+      context = self.rev:abbrev(11)
+    elseif self.rev.type == RevType.STAGE then
+      context = fmt(":%d:", self.rev.stage)
+    elseif self.rev.type == RevType.CUSTOM then
+      context = "[custom]"
+    end
+
+    local fullname = pl:join("diffview://", self.adapter.ctx.dir, context, self.path)
+
+    self.bufnr = utils.find_named_buffer(fullname)
+
+    if self.bufnr then
+      -- Only reuse a found buffer if a prior successful load marked it
+      -- ready. An unmarked buffer may belong to a different File instance
+      -- whose load is still in flight; since we don't yet coordinate
+      -- across File instances, refuse to return a half-built buffer.
+      if vim.b[self.bufnr].diffview_loaded then
+        return
+      end
+      self.bufnr = nil
+      error("Found unloaded `diffview://` buffer: " .. fullname)
+    end
+
+    -- Create buffer and set name *before* calling `produce_data()` to ensure
+    -- that multiple file instances won't ever try to create the same file.
+    self.bufnr = api.nvim_create_buf(false, false)
+    created_fresh_bufnr = self.bufnr
+    api.nvim_buf_set_name(self.bufnr, fullname)
+
+    -- If the file was deactivated (e.g. the user navigated away) before we
+    -- start the expensive produce_data call, bail out. The outer handler
+    -- wipes `created_fresh_bufnr`.
+    if not self.active then
+      error(File.CANCELLED)
+    end
+
+    local data_err, lines = await(self:produce_data())
+    if data_err then
+      error(table.concat(data_err, "\n"))
+    end
+
+    await(async.scheduler())
+
+    -- If the file was deactivated while produce_data was running, bail
+    -- out. The outer handler wipes `created_fresh_bufnr`.
+    if not self.active then
+      error(File.CANCELLED)
+    end
+
+    -- Revalidate buffer in case the file was destroyed before `produce_data()`
+    -- returned.
+    if not api.nvim_buf_is_valid(self.bufnr) then
+      error("The buffer has been invalidated!")
+    end
+    local bufopts = vim.deepcopy(File.bufopts)
+
+    if self.rev.type == RevType.STAGE and self.rev.stage == 0 then
+      self.blob_hash = self.adapter:file_blob_hash(self.path)
+      bufopts.modifiable = true
+      bufopts.buftype = "acwrite"
+      bufopts.undolevels = nil
+      utils.tbl_set(File.index_bufmap, { self.adapter.ctx.toplevel, self.path }, self.bufnr)
+
+      api.nvim_create_autocmd("BufWriteCmd", {
+        buffer = self.bufnr,
+        nested = true,
+        callback = function()
+          self.adapter:stage_index_file(self)
+        end,
+      })
+    end
+
+    for option, value in pairs(bufopts) do
+      vim.bo[self.bufnr][option] = value
+    end
+
+    local last_modifiable = vim.bo[self.bufnr].modifiable
+    local last_modified = vim.bo[self.bufnr].modified
+    vim.bo[self.bufnr].modifiable = true
+    api.nvim_buf_set_lines(self.bufnr, 0, -1, false, lines)
+
+    -- Prevent LSP clients from attaching to diffview:// buffers. LSP servers
+    -- may not support the custom URI scheme, and the buffer content may be
+    -- from a different revision making LSP features incorrect or harmful.
+    api.nvim_create_autocmd("LspAttach", {
+      buffer = self.bufnr,
+      callback = function(ev)
+        local client_id = ev.data and ev.data.client_id
+        if not client_id then
+          return
         end
-      end)
-    end,
-  })
+        vim.schedule(function()
+          if api.nvim_buf_is_valid(ev.buf) then
+            pcall(vim.lsp.buf_detach_client, ev.buf, client_id)
+          end
+        end)
+      end,
+    })
 
-  -- Disable auto-formatting. Diffview buffers contain committed or staged
-  -- content that should not be reformatted. The `autoformat` variable is
-  -- a common convention (LazyVim, conform.nvim, etc.).
-  vim.b[self.bufnr].autoformat = false
+    -- Disable auto-formatting. Diffview buffers contain committed or staged
+    -- content that should not be reformatted. The `autoformat` variable is
+    -- a common convention (LazyVim, conform.nvim, etc.).
+    vim.b[self.bufnr].autoformat = false
 
-  -- Disable treesitter highlighting on large non-LOCAL buffers. Treesitter
-  -- may still perform an initial parse during filetype detection, but
-  -- stopping it prevents the ongoing re-parses during cursor movement and
-  -- scrolling that cause the actual performance problems in diff views.
-  local threshold = config.get_config().large_file_threshold
-  local disable_ts = threshold > 0 and #lines > threshold
+    -- Disable treesitter highlighting on large non-LOCAL buffers. Treesitter
+    -- may still perform an initial parse during filetype detection, but
+    -- stopping it prevents the ongoing re-parses during cursor movement and
+    -- scrolling that cause the actual performance problems in diff views.
+    local threshold = config.get_config().large_file_threshold
+    local disable_ts = threshold > 0 and #lines > threshold
 
-  if disable_ts then
-    vim.b[self.bufnr].diffview_disable_ts = true
-  end
+    if disable_ts then
+      vim.b[self.bufnr].diffview_disable_ts = true
+    end
 
-  api.nvim_buf_call(self.bufnr, function()
-    vim.cmd("filetype detect")
+    api.nvim_buf_call(self.bufnr, function()
+      vim.cmd("filetype detect")
+    end)
+
+    if disable_ts then
+      pcall(vim.treesitter.stop, self.bufnr)
+    end
+
+    -- Match the index buffer's fileformat to the working tree file so that
+    -- saving the buffer does not inadvertently convert line endings.
+    if self.rev.type == RevType.STAGE and self.rev.stage == 0 then
+      local abs_path = self.absolute_path or pl:absolute(self.path, self.adapter.ctx.toplevel)
+      if vim.fn.filereadable(abs_path) == 1 then
+        local first_line = vim.fn.readfile(abs_path, "B", 1)
+        if first_line[1] and first_line[1]:find("\r$") then
+          vim.bo[self.bufnr].fileformat = "dos"
+        else
+          vim.bo[self.bufnr].fileformat = "unix"
+        end
+      end
+    end
+
+    -- Disable context plugins that interfere with scrollbind alignment.
+    -- Note: nvim-treesitter-context does NOT check this variable by default;
+    -- users must configure `on_attach` callback to check it. context.vim does.
+    vim.b[self.bufnr].ts_context_disable = true
+    vim.b[self.bufnr].context_enabled = false
+
+    vim.bo[self.bufnr].modifiable = last_modifiable
+    vim.bo[self.bufnr].modified = last_modified
+    -- Mark this `diffview://` buffer as fully populated. Other File
+    -- instances that resolve to the same `fullname` via
+    -- `find_named_buffer` use this flag to know the buffer's content is
+    -- ready and safe to reuse.
+    vim.b[self.bufnr].diffview_loaded = true
+    self:post_buf_created()
   end)
 
-  if disable_ts then
-    pcall(vim.treesitter.stop, self.bufnr)
-  end
-
-  -- Match the index buffer's fileformat to the working tree file so that
-  -- saving the buffer does not inadvertently convert line endings.
-  if self.rev.type == RevType.STAGE and self.rev.stage == 0 then
-    local abs_path = self.absolute_path or pl:absolute(self.path, self.adapter.ctx.toplevel)
-    if vim.fn.filereadable(abs_path) == 1 then
-      local first_line = vim.fn.readfile(abs_path, "B", 1)
-      if first_line[1] and first_line[1]:find("\r$") then
-        vim.bo[self.bufnr].fileformat = "dos"
-      else
-        vim.bo[self.bufnr].fileformat = "unix"
-      end
+  if not ok and created_fresh_bufnr then
+    -- Wipe the half-built `diffview://` buffer so a retry (or a sibling
+    -- File instance) doesn't pick it up via `find_named_buffer`.
+    pcall(api.nvim_buf_delete, created_fresh_bufnr, { force = true })
+    if self.bufnr == created_fresh_bufnr then
+      self.bufnr = nil
     end
   end
 
-  -- Disable context plugins that interfere with scrollbind alignment.
-  -- Note: nvim-treesitter-context does NOT check this variable by default;
-  -- users must configure `on_attach` callback to check it. context.vim does.
-  vim.b[self.bufnr].ts_context_disable = true
-  vim.b[self.bufnr].context_enabled = false
+  -- Mark loaded only on success; stash the error and signal either way so
+  -- waiters unblock and see the same outcome.
+  if ok then
+    self.loaded = true
+  end
+  self._loading_error = err
+  self._loading = nil
+  loading:send()
 
-  vim.bo[self.bufnr].modifiable = last_modifiable
-  vim.bo[self.bufnr].modified = last_modified
-  self:post_buf_created()
+  if not ok then
+    error(err)
+  end
+
   callback(self.bufnr)
   ---@diagnostic enable: invisible
 end)
 
 function File:is_valid()
-  return self.bufnr and api.nvim_buf_is_valid(self.bufnr)
+  -- `loaded` is set only after `produce_data` populates the buffer, so a
+  -- mid-load placeholder (bufnr created, content pending) does not read
+  -- as valid.
+  return self.bufnr ~= nil and api.nvim_buf_is_valid(self.bufnr) and self.loaded
 end
 
 ---@param t1 table
@@ -618,6 +694,8 @@ function File:dispose_buffer()
     end
 
     self.bufnr = nil
+    -- Reset so a later `create_buffer` re-loads from scratch.
+    self.loaded = false
   end
 end
 
@@ -693,6 +771,10 @@ File.NULL_FILE = File({
     winhl = {},
   },
 })
+-- The NULL buffer skips `create_buffer`'s loading path (it's created
+-- on-demand by `_get_null_buffer`), so mark it loaded so `is_valid()`
+-- accepts it.
+File.NULL_FILE.loaded = true
 
 M.File = File
 return M
