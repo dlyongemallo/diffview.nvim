@@ -142,16 +142,24 @@ Window.open_file = async.void(function(self)
   ---@diagnostic disable: invisible
   assert(self.file)
 
-  if not (self:is_valid() and self.file.active) then
+  if not self:is_valid() then
     return
   end
 
   if not self.file:is_valid() then
+    -- Skip the load entirely if the file was already deactivated by the
+    -- time we got here -- the user has navigated past this target, so a
+    -- fresh `git show` would be wasted work. Once the load is in flight,
+    -- `create_buffer` raises `CANCELLED` on its own active checks, which
+    -- surfaces as `ok = false` below.
+    if not self.file.active then
+      return
+    end
     local ok = await(self:load_file())
     await(async.scheduler())
 
     -- Ensure validity after await
-    if not (self:is_valid() and self.file.active) then
+    if not self:is_valid() then
       return
     end
 
@@ -160,6 +168,19 @@ Window.open_file = async.void(function(self)
       return
     end
   end
+
+  -- The file is loaded; display it regardless of `self.file.active`.
+  -- `Layout.open_files` yields on `async.scheduler()` between its load
+  -- loop and its open loop, and a rapid navigation in that gap can
+  -- deactivate the file. Bailing here on `active=false` used to leave
+  -- the window holding the prior `open_null` placeholder while
+  -- `file.loaded=true` claimed the buffer was ready -- a stale state
+  -- that trips `jump_to_first_change` (silent `]c` on an empty buffer
+  -- in the default branch; `Cursor position outside buffer` in
+  -- `diff1_inline`, which looks up hunks on `file.bufnr` and writes the
+  -- cursor in `main.id`'s current buffer). The buffer is already
+  -- populated, so setting it in the window is cheap; the next worker
+  -- iteration replaces it with the user's actual target.
 
   self.emitter:emit("pre_open")
 
