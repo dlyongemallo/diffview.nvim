@@ -5,7 +5,7 @@ local oop = require("diffview.oop")
 local M = {}
 
 ---Single-window layout that shows the file as a plain (non-diff) buffer. Used
----by `view.single_pane_for_one_sided` when a file's diff would be one-sided
+---by `view.one_sided_layout = "raw"` when a file's diff would be one-sided
 ---(status `A`/`?` or `D`). Window opts disabling `diff`, `scrollbind`, and
 ---diff folding are merged in by `StandardView` via the `diff1_raw` winopts
 ---key; the layout itself just wires the single `b` window.

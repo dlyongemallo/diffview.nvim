@@ -1,4 +1,6 @@
 local FileEntry = require("diffview.scene.file_entry").FileEntry
+local Diff1 = require("diffview.scene.layouts.diff_1").Diff1
+local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
 local Diff1Raw = require("diffview.scene.layouts.diff_1_raw").Diff1Raw
 local Diff2Hor = require("diffview.scene.layouts.diff_2_hor").Diff2Hor
 local RevType = require("diffview.vcs.rev").RevType
@@ -39,7 +41,7 @@ local function make_entry(status, opts)
   })
 end
 
-describe("view.single_pane_for_one_sided", function()
+describe("view.one_sided_layout", function()
   local original
 
   before_each(function()
@@ -51,18 +53,18 @@ describe("view.single_pane_for_one_sided", function()
   end)
 
   describe("config schema", function()
-    it("defaults to false", function()
+    it('defaults to "default"', function()
       config.setup({})
-      assert.is_false(config.get_config().view.single_pane_for_one_sided)
+      assert.equals("default", config.get_config().view.one_sided_layout)
     end)
 
-    it("can be set to true via user config", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
-      assert.is_true(config.get_config().view.single_pane_for_one_sided)
+    it('can be set to "raw" via user config', function()
+      config.setup({ view = { one_sided_layout = "raw" } })
+      assert.equals("raw", config.get_config().view.one_sided_layout)
     end)
 
     it("does not affect unrelated view options when toggled", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local conf = config.get_config()
       assert.equals("diff2_horizontal", conf.view.default.layout)
       assert.equals(0, conf.view.foldlevel)
@@ -70,44 +72,64 @@ describe("view.single_pane_for_one_sided", function()
   end)
 
   describe("FileEntry.with_layout layout selection", function()
-    it("falls through to the default layout when the option is off", function()
+    it('falls through to the default layout when option is "default"', function()
       config.setup({})
       local entry = make_entry("A")
       assert.equals(Diff2Hor, entry.layout.class)
     end)
 
-    it("substitutes Diff1Raw for an added (A) file when enabled", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+    it('substitutes Diff1Raw for an added (A) Diff2 entry when "raw"', function()
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("A")
       assert.equals(Diff1Raw, entry.layout.class)
     end)
 
-    it("substitutes Diff1Raw for an untracked (?) file when enabled", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+    it('substitutes Diff1Raw for an untracked (?) Diff2 entry when "raw"', function()
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("?")
       assert.equals(Diff1Raw, entry.layout.class)
     end)
 
-    it("substitutes Diff1Raw for a deleted (D) file when enabled", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+    it('substitutes Diff1Raw for a deleted (D) Diff2 entry when "raw"', function()
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("D")
       assert.equals(Diff1Raw, entry.layout.class)
     end)
 
+    it('substitutes Diff1Raw for an added (A) Diff1 entry when "raw"', function()
+      config.setup({ view = { one_sided_layout = "raw" } })
+      local entry = make_entry("A", { layout_class = Diff1 })
+      assert.equals(Diff1Raw, entry.layout.class)
+    end)
+
+    it('substitutes Diff1Raw for a deleted (D) Diff1 entry when "raw"', function()
+      -- The substitution is more than cosmetic for status D: Diff1.should_null
+      -- nulls the b-side, but Diff1Raw shows pre-deletion content from revs.a.
+      config.setup({ view = { one_sided_layout = "raw" } })
+      local entry = make_entry("D", { layout_class = Diff1 })
+      assert.equals(Diff1Raw, entry.layout.class)
+    end)
+
+    it("leaves Diff1Inline entries alone (coherent one-sided rendering)", function()
+      config.setup({ view = { one_sided_layout = "raw" } })
+      local entry = make_entry("A", { layout_class = Diff1Inline })
+      assert.equals(Diff1Inline, entry.layout.class)
+    end)
+
     it("leaves modified (M) files on the default Diff2 layout", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("M")
       assert.equals(Diff2Hor, entry.layout.class)
     end)
 
     it("leaves renamed (R) files on the default Diff2 layout", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("R", { oldpath = "old.txt" })
       assert.equals(Diff2Hor, entry.layout.class)
     end)
 
     it("leaves pinned_b_file entries on the pin-aware Diff2 layout", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local Diff2HorPinned = require("diffview.scene.layouts.diff_2_hor_pinned").Diff2HorPinned
       local rev_b = local_rev()
       local shared = {
@@ -125,13 +147,13 @@ describe("view.single_pane_for_one_sided", function()
 
   describe("b-side rev substitution", function()
     it("uses the LOCAL b-rev for added files (editable on-disk buffer)", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("A")
       assert.equals(RevType.LOCAL, entry.layout.b.file.rev.type)
     end)
 
     it("swaps in revs.a for deleted files (pre-deletion content)", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local rev_a = commit_rev()
       local entry = make_entry("D", { revs = { a = rev_a, b = local_rev() } })
       assert.equals(rev_a, entry.layout.b.file.rev)
@@ -139,7 +161,7 @@ describe("view.single_pane_for_one_sided", function()
 
     it("drops the unwindowed a-side File when the b-side is substituted", function()
       -- Avoids fetching the same scratch content twice.
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("D")
       assert.is_nil(entry.layout.a_file)
     end)
@@ -147,7 +169,7 @@ describe("view.single_pane_for_one_sided", function()
     it("keeps the unwindowed a-side File for non-substituted Diff1Raw entries", function()
       -- Needed by `convert_layout` to round-trip back to Diff2 without
       -- losing the COMMIT-side file metadata.
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("A")
       assert.is_not_nil(entry.layout.a_file)
     end)
@@ -155,7 +177,7 @@ describe("view.single_pane_for_one_sided", function()
 
   describe("Diff1Raw layout shape", function()
     it("owned_files includes the unwindowed a_file", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("A")
       local owned = entry.layout:owned_files()
       assert.is_true(vim.tbl_contains(owned, entry.layout.a_file))
@@ -163,7 +185,7 @@ describe("view.single_pane_for_one_sided", function()
     end)
 
     it("get_file_for('a') returns the unwindowed a_file", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("A")
       assert.equals(entry.layout.a_file, entry.layout:get_file_for("a"))
     end)
@@ -172,13 +194,13 @@ describe("view.single_pane_for_one_sided", function()
       -- convert_layout's fallback rebuilds a natural b-side with the right
       -- nulled flag instead of carrying the substituted COMMIT-rev File
       -- into a Diff2's b-slot.
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("D")
       assert.is_nil(entry.layout:get_file_for("b"))
     end)
 
     it("get_file_for('b') delegates to the base when not substituted", function()
-      config.setup({ view = { single_pane_for_one_sided = true } })
+      config.setup({ view = { one_sided_layout = "raw" } })
       local entry = make_entry("A")
       assert.equals(entry.layout.b.file, entry.layout:get_file_for("b"))
     end)

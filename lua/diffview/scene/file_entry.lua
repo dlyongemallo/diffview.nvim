@@ -2,6 +2,7 @@ local lazy = require("diffview.lazy")
 local oop = require("diffview.oop")
 
 local Diff1 = lazy.access("diffview.scene.layouts.diff_1", "Diff1") ---@type Diff1|LazyModule
+local Diff1Inline = lazy.access("diffview.scene.layouts.diff_1_inline", "Diff1Inline") ---@type Diff1Inline|LazyModule
 local Diff1Raw = lazy.access("diffview.scene.layouts.diff_1_raw", "Diff1Raw") ---@type Diff1Raw|LazyModule
 local Diff2 = lazy.access("diffview.scene.layouts.diff_2", "Diff2") ---@type Diff2|LazyModule
 local File = lazy.access("diffview.vcs.file", "File") ---@type vcs.File|LazyModule
@@ -299,16 +300,18 @@ local function class_descends_from(cls, target)
 end
 
 ---Pick the effective layout class for an entry. Substitutes `Diff1Raw` for a
----Diff2 when `view.single_pane_for_one_sided` is on and the file's diff is
----one-sided (status `A`/`?`/`D`). Falls through (returns the input class)
----when the precondition isn't met, leaving every other layout path untouched.
----Bails out for pinned-b mode (the view owns the b-side) and for non-Diff2
----inputs (merge layouts, user-set `diff1_*` layouts, etc.).
+---Diff1 or Diff2 base when `view.one_sided_layout` is `"raw"` and the file's
+---diff is one-sided (status `A`/`?`/`D`). Falls through (returns the input
+---class) when the precondition isn't met, leaving every other layout path
+---untouched. Bails out for pinned-b mode (the view owns the b-side), for
+---`diff1_inline` (which already renders one-sided content coherently as
+---all-added or all-deleted virt_lines), for `diff1_raw` itself (no-op), and
+---for merge layouts (Diff3/Diff4).
 ---@param default_class Layout (class)
 ---@param opt FileEntry.with_layout.Opt
 ---@return Layout (class)
 local function select_layout_for_status(default_class, opt)
-  if not config.get_config().view.single_pane_for_one_sided then
+  if config.get_config().view.one_sided_layout ~= "raw" then
     return default_class
   end
   if opt.pinned_b_file then
@@ -317,10 +320,19 @@ local function select_layout_for_status(default_class, opt)
   if not vim.tbl_contains({ "A", "?", "D" }, opt.status) then
     return default_class
   end
-  if not class_descends_from(default_class, Diff2.__get()) then
+  if
+    class_descends_from(default_class, Diff1Inline.__get())
+    or class_descends_from(default_class, Diff1Raw.__get())
+  then
     return default_class
   end
-  return Diff1Raw.__get()
+  if
+    class_descends_from(default_class, Diff1.__get())
+    or class_descends_from(default_class, Diff2.__get())
+  then
+    return Diff1Raw.__get()
+  end
+  return default_class
 end
 
 ---@param layout_class Layout (class)
