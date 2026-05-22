@@ -303,6 +303,38 @@ describe("diffview.scene.window", function()
         vim.api.nvim_buf_delete(bufnr, { force = true })
       end)
     )
+
+    -- Regression: `Layout.open_files` yields between its load loop and its
+    -- open loop. A rapid navigation in that gap deactivates the in-flight
+    -- file; bailing on `active=false` here used to leave the window holding
+    -- the `open_null` placeholder while `file.loaded=true` claimed the
+    -- buffer was ready, tripping `jump_to_first_change` (silent `]c` on an
+    -- empty buffer; "Cursor position outside buffer" in `diff1_inline`).
+    -- Once the buffer is populated, displaying it is cheap, so `open_file`
+    -- proceeds regardless of `active`.
+    it(
+      "displays an already-loaded buffer even when the file got deactivated",
+      helpers.async_test(function()
+        local adapter = mock_adapter()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        local win, file = make_window(adapter)
+        file.bufnr = bufnr
+        file.loaded = true
+        file.active = false -- deactivated post-load.
+        win.parent = stub_parent()
+
+        async.await(win:open_file())
+
+        assert.equals(bufnr, vim.api.nvim_win_get_buf(win.id))
+
+        if vim.api.nvim_win_is_valid(test_winid) then
+          vim.api.nvim_win_close(test_winid, true)
+        end
+        test_winid = nil
+        Window.winopt_store[bufnr] = nil
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+      end)
+    )
   end)
 
   it(
