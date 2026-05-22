@@ -82,10 +82,10 @@ DEFAULT CONFIG                                  *diffview.defaults*
         pin_local = false,            -- See |diffview-config-view.file_history.pin_local|
       },
       foldlevel = 0,                  -- See |diffview-config-view.foldlevel|
-      -- See |diffview-config-view.single_pane_for_one_sided|. When true,
+      -- See |diffview-config-view.one_sided_layout|. When set to "raw",
       -- one-sided diffs (status A/?/D) open in a single non-diff window
-      -- instead of a Diff2 layout with an empty pane.
-      single_pane_for_one_sided = false,
+      -- (diff1_raw) instead of the configured Diff2 or diff1_plain layout.
+      one_sided_layout = "default",
       -- Layouts to cycle through with `cycle_layout` action. Each view's
       -- configured layout (e.g. view.default.layout) is automatically
       -- appended to its cycle if missing, so cycling always returns to it.

@@ -809,14 +809,15 @@ view.x.layout                                   *diffview-config-view.x.layout*
             {diff1_raw}
                 Auto-selected (not directly settable via `view.x.layout`).
 
-                Selected per-file by |diffview-config-view.single_pane_for_one_sided|
+                Selected per-file by |diffview-config-view.one_sided_layout|
                 when the entry's diff is one-sided (added, untracked, or
                 deleted). A single window with no diff highlighting and no
                 diff folding; the buffer reads like a normal file. For
                 additions and untracked files the window holds the working-
                 tree file directly (editable and `:w`-able); for deletions
-                it holds the pre-deletion content from the index or commit
-                (read-only since the working-tree file is gone).
+                it holds the pre-deletion content from `revs.a` (read-only
+                against a commit, editable against the index — `:w` then
+                writes back to the index via the usual STAGE-0 path).
 
                 ┌──────────────┐
                 │              │
@@ -915,33 +916,42 @@ view.foldlevel                                  *diffview-config-view.foldlevel*
         value (e.g. `99`) to keep all folds open, which can help when another
         plugin's ftplugin creates unrelated folds in diff buffers.
 
-                                                *diffview-config-view.single_pane_for_one_sided*
-view.single_pane_for_one_sided
-        Type: `boolean`, Default: `false`
+                                                *diffview-config-view.one_sided_layout*
+view.one_sided_layout
+        Type: `"default"|"raw"`, Default: `"default"`
 
-        When true, files whose diff is one-sided open in a single non-diff
-        window instead of a Diff2 layout with an empty pane. Specifically:
+        Layout used for files whose diff is one-sided (status `A`/`?`/`D`).
 
-          • Status A or ? (added / untracked): the b-side is opened
-            directly. When b is `LOCAL` (the usual case in diff views)
-            the window holds the working-tree file as an editable,
-            `:w`-able buffer; when b is a commit rev (the usual case in
-            file-history views) it is read-only.
-          • Status D (deleted): the pre-deletion content from the index or
-            commit is shown in a single read-only window.
+          • `"default"`: keep the configured base layout. A Diff2 will
+            leave one pane empty; a `diff1_plain` keeps its diff-mode
+            chrome (foldcolumn, foldmethod=diff) on a buffer with no
+            comparison partner.
+          • `"raw"`: substitute `diff1_raw`. A single non-diff window:
 
-        Applies to both diff views and file history views. Has no effect for
-        renamed, modified, or merge-conflict files (those keep their Diff2 or
-        merge layout). Also no effect when the configured layout is already a
-        single-window layout (`diff1_plain`, `diff1_inline`) or when file
-        history's `pin_local` mode owns the right-hand window.
+            • Status A or ? (added / untracked): the b-side is opened
+              directly. When b is `LOCAL` (the usual case in diff views)
+              the window holds the working-tree file as an editable,
+              `:w`-able buffer; when b is a commit rev (the usual case in
+              file-history views) it is read-only.
+            • Status D (deleted): the pre-deletion content from `revs.a`
+              is shown in a single window — read-only when the source is
+              a commit; editable when it's the index, with `:w` writing
+              back via the usual STAGE-0 path (same workflow as other
+              index buffers in diffview).
 
-        The auto-selected layout is `diff1_raw`. It is excluded from
-        |diffview-config-view.cycle_layouts|: cycling with |g<C-x>| moves
-        through your configured Diff2 layouts. The cycled-to layout
-        replaces the entry's layout in place, so re-selecting the same
-        file simply reuses it; re-applying `diff1_raw` requires a refresh
-        that rebuilds the entry (see |diffview-actions-refresh_files|).
+        Applies to both diff views and file history views, and to
+        `diff1_plain` and Diff2 base layouts. Has no effect on
+        `diff1_inline` (which already renders one-sided content coherently
+        as all-added or all-deleted virt_lines), on renamed/modified files
+        or merge conflicts, or when file history's `pin_local` mode owns
+        the right-hand window.
+
+        `diff1_raw` is excluded from |diffview-config-view.cycle_layouts|:
+        cycling with |g<C-x>| moves through your configured base layouts.
+        The cycled-to layout replaces the entry's layout in place, so
+        re-selecting the same file simply reuses it; re-applying
+        `diff1_raw` requires a refresh that rebuilds the entry (see
+        |diffview-actions-refresh_files|).
 
 view.cycle_layouts                              *diffview-config-view.cycle_layouts*
         Type: `table`, Default: (see defaults)

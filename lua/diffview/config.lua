@@ -46,6 +46,7 @@ end
 ---@alias DiffviewStandardLayout "diff1_plain"|"diff1_inline"|"diff2_horizontal"|"diff2_vertical"
 ---@alias DiffviewMergeLayout "diff1_plain"|"diff3_horizontal"|"diff3_vertical"|"diff3_mixed"|"diff4_mixed"
 ---@alias DiffviewInferredLayout -1
+---@alias DiffviewOneSidedLayout "default"|"raw"
 
 -- Targets consumed by action factories in `actions.lua` (referenced from keymaps).
 ---@alias DiffviewConflictTarget "ours"|"theirs"|"base"|"all"|"none"
@@ -289,7 +290,7 @@ M.defaults = {
   ---@field merge_tool DiffviewMergeViewTypeConfig
   ---@field file_history DiffviewStandardViewTypeConfig
   ---@field foldlevel integer
-  ---@field single_pane_for_one_sided boolean
+  ---@field one_sided_layout DiffviewOneSidedLayout
   ---@field cycle_layouts DiffviewCycleLayouts
   ---@field inline DiffviewInlineConfig
 
@@ -298,7 +299,7 @@ M.defaults = {
   ---@field merge_tool? DiffviewMergeViewTypeConfig.user Config for conflicted files in diff views during a merge or rebase.
   ---@field file_history? DiffviewStandardViewTypeConfig.user Config for changed files in file history views.
   ---@field foldlevel? integer See `|diffview-config-view.foldlevel|`.
-  ---@field single_pane_for_one_sided? boolean When true, files whose diff is one-sided (status `A`/`?` or `D`) open in a single non-diff window instead of a Diff2 layout with an empty pane. `A`/`?` shows the b-side directly: editable working-tree buffer when b is `LOCAL` (the usual case in diff views), read-only when b is a commit rev (the usual case in file-history views). `D` shows the pre-deletion content from the index/commit in a read-only window. Applies to both diff views and file history views. Has no effect for renames, modifications, or merge conflicts. See `|diffview-config-view.single_pane_for_one_sided|`.
+  ---@field one_sided_layout? DiffviewOneSidedLayout Layout used for files whose diff is one-sided (status `A`/`?` or `D`). `"default"` keeps the configured layout (a Diff2 leaves an empty pane; a `diff1_plain` keeps its diff-mode chrome). `"raw"` substitutes `diff1_raw`: a single non-diff window where `A`/`?` shows the b-side directly (editable working-tree buffer when b is `LOCAL`, read-only when b is a commit rev) and `D` shows the pre-deletion content from `revs.a` (read-only when that's a commit; editable when it's the index, with `:w` writing back via the usual STAGE-0 path). Applies to both diff views and file history views, and to `diff1_plain` and Diff2 base layouts. Has no effect on `diff1_inline` (which already renders one-sided content coherently), on renames, modifications, merge conflicts, or when file history's `pin_local` mode owns the right-hand window. See `|diffview-config-view.one_sided_layout|`.
   ---@field cycle_layouts? DiffviewCycleLayouts.user Layouts to cycle through with `cycle_layout`.
   ---@field inline? DiffviewInlineConfig.user Options that apply to the `diff1_inline` layout.
   view = {
@@ -351,13 +352,16 @@ M.defaults = {
     -- Initial 'foldlevel' for diff buffers. Default 0 collapses unchanged
     -- regions; set to a high value (e.g. 99) to keep all folds open.
     foldlevel = 0,
-    -- When true, files whose diff is one-sided (added, untracked, or
-    -- deleted) open in a single non-diff window. Working-tree additions
-    -- and untracked files open as editable buffers backed by the file on
-    -- disk; deletions show the pre-deletion content from the index or
-    -- commit in a single read-only window. Has no effect for renames,
-    -- modifications, or merge conflicts.
-    single_pane_for_one_sided = false,
+    -- Layout used for files whose diff is one-sided (added, untracked, or
+    -- deleted). `"default"` keeps the configured layout. `"raw"` substitutes
+    -- `diff1_raw`: a single non-diff window where additions and untracked
+    -- files open as editable buffers backed by the file on disk, and
+    -- deletions show the pre-deletion content from `revs.a` (read-only
+    -- against a commit; editable against the index, with `:w` writing
+    -- back via the usual STAGE-0 path). Applies to `diff1_plain` and
+    -- Diff2 base layouts; `diff1_inline` (which renders one-sided content
+    -- as all-added or all-deleted virt_lines) is left alone.
+    one_sided_layout = "default",
 
     ---@class DiffviewCycleLayouts
     ---@field default DiffviewStandardLayout[]
@@ -1252,6 +1256,19 @@ function M.setup(user_config)
       if layout and layout ~= -1 and not vim.tbl_contains(list, layout) then
         table.insert(list, layout)
       end
+    end
+
+    local valid_one_sided_layouts = { "default", "raw" }
+    if view.one_sided_layout == nil then
+      view.one_sided_layout = M.defaults.view.one_sided_layout
+    elseif not vim.tbl_contains(valid_one_sided_layouts, view.one_sided_layout) then
+      utils.err(
+        ("Invalid value '%s' for 'view.one_sided_layout'! Must be one of (%s)."):format(
+          view.one_sided_layout,
+          fmt_enum(valid_one_sided_layouts)
+        )
+      )
+      view.one_sided_layout = M.defaults.view.one_sided_layout
     end
 
     -- Validate `view.inline`. A nil style (e.g. user passed `view.inline = {}`)
