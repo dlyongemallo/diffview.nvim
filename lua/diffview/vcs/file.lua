@@ -184,6 +184,18 @@ function File:_create_local_buffer()
     -- Track this buffer as created by diffview so it can be cleaned up on close.
     File.created_bufs[self.bufnr] = true
   else
+    -- Plugins that scan the project (LSP, file managers, grapple/harpoon-style
+    -- pickers, fzf-lua warm caches, ...) sometimes register a buffer by name
+    -- without ever loading its contents. `find_file_buffer` matches on name,
+    -- so we'd happily reuse the empty placeholder -- `inline_diff.render`
+    -- would then diff an empty new-side against the old-side content, the
+    -- hunk cache wouldn't get populated, and `jump_to_first_change` would
+    -- land on line 1 (or, in `diff1_inline`, error past the empty buffer's
+    -- end). Force a load if the buffer is unloaded so its contents come from
+    -- disk before we hand the bufnr to the diff renderer.
+    if not api.nvim_buf_is_loaded(self.bufnr) then
+      vim.fn.bufload(self.bufnr)
+    end
     -- NOTE: LSP servers might load buffers in the background and unlist
     -- them. Explicitly set the buffer as listed when loading it here.
     vim.bo[self.bufnr].buflisted = true

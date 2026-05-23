@@ -690,4 +690,59 @@ describe("diffview.vcs.file", function()
       end)
     )
   end)
+
+  -- Regression: project-scanning plugins (LSP, file managers, fzf-lua warm
+  -- caches, ...) can register a buffer by name without loading its
+  -- contents. `_create_local_buffer` reuses any buffer whose name matches
+  -- the file path, so without a `bufload` guard it would hand the inline
+  -- renderer an empty bufnr -- producing zero hunks and stranding the
+  -- cursor at line 1 of an apparently-empty buffer.
+  describe("LOCAL rev with a pre-existing unloaded buffer", function()
+    local tmpdir, tmpfile, prelim
+
+    before_each(function()
+      tmpdir = vim.fn.tempname()
+      vim.fn.mkdir(tmpdir, "p")
+      tmpfile = tmpdir .. "/working_unloaded.txt"
+      vim.fn.writefile({ "line 1", "line 2", "line 3" }, tmpfile)
+      prelim = nil
+    end)
+
+    after_each(function()
+      if prelim then
+        pcall(vim.api.nvim_buf_delete, prelim, { force = true })
+      end
+      vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("loads content into a pre-existing unloaded buffer", function()
+      -- Mimic a project-scanning plugin that adds the file to the buffer
+      -- list without ever loading it.
+      prelim = vim.fn.bufadd(tmpfile)
+      assert.is_true(prelim > 0)
+      assert.is_false(vim.api.nvim_buf_is_loaded(prelim))
+
+      local adapter = {
+        ctx = { toplevel = tmpdir, dir = tmpdir },
+        is_binary = function()
+          return false
+        end,
+        on_local_buffer_reused = function() end,
+      }
+
+      local file = File({
+        adapter = adapter,
+        path = "working_unloaded.txt",
+        absolute_path = tmpfile,
+        kind = "working",
+        rev = GitRev(RevType.LOCAL),
+      })
+
+      async.await(file:create_buffer())
+
+      assert.equals(prelim, file.bufnr)
+      assert.is_true(vim.api.nvim_buf_is_loaded(file.bufnr))
+      assert.equals(3, vim.api.nvim_buf_line_count(file.bufnr))
+    end)
+  end)
 end)
