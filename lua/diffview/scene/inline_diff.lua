@@ -1795,12 +1795,14 @@ function M.render(bufnr, old_lines, new_lines, opts)
         local nl = new_lines[new_start + k] or ""
         local char_result = render_char_highlights(bufnr, row, ol, nl, style.inline_del)
 
-        -- Line highlight. Unified always applies it; overleaf applies it only
-        -- as a fallback when char-level rendering was skipped (fragmented
-        -- pairing) so the reader still sees that the line was modified.
+        -- `"skipped"` draws no `DiffviewDiffAddInline` overlay, so the
+        -- subtle `DiffviewDiffChange` backdrop alone would be a bare
+        -- smudge. Treat as a pure addition — the deletion is still
+        -- echoed above (unified unconditionally; overleaf via the
+        -- fallback below).
         local line_hl = style.change_line_hl
-        if not line_hl and char_result == "skipped" then
-          line_hl = "DiffviewDiffChange"
+        if char_result == "skipped" then
+          line_hl = "DiffviewDiffAdd"
         end
         if line_hl then
           api.nvim_buf_set_extmark(bufnr, M.ns, row, 0, {
