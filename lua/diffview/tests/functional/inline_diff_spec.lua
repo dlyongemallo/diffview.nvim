@@ -1112,20 +1112,20 @@ describe("diffview.scene.inline_diff", function()
       assert.are.equal(0, t.inline, "expected no inline deletion virt_text on dissimilar pairing")
     end)
 
-    it("falls back to block echo + line_hl in overleaf when char-level skips", function()
+    it("falls back to block echo + DiffAdd line_hl in overleaf when char-level skips", function()
       -- When overleaf's char-level rendering is gated off, the paired
       -- modification would otherwise be invisible. Verify the fallback
-      -- emits a DiffChange line_hl and a virt_line with the old content
-      -- under the overleaf `del_hl` (so the strikethrough on
-      -- DiffviewDiffDeleteInline is preserved on the echoed line, not
-      -- silently downgraded to the unified DiffviewDiffDelete).
+      -- emits a `DiffviewDiffAdd` line_hl (not `DiffviewDiffChange` — see
+      -- the `"skipped"` branch in `M.render`) and a virt_line under the
+      -- overleaf `del_hl` (preserving the strikethrough on the echoed
+      -- line, not silently downgrading to `DiffviewDiffDelete`).
       local old = "This is a plain, singular window. This is available in case"
       local new = "This is a plain, singular window with no diff rendering —"
       local bufnr = fresh_buf({ new })
       inline_diff.render(bufnr, { old }, { new }, { style = "overleaf" })
 
       local hls = line_hls(extmarks(bufnr))
-      assert.are.same({ { row = 0, hl = "DiffviewDiffChange" } }, hls)
+      assert.are.same({ { row = 0, hl = "DiffviewDiffAdd" } }, hls)
 
       local vls = virt_line_hls(extmarks(bufnr))
       assert.are.same({ "DiffviewDiffDeleteInline" }, vls)
