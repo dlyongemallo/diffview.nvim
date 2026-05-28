@@ -233,6 +233,19 @@ end)
 ---@param self Diff1Inline
 ---@param callback fun(lines: string[])
 Diff1Inline._load_old_lines = async.wrap(function(self, callback)
+  -- For a deletion (nulled b-side) resolve binary-ness from the a-side, where
+  -- the file still exists; else a deleted binary file's bytes would render as
+  -- virt_lines. Skipped for a non-nulled (modified) b-side.
+  if
+    self.a_file
+    and self.a_file.binary == nil
+    and self.b
+    and self.b.file
+    and self.b.file.nulled
+    and not config.get_config().diff_binaries
+  then
+    self.a_file.binary = self.a_file.adapter:is_binary(self.a_file.path, self.a_file.rev)
+  end
   if not self.a_file or self.a_file.nulled or self.a_file.binary then
     callback({})
     return

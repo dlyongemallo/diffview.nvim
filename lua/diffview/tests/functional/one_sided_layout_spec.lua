@@ -1,10 +1,12 @@
 local FileEntry = require("diffview.scene.file_entry").FileEntry
+local async = require("diffview.async")
 local Diff1 = require("diffview.scene.layouts.diff_1").Diff1
 local Diff1Inline = require("diffview.scene.layouts.diff_1_inline").Diff1Inline
 local Diff1Raw = require("diffview.scene.layouts.diff_1_raw").Diff1Raw
 local Diff2Hor = require("diffview.scene.layouts.diff_2_hor").Diff2Hor
 local RevType = require("diffview.vcs.rev").RevType
 local config = require("diffview.config")
+local helpers = require("diffview.tests.helpers")
 
 local function commit_rev()
   return {
@@ -111,9 +113,11 @@ describe("view.one_sided_layout", function()
     end)
 
     it("leaves Diff1Inline entries alone (coherent one-sided rendering)", function()
+      -- `diff1_inline` renders one-sided content itself, so `"raw"` doesn't
+      -- substitute `Diff1Raw` for it (#199).
       config.setup({ view = { one_sided_layout = "raw" } })
-      local entry = make_entry("A", { layout_class = Diff1Inline })
-      assert.equals(Diff1Inline, entry.layout.class)
+      assert.equals(Diff1Inline, make_entry("A", { layout_class = Diff1Inline }).layout.class)
+      assert.equals(Diff1Inline, make_entry("D", { layout_class = Diff1Inline }).layout.class)
     end)
 
     it("leaves modified (M) files on the default Diff2 layout", function()
@@ -214,5 +218,51 @@ describe("view.one_sided_layout", function()
       local cls = config.name_to_layout("diff1_raw")
       assert.equals(Diff1Raw, cls)
     end)
+  end)
+
+  describe("Diff1Inline old-side binary gating", function()
+    -- Minimal `self` for `_load_old_lines`: an a-side file plus a b-side
+    -- window. The mock adapter records each `is_binary` probe.
+    local function make_self(opts)
+      local calls = {}
+      local a_file = {
+        path = "foo.txt",
+        rev = commit_rev(),
+        nulled = false,
+        adapter = {
+          is_binary = function()
+            calls[#calls + 1] = true
+            return opts.is_binary_result
+          end,
+        },
+        is_valid = function()
+          return false
+        end,
+        produce_data = async.wrap(function(_, callback)
+          callback(nil, opts.old_lines or { "x" })
+        end),
+      }
+      return { a_file = a_file, b = { file = { nulled = opts.b_nulled } } }, calls
+    end
+
+    it(
+      "treats a deleted file's binary old side as binary",
+      helpers.async_test(function()
+        config.setup({})
+        local self, calls = make_self({ b_nulled = true, is_binary_result = true })
+        helpers.eq({}, async.await(Diff1Inline._load_old_lines(self)))
+        assert.equals(1, #calls)
+      end)
+    )
+
+    it(
+      "skips the old-side probe for a non-nulled (modified) b-side",
+      helpers.async_test(function()
+        config.setup({})
+        local self, calls = make_self({ b_nulled = false, is_binary_result = true })
+        helpers.eq({ "x" }, async.await(Diff1Inline._load_old_lines(self)))
+        assert.equals(0, #calls)
+      end)
+    )
   end)
 end)
