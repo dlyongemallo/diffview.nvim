@@ -99,6 +99,22 @@ Common questions, useful patterns, and known compatibility issues.
     })
     ```
   - Customise the look with `:hi DiffviewDiffDeleteInline gui=...`.
+- **Customise inline char-level highlights:**
+  - In the `diff1_inline` layout, changed characters on paired
+    modification rows use the `DiffviewDiffAddInline` highlight group,
+    and inline strikethrough deletions in the "overleaf" style use
+    `DiffviewDiffDeleteInline`. The defaults derive their backgrounds
+    from `DiffviewDiffAdd` and `DiffviewDiffDelete` respectively. If
+    your colourscheme defines `DiffAdd.bg` and `DiffChange.bg` with
+    similar tints, char-level changes can blend into the paired-row
+    `DiffviewDiffChange` backdrop. Override the inline group to taste,
+    e.g., to use the colourscheme's `DiffText` as the char-level
+    background:
+    ```lua
+    vim.api.nvim_set_hl(0, "DiffviewDiffAddInline", { link = "DiffText" })
+    -- Or with explicit colours:
+    vim.api.nvim_set_hl(0, "DiffviewDiffAddInline", { bg = "#3a4a3a" })
+    ```
 - **Better diff display (changes shown as add+delete instead of modification):**
   - Set Neovim's `diffopt` to use a better algorithm:
     - `vim.opt.diffopt:append { "algorithm:histogram" }`
@@ -112,11 +128,15 @@ Common questions, useful patterns, and known compatibility issues.
     VSCode-style dual-layer highlighting: light backgrounds for changed lines
     plus fine-grained highlights for the exact characters that differ.
   - diffchar.vim works with diffview out of the box. Install the plugin and
-    open a diff -- no additional configuration is needed. You may want to
-    enable visual indicators next to deleted characters to get VSCode-style
-    character-level diffs, or disable diffchar's
-    default keymaps (`<leader>g`, `<leader>p`) if they conflict with your
-    mappings:
+    open a diff -- no additional configuration is needed. Note that
+    diffchar.vim only applies to diff-mode layouts (`diff2_*`, `diff3_*`,
+    `diff4_*`); the `diff1_inline` layout renders inline changes via
+    extmarks rather than Neovim's diff mode, so diffchar.vim has no effect
+    there -- see *Customise inline char-level highlights* above for
+    `diff1_inline`'s built-in mechanism. You may want to enable visual
+    indicators next to deleted characters to get VSCode-style
+    character-level diffs, or disable diffchar's default keymaps
+    (`<leader>g`, `<leader>p`) if they conflict with your mappings:
     ```lua
     {
       'rickhowe/diffchar.vim',
