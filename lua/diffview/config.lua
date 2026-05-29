@@ -1014,6 +1014,295 @@ local function fmt_enum(values, no_quote)
   )
 end
 
+-- Validation helpers used by `setup()`. Each helper reads `t[key]`,
+-- substitutes a fallback when invalid, and emits a single `utils.warn`
+-- with a uniform message. Conventions:
+--
+--   * `opts.path`   overrides the displayed key path (e.g. "view.inline.style").
+--   * `opts.nilable` allows `nil` without warning or substitution.
+--   * Tables and lists are deep-cloned from the fallback so config
+--     instances never alias `M.defaults`.
+
+---@param val any
+---@param path string
+---@param expected string
+local function warn_invalid(val, path, expected)
+  -- For non-primitive values, omit the literal value: `tostring` on a table
+  -- prints "table: 0x..." which only adds noise.
+  local t = type(val)
+  if t == "table" or t == "function" or t == "userdata" or t == "thread" then
+    utils.warn(("Invalid value for '%s'. Must be %s."):format(path, expected))
+  else
+    utils.warn(("Invalid value '%s' for '%s'. Must be %s."):format(tostring(val), path, expected))
+  end
+end
+
+---@param fallback any
+---@return any
+local function fallback_value(fallback)
+  return type(fallback) == "table" and utils.tbl_deep_clone(fallback) or fallback
+end
+
+local validate = {}
+
+---@param t table
+---@param key any
+---@param valid_values vector
+---@param fallback any
+---@param opts? { nilable?: boolean, path?: string }
+function validate.enum(t, key, valid_values, fallback, opts)
+  opts = opts or {}
+  local v = t[key]
+  if v == nil then
+    if not opts.nilable then
+      t[key] = fallback_value(fallback)
+    end
+    return
+  end
+  if not vim.tbl_contains(valid_values, v) then
+    warn_invalid(
+      v,
+      opts.path or tostring(key),
+      ("one of (%s)%s"):format(fmt_enum(valid_values), opts.nilable and " or nil" or "")
+    )
+    t[key] = fallback_value(fallback)
+  end
+end
+
+---@param t table
+---@param key any
+---@param fallback any
+---@param opts? { min?: number, max?: number, nilable?: boolean, path?: string }
+function validate.integer(t, key, fallback, opts)
+  opts = opts or {}
+  local v = t[key]
+  if v == nil then
+    if not opts.nilable then
+      t[key] = fallback_value(fallback)
+    end
+    return
+  end
+  local n = tonumber(v)
+  if not n or n % 1 ~= 0 or (opts.min and n < opts.min) or (opts.max and n > opts.max) then
+    local expected
+    if opts.min and opts.max then
+      expected = ("an integer between %s and %s"):format(opts.min, opts.max)
+    elseif opts.min then
+      expected = ("an integer >= %s"):format(opts.min)
+    elseif opts.max then
+      expected = ("an integer <= %s"):format(opts.max)
+    else
+      expected = "an integer"
+    end
+    warn_invalid(v, opts.path or tostring(key), expected .. (opts.nilable and ", or nil" or ""))
+    t[key] = fallback_value(fallback)
+  else
+    -- Persist the coerced numeric form (e.g. "40" -> 40).
+    t[key] = n
+  end
+end
+
+-- Common boolean-like spellings, case-insensitive for strings. Configs
+-- migrated from other languages frequently use these forms, and pre-validator
+-- diffview accepted any truthy value via Lua's truthiness rules; coercing
+-- preserves those setups while still rejecting genuinely wrong types.
+local boolean_coercion = {
+  ["true"] = true,
+  ["yes"] = true,
+  ["on"] = true,
+  ["false"] = false,
+  ["no"] = false,
+  ["off"] = false,
+}
+
+---@param t table
+---@param key any
+---@param fallback any
+---@param opts? { nilable?: boolean, path?: string }
+function validate.boolean(t, key, fallback, opts)
+  opts = opts or {}
+  local v = t[key]
+  if v == nil then
+    if not opts.nilable then
+      t[key] = fallback_value(fallback)
+    end
+    return
+  end
+  if type(v) == "boolean" then
+    return
+  end
+  if type(v) == "string" then
+    local coerced = boolean_coercion[v:lower()]
+    if coerced ~= nil then
+      t[key] = coerced
+      return
+    end
+  elseif type(v) == "number" then
+    if v == 1 then
+      t[key] = true
+      return
+    elseif v == 0 then
+      t[key] = false
+      return
+    end
+  end
+  warn_invalid(v, opts.path or tostring(key), "a boolean" .. (opts.nilable and " or nil" or ""))
+  t[key] = fallback_value(fallback)
+end
+
+---@param t table
+---@param key any
+---@param fallback any
+---@param opts? { nilable?: boolean, path?: string }
+function validate.string(t, key, fallback, opts)
+  opts = opts or {}
+  local v = t[key]
+  if v == nil then
+    if not opts.nilable then
+      t[key] = fallback_value(fallback)
+    end
+    return
+  end
+  if type(v) ~= "string" then
+    warn_invalid(v, opts.path or tostring(key), "a string" .. (opts.nilable and " or nil" or ""))
+    t[key] = fallback_value(fallback)
+  end
+end
+
+---@param t table
+---@param key any
+---@param fallback any
+---@param opts? { nilable?: boolean, path?: string }
+function validate.table(t, key, fallback, opts)
+  opts = opts or {}
+  local v = t[key]
+  if v == nil then
+    if not opts.nilable then
+      t[key] = fallback_value(fallback)
+    end
+    return
+  end
+  if type(v) ~= "table" then
+    warn_invalid(v, opts.path or tostring(key), "a table" .. (opts.nilable and " or nil" or ""))
+    t[key] = fallback_value(fallback)
+  end
+end
+
+---@param t table
+---@param key any
+---@param fallback any
+---@param opts? { nilable?: boolean, path?: string }
+function validate.list(t, key, fallback, opts)
+  opts = opts or {}
+  local v = t[key]
+  if v == nil then
+    if not opts.nilable then
+      t[key] = fallback_value(fallback)
+    end
+    return
+  end
+  if type(v) ~= "table" or not utils.islist(v) then
+    warn_invalid(v, opts.path or tostring(key), "a list" .. (opts.nilable and " or nil" or ""))
+    t[key] = fallback_value(fallback)
+  end
+end
+
+-- For list helpers below: the container itself is validated strictly (a
+-- non-list falls back to the default), but invalid *elements* are filtered
+-- out (with a per-element warning) rather than nuking the user's whole list.
+-- This preserves the user's good entries when they typo one of many.
+
+---@param t table
+---@param key any
+---@param fallback any
+---@param opts? { nilable?: boolean, path?: string }
+function validate.string_list(t, key, fallback, opts)
+  opts = opts or {}
+  local v = t[key]
+  if v == nil then
+    if not opts.nilable then
+      t[key] = fallback_value(fallback)
+    end
+    return
+  end
+  if type(v) ~= "table" or not utils.islist(v) then
+    warn_invalid(
+      v,
+      opts.path or tostring(key),
+      "a list of strings" .. (opts.nilable and " or nil" or "")
+    )
+    t[key] = fallback_value(fallback)
+    return
+  end
+  local filtered = {}
+  for i, item in ipairs(v) do
+    if type(item) == "string" then
+      filtered[#filtered + 1] = item
+    else
+      warn_invalid(item, ("%s[%d]"):format(opts.path or tostring(key), i), "a string")
+    end
+  end
+  t[key] = filtered
+end
+
+---@param t table
+---@param key any
+---@param valid_values vector
+---@param fallback any
+---@param opts? { nilable?: boolean, path?: string }
+function validate.enum_list(t, key, valid_values, fallback, opts)
+  opts = opts or {}
+  local v = t[key]
+  if v == nil then
+    if not opts.nilable then
+      t[key] = fallback_value(fallback)
+    end
+    return
+  end
+  if type(v) ~= "table" or not utils.islist(v) then
+    warn_invalid(v, opts.path or tostring(key), "a list" .. (opts.nilable and " or nil" or ""))
+    t[key] = fallback_value(fallback)
+    return
+  end
+  local filtered = {}
+  for i, item in ipairs(v) do
+    if vim.tbl_contains(valid_values, item) then
+      filtered[#filtered + 1] = item
+    else
+      warn_invalid(
+        item,
+        ("%s[%d]"):format(opts.path or tostring(key), i),
+        ("one of (%s)"):format(fmt_enum(valid_values))
+      )
+    end
+  end
+  t[key] = filtered
+end
+
+---@param t table
+---@param key any
+---@param allowed_types string[]
+---@param fallback any
+---@param opts? { nilable?: boolean, path?: string }
+function validate.any_of(t, key, allowed_types, fallback, opts)
+  opts = opts or {}
+  local v = t[key]
+  if v == nil then
+    if not opts.nilable then
+      t[key] = fallback_value(fallback)
+    end
+    return
+  end
+  if not vim.tbl_contains(allowed_types, type(v)) then
+    warn_invalid(
+      v,
+      opts.path or tostring(key),
+      ("of type (%s)%s"):format(table.concat(allowed_types, "|"), opts.nilable and ", or nil" or "")
+    )
+    t[key] = fallback_value(fallback)
+  end
+end
+
 ---@param ... table
 ---@return table
 function M.extend_keymaps(...)
@@ -1066,6 +1355,13 @@ function M.setup(user_config)
   ---@type EventEmitter
   M.user_emitter = EventEmitter()
 
+  -- Coarse table guards for containers the deprecation block below indexes
+  -- into. Without these, a malformed `file_panel`/`file_history_panel` (e.g.
+  -- a boolean or number) would crash before per-field validation could fall
+  -- back to defaults.
+  validate.table(M._config, "file_panel", M.defaults.file_panel)
+  validate.table(M._config, "file_history_panel", M.defaults.file_history_panel)
+
   --#region DEPRECATION NOTICES
 
   ---@diagnostic disable-next-line: undefined-field -- Deprecated legacy key, kept for warning-only detection.
@@ -1091,7 +1387,12 @@ function M.setup(user_config)
           )
           notified = true
         end
-        panel_config.win_config[option] = panel_config[option]
+        -- `win_config` may legitimately be a function (validated below); only
+        -- migrate into it when it's still the table shape the old keys
+        -- expected. Otherwise drop the deprecated value silently.
+        if type(panel_config.win_config) == "table" then
+          panel_config.win_config[option] = panel_config[option]
+        end
         panel_config[option] = nil
       end
     end
@@ -1106,7 +1407,16 @@ function M.setup(user_config)
   end
   ---@diagnostic enable: undefined-field, inject-field
 
-  local user_log_options = utils.tbl_access(user_config, "file_history_panel.log_options")
+  -- `utils.tbl_access` walks the user config directly and would error on
+  -- non-table intermediate values like `file_history_panel = 0`, so check
+  -- the shape explicitly before reading the deprecated keys.
+  local user_log_options
+  if
+    type(user_config.file_history_panel) == "table"
+    and type(user_config.file_history_panel.log_options) == "table"
+  then
+    user_log_options = user_config.file_history_panel.log_options
+  end
   if user_log_options then
     local top_options = {
       "single_file",
@@ -1143,177 +1453,354 @@ function M.setup(user_config)
 
   --#endregion
 
-  if #M._config.git_cmd == 0 then
-    M._config.git_cmd = M.defaults.git_cmd
+  -- ============================================================================
+  -- Validation
+  -- ============================================================================
+  -- Each option is validated against its declared shape and falls back to the
+  -- value declared in `M.defaults` (with `utils.warn`) when invalid. See the
+  -- `validate.*` helpers near the top of this file for conventions.
+
+  local c = M._config
+  local d = M.defaults
+
+  -- Top-level scalars and command lists.
+  validate.boolean(c, "diff_binaries", d.diff_binaries)
+  validate.boolean(c, "enhanced_diff_hl", d.enhanced_diff_hl)
+  validate.string_list(c, "git_cmd", d.git_cmd)
+  validate.string_list(c, "hg_cmd", d.hg_cmd)
+  validate.string_list(c, "jj_cmd", d.jj_cmd)
+  validate.string_list(c, "p4_cmd", d.p4_cmd)
+  -- An empty command list would not be usable; substitute the default so the
+  -- adapter detection logic later in setup can still pick an executable.
+  for _, cmd_key in ipairs({ "git_cmd", "hg_cmd", "jj_cmd", "p4_cmd" }) do
+    if #c[cmd_key] == 0 then
+      c[cmd_key] = utils.tbl_deep_clone(d[cmd_key])
+    end
+  end
+  validate.enum(c, "preferred_adapter", { "git", "hg", "jj", "p4" }, d.preferred_adapter, {
+    nilable = true,
+  })
+  validate.integer(c, "rename_threshold", d.rename_threshold, {
+    min = 0,
+    max = 100,
+    nilable = true,
+  })
+  validate.boolean(c, "use_icons", d.use_icons)
+  validate.boolean(c, "show_help_hints", d.show_help_hints)
+  validate.boolean(c, "show_root_path", d.show_root_path)
+  validate.boolean(c, "watch_index", d.watch_index)
+  validate.boolean(c, "hide_merge_artifacts", d.hide_merge_artifacts)
+  validate.boolean(c, "auto_close_on_empty", d.auto_close_on_empty)
+  validate.boolean(c, "wrap_entries", d.wrap_entries)
+  validate.integer(c, "large_file_threshold", d.large_file_threshold, { min = 0 })
+  validate.table(c, "diffopt", d.diffopt)
+  validate.boolean(c, "clean_up_buffers", d.clean_up_buffers)
+
+  -- persist_selections
+  validate.table(c, "persist_selections", d.persist_selections)
+  validate.boolean(c.persist_selections, "enabled", d.persist_selections.enabled, {
+    path = "persist_selections.enabled",
+  })
+  validate.string(c.persist_selections, "path", d.persist_selections.path, {
+    path = "persist_selections.path",
+    nilable = true,
+  })
+
+  -- icons (folder icons)
+  validate.table(c, "icons", d.icons)
+  validate.string(c.icons, "folder_closed", d.icons.folder_closed, {
+    path = "icons.folder_closed",
+  })
+  validate.string(c.icons, "folder_open", d.icons.folder_open, {
+    path = "icons.folder_open",
+  })
+
+  -- status_icons: keys are git status codes (single chars like "A", "?"),
+  -- values are display strings.
+  validate.table(c, "status_icons", d.status_icons)
+  for status_key in pairs(d.status_icons) do
+    validate.string(c.status_icons, status_key, d.status_icons[status_key], {
+      path = ("status_icons[%q]"):format(status_key),
+    })
   end
 
-  if #M._config.hg_cmd == 0 then
-    M._config.hg_cmd = M.defaults.hg_cmd
+  -- signs
+  validate.table(c, "signs", d.signs)
+  for sign_key in pairs(d.signs) do
+    validate.string(c.signs, sign_key, d.signs[sign_key], {
+      path = "signs." .. sign_key,
+    })
   end
 
-  if #M._config.jj_cmd == 0 then
-    M._config.jj_cmd = M.defaults.jj_cmd
+  -- view
+  validate.table(c, "view", d.view)
+  local view = c.view
+  -- Concrete layout names. `view.*.layout` additionally accepts the `-1`
+  -- "infer from diffopt" sentinel; `view.cycle_layouts.*` does not, since
+  -- cycling needs concrete layouts to rotate through (`cycle_layout` drops
+  -- any unresolvable entry).
+  local standard_concrete = { "diff1_plain", "diff1_inline", "diff2_horizontal", "diff2_vertical" }
+  local merge_concrete =
+    { "diff1_plain", "diff3_horizontal", "diff3_vertical", "diff3_mixed", "diff4_mixed" }
+  local standard_layouts = utils.vec_join(standard_concrete, -1)
+  local merge_layouts = utils.vec_join(merge_concrete, -1)
+  local layouts_for_kind = {
+    default = standard_layouts,
+    merge_tool = merge_layouts,
+    file_history = standard_layouts,
+  }
+  for _, kind in ipairs({ "default", "merge_tool", "file_history" }) do
+    validate.table(view, kind, d.view[kind], { path = "view." .. kind })
+    validate.enum(view[kind], "layout", layouts_for_kind[kind], d.view[kind].layout, {
+      path = ("view.%s.layout"):format(kind),
+    })
+    for _, flag in ipairs({ "disable_diagnostics", "winbar_info", "focus_diff" }) do
+      validate.boolean(view[kind], flag, d.view[kind][flag], {
+        path = ("view.%s.%s"):format(kind, flag),
+      })
+    end
+  end
+  -- `pin_local` is documented and defaulted only on `file_history`.
+  validate.boolean(view.file_history, "pin_local", d.view.file_history.pin_local, {
+    path = "view.file_history.pin_local",
+  })
+
+  validate.integer(view, "foldlevel", d.view.foldlevel, {
+    min = 0,
+    path = "view.foldlevel",
+  })
+
+  validate.enum(view, "one_sided_layout", { "default", "raw" }, d.view.one_sided_layout, {
+    path = "view.one_sided_layout",
+  })
+
+  validate.table(view, "cycle_layouts", d.view.cycle_layouts, { path = "view.cycle_layouts" })
+  validate.enum_list(
+    view.cycle_layouts,
+    "default",
+    standard_concrete,
+    d.view.cycle_layouts.default,
+    { path = "view.cycle_layouts.default" }
+  )
+  validate.enum_list(
+    view.cycle_layouts,
+    "merge_tool",
+    merge_concrete,
+    d.view.cycle_layouts.merge_tool,
+    { path = "view.cycle_layouts.merge_tool" }
+  )
+  -- Ensure each view's configured layout is in its corresponding cycle list,
+  -- so `cycle_layout` (g<C-x>) can always rotate back to the starting layout.
+  -- The sentinel `-1` ("infer from diffopt") is skipped since the concrete
+  -- layout is not known at setup time. Iterate in a fixed order so shared
+  -- cycle lists (e.g. `default` is used by both `default` and `file_history`)
+  -- get deterministic entries.
+  for _, item in ipairs({
+    { kind = "default", cycle_key = "default" },
+    { kind = "file_history", cycle_key = "default" },
+    { kind = "merge_tool", cycle_key = "merge_tool" },
+  }) do
+    local layout = view[item.kind].layout
+    local list = view.cycle_layouts[item.cycle_key]
+    if layout and layout ~= -1 and not vim.tbl_contains(list, layout) then
+      table.insert(list, layout)
+    end
   end
 
-  if #M._config.p4_cmd == 0 then
-    M._config.p4_cmd = M.defaults.p4_cmd
-  end
+  validate.table(view, "inline", d.view.inline, { path = "view.inline" })
+  validate.enum(view.inline, "style", { "unified", "overleaf" }, d.view.inline.style, {
+    path = "view.inline.style",
+  })
+  validate.enum(
+    view.inline,
+    "deletion_highlight",
+    { "text", "full_width", "hanging" },
+    d.view.inline.deletion_highlight,
+    { path = "view.inline.deletion_highlight" }
+  )
+  validate.boolean(view.inline, "deletion_treesitter", d.view.inline.deletion_treesitter, {
+    path = "view.inline.deletion_treesitter",
+  })
 
-  do
-    local pa = M._config.preferred_adapter
-    local valid = { git = true, hg = true, jj = true, p4 = true }
-    if pa ~= nil and not valid[pa] then
-      utils.warn(
-        "Invalid value for 'preferred_adapter'. Must be one of: 'git', 'hg', 'jj', 'p4', or nil."
+  -- file_panel
+  validate.table(c, "file_panel", d.file_panel)
+  local file_panel = c.file_panel
+  validate.enum(file_panel, "listing_style", { "tree", "list" }, d.file_panel.listing_style, {
+    path = "file_panel.listing_style",
+  })
+  validate.any_of(file_panel, "sort_file", { "function" }, d.file_panel.sort_file, {
+    nilable = true,
+    path = "file_panel.sort_file",
+  })
+  validate.table(file_panel, "tree_options", d.file_panel.tree_options, {
+    path = "file_panel.tree_options",
+  })
+  validate.boolean(
+    file_panel.tree_options,
+    "flatten_dirs",
+    d.file_panel.tree_options.flatten_dirs,
+    { path = "file_panel.tree_options.flatten_dirs" }
+  )
+  validate.enum(
+    file_panel.tree_options,
+    "folder_statuses",
+    { "never", "only_folded", "always" },
+    d.file_panel.tree_options.folder_statuses,
+    { path = "file_panel.tree_options.folder_statuses" }
+  )
+  validate.enum(
+    file_panel.tree_options,
+    "folder_count_style",
+    { "grouped", "simple", "none" },
+    d.file_panel.tree_options.folder_count_style,
+    { path = "file_panel.tree_options.folder_count_style" }
+  )
+  validate.boolean(
+    file_panel.tree_options,
+    "folder_trailing_slash",
+    d.file_panel.tree_options.folder_trailing_slash,
+    { path = "file_panel.tree_options.folder_trailing_slash" }
+  )
+  validate.table(file_panel, "list_options", d.file_panel.list_options, {
+    path = "file_panel.list_options",
+  })
+  validate.enum(
+    file_panel.list_options,
+    "path_style",
+    { "basename", "full" },
+    d.file_panel.list_options.path_style,
+    { path = "file_panel.list_options.path_style" }
+  )
+  validate.any_of(
+    file_panel,
+    "win_config",
+    { "table", "function" },
+    d.file_panel.win_config,
+    { path = "file_panel.win_config" }
+  )
+  validate.boolean(file_panel, "show", d.file_panel.show, { path = "file_panel.show" })
+  validate.boolean(
+    file_panel,
+    "always_show_sections",
+    d.file_panel.always_show_sections,
+    { path = "file_panel.always_show_sections" }
+  )
+  validate.boolean(file_panel, "always_show_marks", d.file_panel.always_show_marks, {
+    path = "file_panel.always_show_marks",
+  })
+  validate.enum(
+    file_panel,
+    "mark_placement",
+    { "inline", "sign_column" },
+    d.file_panel.mark_placement,
+    { path = "file_panel.mark_placement" }
+  )
+  validate.boolean(file_panel, "show_branch_name", d.file_panel.show_branch_name, {
+    path = "file_panel.show_branch_name",
+  })
+
+  -- file_history_panel
+  validate.table(c, "file_history_panel", d.file_history_panel)
+  local fhp = c.file_history_panel
+  validate.enum(
+    fhp,
+    "stat_style",
+    { "number", "bar", "both" },
+    d.file_history_panel.stat_style,
+    { path = "file_history_panel.stat_style" }
+  )
+  validate.enum(
+    fhp,
+    "subject_highlight",
+    { "ref_aware", "merge_aware", "plain" },
+    d.file_history_panel.subject_highlight,
+    { path = "file_history_panel.subject_highlight" }
+  )
+  validate.enum_list(
+    fhp,
+    "commit_format",
+    { "status", "files", "stats", "hash", "reflog", "ref", "subject", "author", "date" },
+    d.file_history_panel.commit_format,
+    { path = "file_history_panel.commit_format" }
+  )
+  -- An empty `commit_format` would render commits with no info, so fall back
+  -- to the default whether the user explicitly passed `{}` or filtering
+  -- dropped every element.
+  if #fhp.commit_format == 0 then
+    utils.warn("Invalid value for 'file_history_panel.commit_format'. Must be a non-empty list.")
+    fhp.commit_format = utils.tbl_deep_clone(d.file_history_panel.commit_format)
+  end
+  validate.table(fhp, "log_options", d.file_history_panel.log_options, {
+    path = "file_history_panel.log_options",
+  })
+  -- Validate each per-VCS branch and its `single_file`/`multi_file` children
+  -- before the merge loop below indexes and extends them. Without these,
+  -- a config like `log_options = { git = 0 }` would crash setup.
+  for _, vcs in ipairs({ "git", "hg", "jj", "p4" }) do
+    validate.table(fhp.log_options, vcs, d.file_history_panel.log_options[vcs], {
+      path = ("file_history_panel.log_options.%s"):format(vcs),
+    })
+    for _, name in ipairs({ "single_file", "multi_file" }) do
+      validate.table(
+        fhp.log_options[vcs],
+        name,
+        d.file_history_panel.log_options[vcs][name],
+        { path = ("file_history_panel.log_options.%s.%s"):format(vcs, name) }
       )
-      M._config.preferred_adapter = M.defaults.preferred_adapter
     end
   end
+  validate.any_of(
+    fhp,
+    "win_config",
+    { "table", "function" },
+    d.file_history_panel.win_config,
+    { path = "file_history_panel.win_config" }
+  )
+  validate.boolean(fhp, "show", d.file_history_panel.show, { path = "file_history_panel.show" })
+  validate.integer(
+    fhp,
+    "commit_subject_max_length",
+    d.file_history_panel.commit_subject_max_length,
+    { min = 0, path = "file_history_panel.commit_subject_max_length" }
+  )
+  validate.enum(
+    fhp,
+    "date_format",
+    { "auto", "relative", "iso" },
+    d.file_history_panel.date_format,
+    { path = "file_history_panel.date_format" }
+  )
 
-  do
-    local rename_threshold = M._config.rename_threshold
+  -- commit_log_panel
+  validate.table(c, "commit_log_panel", d.commit_log_panel)
+  validate.any_of(
+    c.commit_log_panel,
+    "win_config",
+    { "table", "function" },
+    d.commit_log_panel.win_config,
+    { path = "commit_log_panel.win_config" }
+  )
 
-    if rename_threshold ~= nil then
-      local n = tonumber(rename_threshold)
+  -- default_args
+  validate.table(c, "default_args", d.default_args)
+  validate.string_list(c.default_args, "DiffviewOpen", d.default_args.DiffviewOpen, {
+    path = "default_args.DiffviewOpen",
+  })
+  validate.string_list(
+    c.default_args,
+    "DiffviewFileHistory",
+    d.default_args.DiffviewFileHistory,
+    { path = "default_args.DiffviewFileHistory" }
+  )
 
-      if not n or n < 0 or n > 100 or n % 1 ~= 0 then
-        utils.warn(
-          "Invalid value for 'rename_threshold'. Must be an integer between 0 and 100, or nil."
-        )
-        M._config.rename_threshold = M.defaults.rename_threshold
-      else
-        M._config.rename_threshold = n
-      end
-    end
-  end
-
-  do
-    -- Validate layouts
-    local view = M._config.view
-    local standard_layouts =
-      { "diff1_plain", "diff1_inline", "diff2_horizontal", "diff2_vertical", -1 }
-    local merge_layouts = {
-      "diff1_plain",
-      "diff3_horizontal",
-      "diff3_vertical",
-      "diff3_mixed",
-      "diff4_mixed",
-      -1,
-    }
-    local valid_layouts = {
-      default = standard_layouts,
-      merge_tool = merge_layouts,
-      file_history = standard_layouts,
-    }
-
-    for _, kind in ipairs(vim.tbl_keys(valid_layouts)) do
-      if not vim.tbl_contains(valid_layouts[kind], view[kind].layout) then
-        utils.err(
-          ("Invalid layout name '%s' for 'view.%s'! Must be one of (%s)."):format(
-            view[kind].layout,
-            kind,
-            fmt_enum(valid_layouts[kind])
-          )
-        )
-        view[kind].layout = M.defaults.view[kind].layout
-      end
-    end
-
-    local n = tonumber(view.foldlevel)
-    if not n or n < 0 or n % 1 ~= 0 then
-      utils.warn("Invalid value for 'view.foldlevel'. Must be a non-negative integer.")
-      view.foldlevel = M.defaults.view.foldlevel
-    else
-      view.foldlevel = n
-    end
-
-    -- Ensure each view's configured layout is in its corresponding cycle
-    -- list, so `cycle_layout` (g<C-x>) can always rotate back to the
-    -- starting layout. The sentinel `-1` ("infer from diffopt") is skipped
-    -- since the concrete layout is not known at setup time.
-    if view.cycle_layouts ~= nil and type(view.cycle_layouts) ~= "table" then
-      utils.warn("Invalid value for 'view.cycle_layouts'. Must be a table.")
-      view.cycle_layouts = utils.tbl_deep_clone(M.defaults.view.cycle_layouts)
-    end
-    -- Iterate in a fixed order so shared cycle lists (e.g. `default` is
-    -- used by both `default` and `file_history`) get deterministic entries.
-    local cycle_for_kind = {
-      { kind = "default", cycle_key = "default" },
-      { kind = "file_history", cycle_key = "default" },
-      { kind = "merge_tool", cycle_key = "merge_tool" },
-    }
-    for _, item in ipairs(cycle_for_kind) do
-      local layout = view[item.kind] and view[item.kind].layout
-      local list = view.cycle_layouts[item.cycle_key]
-      if list ~= nil and not (type(list) == "table" and utils.islist(list)) then
-        utils.warn(
-          ("Invalid value for 'view.cycle_layouts.%s'. Must be a list."):format(item.cycle_key)
-        )
-        list = utils.tbl_deep_clone(M.defaults.view.cycle_layouts[item.cycle_key])
-      end
-      list = list or {}
-      view.cycle_layouts[item.cycle_key] = list
-      if layout and layout ~= -1 and not vim.tbl_contains(list, layout) then
-        table.insert(list, layout)
-      end
-    end
-
-    local valid_one_sided_layouts = { "default", "raw" }
-    if view.one_sided_layout == nil then
-      view.one_sided_layout = M.defaults.view.one_sided_layout
-    elseif not vim.tbl_contains(valid_one_sided_layouts, view.one_sided_layout) then
-      utils.err(
-        ("Invalid value '%s' for 'view.one_sided_layout'! Must be one of (%s)."):format(
-          view.one_sided_layout,
-          fmt_enum(valid_one_sided_layouts)
-        )
-      )
-      view.one_sided_layout = M.defaults.view.one_sided_layout
-    end
-
-    -- Validate `view.inline`. A nil style (e.g. user passed `view.inline = {}`)
-    -- silently falls back to the default; only an explicit invalid value errors.
-    -- Reject non-table values (mirrors the `view.cycle_layouts` guard above).
-    if view.inline ~= nil and type(view.inline) ~= "table" then
-      utils.warn("Invalid value for 'view.inline'. Must be a table.")
-      view.inline = utils.tbl_deep_clone(M.defaults.view.inline)
-    end
-    view.inline = view.inline or {}
-    local valid_inline_styles = { "unified", "overleaf" }
-    if view.inline.style == nil then
-      view.inline.style = M.defaults.view.inline.style
-    elseif not vim.tbl_contains(valid_inline_styles, view.inline.style) then
-      utils.err(
-        ("Invalid inline style '%s' for 'view.inline.style'! Must be one of (%s)."):format(
-          view.inline.style,
-          fmt_enum(valid_inline_styles)
-        )
-      )
-      view.inline.style = M.defaults.view.inline.style
-    end
-    local valid_deletion_hl = { "text", "full_width", "hanging" }
-    if view.inline.deletion_highlight == nil then
-      view.inline.deletion_highlight = M.defaults.view.inline.deletion_highlight
-    elseif not vim.tbl_contains(valid_deletion_hl, view.inline.deletion_highlight) then
-      utils.err(
-        ("Invalid value '%s' for 'view.inline.deletion_highlight'! Must be one of (%s)."):format(
-          view.inline.deletion_highlight,
-          fmt_enum(valid_deletion_hl)
-        )
-      )
-      view.inline.deletion_highlight = M.defaults.view.inline.deletion_highlight
-    end
-    if view.inline.deletion_treesitter == nil then
-      view.inline.deletion_treesitter = M.defaults.view.inline.deletion_treesitter
-    elseif type(view.inline.deletion_treesitter) ~= "boolean" then
-      utils.err(
-        ("Invalid value '%s' for 'view.inline.deletion_treesitter'! Must be a boolean."):format(
-          tostring(view.inline.deletion_treesitter)
-        )
-      )
-      view.inline.deletion_treesitter = M.defaults.view.inline.deletion_treesitter
-    end
-  end
+  -- hooks and keymaps. Only the containers are validated here (plus
+  -- `keymaps.disable_defaults`, which is branched on below); individual hook
+  -- callbacks and keymap entries are type-checked where they are consumed.
+  validate.table(c, "hooks", d.hooks)
+  validate.table(c, "keymaps", d.keymaps)
+  validate.boolean(c.keymaps, "disable_defaults", d.keymaps.disable_defaults, {
+    path = "keymaps.disable_defaults",
+  })
 
   for _, name in ipairs({ "single_file", "multi_file" }) do
     for _, vcs in ipairs({ "git", "hg", "jj", "p4" }) do
@@ -1335,10 +1822,16 @@ function M.setup(user_config)
     end
   end
 
+  -- `M._config.keymaps` is validated to a table above, but the merge below
+  -- reads the user's overrides from `user_config` directly. Index that
+  -- through a shape-checked local: `utils.tbl_access` would error when
+  -- `user_config.keymaps` is a truthy non-table (e.g. a number).
+  local user_keymaps = type(user_config.keymaps) == "table" and user_config.keymaps or {}
+
   if M._config.keymaps.disable_defaults then
     for name, _ in pairs(M._config.keymaps) do
       if name ~= "disable_defaults" then
-        M._config.keymaps[name] = utils.tbl_access(user_config, { "keymaps", name }) or {}
+        M._config.keymaps[name] = user_keymaps[name] or {}
       end
     end
   else
@@ -1348,8 +1841,7 @@ function M.setup(user_config)
   -- Merge default and user keymaps
   for name, keymap in pairs(M._config.keymaps) do
     if type(name) == "string" and type(keymap) == "table" then
-      M._config.keymaps[name] =
-        M.extend_keymaps(keymap, utils.tbl_access(user_config, { "keymaps", name }) or {})
+      M._config.keymaps[name] = M.extend_keymaps(keymap, user_keymaps[name] or {})
     end
   end
 
