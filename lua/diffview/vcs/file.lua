@@ -286,7 +286,10 @@ File.create_buffer = async.wrap(function(self, callback)
       error(File.CANCELLED)
     end
 
-    if self.binary == nil and not config.get_config().diff_binaries then
+    -- Don't probe a nulled side: the result is unused (it routes to the NULL
+    -- buffer below), and for a deleted file the gone `LOCAL` path makes
+    -- `is_binary` false-positive, which would hide the deletion in inline.
+    if self.binary == nil and not self.nulled and not config.get_config().diff_binaries then
       self.binary = self.adapter:is_binary(self.path, self.rev)
     end
 

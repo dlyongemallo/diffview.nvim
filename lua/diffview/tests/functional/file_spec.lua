@@ -43,6 +43,37 @@ describe("diffview.vcs.file", function()
     assert.False(show_called)
   end)
 
+  it("does not probe binary-ness for a nulled file", function()
+    -- A deleted file's gone `LOCAL` path makes `is_binary` false-positive; a
+    -- nulled side must not be probed (its result is unused).
+    local is_binary_called = false
+
+    local adapter = {
+      ctx = {
+        toplevel = vim.uv.cwd(),
+        dir = vim.uv.cwd(),
+      },
+      is_binary = function()
+        is_binary_called = true
+        return true -- simulate the deleted-working-tree-path false positive
+      end,
+    }
+
+    local file = File({
+      adapter = adapter,
+      path = "deleted.txt",
+      kind = "working",
+      rev = GitRev(RevType.LOCAL),
+      nulled = true,
+    })
+
+    local bufnr = async.await(file:create_buffer())
+
+    assert.False(is_binary_called)
+    assert.is_not_true(file.binary)
+    assert.equals(File._get_null_buffer(), bufnr)
+  end)
+
   it(
     "bails out of create_buffer if deactivated before produce_data",
     helpers.async_test(function()
