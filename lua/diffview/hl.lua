@@ -461,11 +461,15 @@ function M.update_diff_hl()
   -- is honoured. Runs AFTER the relink above so the final state is read.
   local del_fg = M.get_fg("DiffviewDiffDelete") or "NONE"
   local del_bg = M.get_bg("DiffviewDiffDelete") or "NONE"
+  -- Use `explicit` (not `default`): a `default` highlight is a no-op once the
+  -- group exists, so the colours derived at the first `setup()` would be pinned
+  -- and never refresh on later `ColorScheme` events. `explicit` rebuilds the
+  -- group from scratch each call so it always tracks the active colourscheme.
   M.hi("DiffviewDiffDeleteInline", {
     fg = del_fg,
     bg = del_bg,
     style = "strikethrough",
-    default = true,
+    explicit = true,
   })
 
   -- `diff1_inline` highlight for inserted char ranges (pure adds or the
@@ -496,10 +500,11 @@ function M.update_diff_hl()
     add_bg = M.get_bg("DiffviewDiffAdd") or "NONE"
   end
   local add_style = #add_style_attrs > 0 and table.concat(add_style_attrs, ",") or "NONE"
+  -- `explicit` for the same reason as `DiffviewDiffDeleteInline` above.
   M.hi("DiffviewDiffAddInline", {
     bg = add_bg,
     style = add_style,
-    default = true,
+    explicit = true,
   })
 end
 
