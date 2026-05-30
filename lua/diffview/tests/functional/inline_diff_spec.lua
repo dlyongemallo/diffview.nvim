@@ -391,6 +391,28 @@ describe("diffview.scene.inline_diff", function()
       assert.are.equal(0x00cc00, got.bg)
       assert.is_nil(got.reverse)
     end)
+
+    it("refreshes on re-setup instead of pinning the first colourscheme's value", function()
+      -- Regression: the inline groups were defined with `default = true`, so
+      -- once set they never tracked later `ColorScheme` events (a `default`
+      -- highlight is a no-op when the group already exists). A colourscheme
+      -- switch (modelled here as a new `DiffAdd` background plus a fresh
+      -- `hl.setup()`, WITHOUT clearing the group first) must update the
+      -- derived background rather than keep the stale one.
+      assert.are.equal(
+        0x004400,
+        api.nvim_get_hl(0, { name = "DiffviewDiffAddInline", link = false }).bg
+      )
+
+      api.nvim_set_hl(0, "DiffAdd", { bg = "#88ccff" })
+      api.nvim_set_hl(0, "DiffviewDiffAdd", { link = "DiffAdd" })
+      hl.setup()
+
+      assert.are.equal(
+        0x88ccff,
+        api.nvim_get_hl(0, { name = "DiffviewDiffAddInline", link = false }).bg
+      )
+    end)
   end)
 
   describe("overleaf style", function()
