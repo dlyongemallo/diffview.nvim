@@ -461,6 +461,10 @@ function M.jump_to_first_change(view)
         api.nvim_win_set_cursor(main.id, { rows[1] + 1, 0 })
       end
     else
+      local is_diff = vim.fn.diff_hlID(1, 1) ~= 0 or vim.fn.diff_filler(1) ~= 0
+      if is_diff then
+        return
+      end
       pcall(api.nvim_command, "norm! ]c")
     end
     vim.cmd("norm! zz")
