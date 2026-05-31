@@ -562,6 +562,7 @@ end
 ---@param new_count integer
 ---@param del_text string Joined deleted units ("" if none).
 ---@param inline_del boolean
+---@param add_hl string Highlight group for the inserted char range.
 local function render_hunk(
   bufnr,
   new_row,
@@ -571,7 +572,8 @@ local function render_hunk(
   new_start,
   new_count,
   del_text,
-  inline_del
+  inline_del,
+  add_hl
 )
   if new_count > 0 then
     -- A hunk is a contiguous range, so emit one extmark spanning all units
@@ -581,7 +583,7 @@ local function render_hunk(
     if first and last then
       api.nvim_buf_set_extmark(bufnr, M.ns, new_row, base_byte + first.byte, {
         end_col = base_byte + last.byte + last.byte_len,
-        hl_group = "DiffviewDiffAddInline",
+        hl_group = add_hl,
         priority = 200,
       })
     else
@@ -593,7 +595,7 @@ local function render_hunk(
         if info then
           api.nvim_buf_set_extmark(bufnr, M.ns, new_row, base_byte + info.byte, {
             end_col = base_byte + info.byte + info.byte_len,
-            hl_group = "DiffviewDiffAddInline",
+            hl_group = add_hl,
             priority = 200,
           })
         end
@@ -639,8 +641,9 @@ end
 ---@param old_line string
 ---@param new_line string
 ---@param inline_del boolean Render deleted units as inline virt_text.
+---@param add_hl string Highlight group for changed/added char ranges.
 ---@return "ok"|"noop"|"skipped" # `ok`: rendered; `noop`: identical (nothing to do); `skipped`: fragmented, caller may want to fall back.
-local function render_char_highlights(bufnr, new_row, old_line, new_line, inline_del)
+local function render_char_highlights(bufnr, new_row, old_line, new_line, inline_del, add_hl)
   if old_line == new_line then
     return "noop"
   end
@@ -722,7 +725,8 @@ local function render_char_highlights(bufnr, new_row, old_line, new_line, inline
               sns,
               snc,
               del_text,
-              inline_del
+              inline_del,
+              add_hl
             )
           end
         end
@@ -747,7 +751,8 @@ local function render_char_highlights(bufnr, new_row, old_line, new_line, inline
         new_start,
         new_count,
         del_text,
-        inline_del
+        inline_del,
+        add_hl
       )
     end
   end
@@ -1585,6 +1590,7 @@ end
 ---@field inline_del boolean Render paired char-level deletions as inline virt_text.
 ---@field echo_paired_old boolean Emit full old content as virt_lines above paired modifications.
 ---@field change_line_hl? string Line highlight on paired modified rows, or `nil` to skip.
+---@field add_inline_hl string Highlight group for changed/added char ranges on paired rows.
 
 ---@type table<string, InlineDiffStyle>
 local STYLES = {
@@ -1594,6 +1600,10 @@ local STYLES = {
     inline_del = false,
     echo_paired_old = true,
     change_line_hl = "DiffviewDiffChange",
+    -- Changed chars sit on the `DiffviewDiffChange` paired row, so use the
+    -- `DiffText`-derived overlay (as the built-in side-by-side diff does) to
+    -- stay legible against that backdrop.
+    add_inline_hl = "DiffviewDiffTextInline",
   },
   -- Overleaf style: deletions rendered inline as strikethrough virt_text so
   -- the reader sees the change in flow. No block echo, no line hl — the
@@ -1603,6 +1613,9 @@ local STYLES = {
     inline_del = true,
     echo_paired_old = false,
     change_line_hl = nil,
+    -- No line backdrop; inserted chars read as additions over the normal
+    -- background, so use the `DiffAdd`-derived overlay.
+    add_inline_hl = "DiffviewDiffAddInline",
   },
 }
 
@@ -1793,13 +1806,13 @@ function M.render(bufnr, old_lines, new_lines, opts)
         local row = new_start - 1 + k
         local ol = old_lines[old_start + k] or ""
         local nl = new_lines[new_start + k] or ""
-        local char_result = render_char_highlights(bufnr, row, ol, nl, style.inline_del)
+        local char_result =
+          render_char_highlights(bufnr, row, ol, nl, style.inline_del, style.add_inline_hl)
 
-        -- `"skipped"` draws no `DiffviewDiffAddInline` overlay, so the
-        -- subtle `DiffviewDiffChange` backdrop alone would be a bare
-        -- smudge. Treat as a pure addition — the deletion is still
-        -- echoed above (unified unconditionally; overleaf via the
-        -- fallback below).
+        -- `"skipped"` draws no char-level overlay, so the subtle
+        -- `DiffviewDiffChange` backdrop alone would be a bare smudge. Treat
+        -- as a pure addition — the deletion is still echoed above (unified
+        -- unconditionally; overleaf via the fallback below).
         local line_hl = style.change_line_hl
         if char_result == "skipped" then
           line_hl = "DiffviewDiffAdd"

@@ -98,22 +98,29 @@ Common questions, useful patterns, and known compatibility issues.
       },
     })
     ```
-  - Customise the look with `:hi DiffviewDiffDeleteInline gui=...`.
+  - Customise the strikethrough via `DiffviewDiffDeleteInline` (see the
+    next entry on overriding inline groups).
 - **Customise inline char-level highlights:**
-  - In the `diff1_inline` layout, changed characters on paired
-    modification rows use the `DiffviewDiffAddInline` highlight group,
-    and inline strikethrough deletions in the "overleaf" style use
-    `DiffviewDiffDeleteInline`. The defaults derive their backgrounds
-    from `DiffviewDiffAdd` and `DiffviewDiffDelete` respectively. If
-    your colourscheme defines `DiffAdd.bg` and `DiffChange.bg` with
-    similar tints, char-level changes can blend into the paired-row
-    `DiffviewDiffChange` backdrop. Override the inline group to taste,
-    e.g., to use the colourscheme's `DiffText` as the char-level
-    background:
+  - In the `diff1_inline` layout, changed characters use these groups:
+    the unified style highlights them with `DiffviewDiffTextInline`,
+    while the "overleaf" style uses `DiffviewDiffAddInline` for added
+    chars and `DiffviewDiffDeleteInline` for the strikethrough
+    deletions. Their backgrounds derive by default from `DiffText`,
+    `DiffviewDiffAdd`, and `DiffviewDiffDelete` respectively. The
+    unified group tracks `DiffText` (as the built-in side-by-side diff
+    does), so changes stay visible against the paired-row
+    `DiffviewDiffChange` backdrop even when your colourscheme gives
+    `DiffAdd` and `DiffChange` similar tints (e.g. tokyonight); it falls
+    back to `DiffAdd` for schemes that leave `DiffText` unset.
+  - These groups are re-derived on every colourscheme change, so set
+    overrides from a `ColorScheme` autocmd rather than once at startup
+    (a plain `:hi` is reapplied over on the next change):
     ```lua
-    vim.api.nvim_set_hl(0, "DiffviewDiffAddInline", { link = "DiffText" })
-    -- Or with explicit colours:
-    vim.api.nvim_set_hl(0, "DiffviewDiffAddInline", { bg = "#3a4a3a" })
+    vim.api.nvim_create_autocmd("ColorScheme", {
+      callback = function()
+        vim.api.nvim_set_hl(0, "DiffviewDiffTextInline", { bg = "#3a4a3a" })
+      end,
+    })
     ```
 - **Better diff display (changes shown as add+delete instead of modification):**
   - Set Neovim's `diffopt` to use a better algorithm:
